@@ -1,3 +1,30 @@
+pub enum Keywords {
+    Pp,
+    Bigpp,
+    Smolpp,
+    Let,
+    Gfsays,
+    Gfyells,
+}
+
+pub struct UnknownKeywordError;
+
+impl TryFrom<&str> for Keywords {
+    type Error = UnknownKeywordError;
+
+    fn try_from(value: &str) -> Result<Self, UnknownKeywordError> {
+        match value {
+            "pp" => Ok(Keywords::Pp),
+            "bigpp" => Ok(Keywords::Bigpp),
+            "smolpp" => Ok(Keywords::Smolpp),
+            "let" => Ok(Keywords::Let),
+            "gfsays" => Ok(Keywords::Gfsays),
+            "gfyells" => Ok(Keywords::Gfyells),
+            _ => Err(UnknownKeywordError),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Token {
     kind: TokenKind,
@@ -9,78 +36,66 @@ pub enum TokenKind {
     Identifier,
     Number,
     String,
-    Keyword,
     Operator,
     Punctuation,
+    Keyword,
     Comment,
     Whitespace,
-    Newline,
     Eof,
     Unknown,
 }
 
 #[derive(Debug)]
 #[derive(Default)]
-pub struct Lexer {
+pub struct Lexer<'a> {
+    input: &'a str,
     chars: Vec<char>,
     position: usize,
 }
 
-impl Lexer {
-    fn next(&mut self) -> Token {
-        unimplemented!("next")
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Self {
+        let chars = input.chars().collect();
+        Lexer {
+            input,
+            chars,
+            position: 0,
+        }
     }
 
-    fn peek(&mut self) -> Token {
-        self.peek_ahead(0usize)
-    }
-
-    fn peek_ahead(&mut self, _ahead: usize) -> Token {
-        unimplemented!("peek_ahead")
-    }
-
-    pub fn lex(&mut self, input: &str) -> Vec<Token> {
-        let mut input = String::from(input);
-        input.push('\n');
-
-        self.position = 0;
-        self.chars = input.chars().collect();
-
-        let mut tokens: Vec<Token> = Vec::new();
+    pub fn lex(&mut self) {
         loop {
-            let c = self.current_char();
-            if c == char::default() {
-                let eof = Token { kind: TokenKind::Eof, value: None };
-                println!("{:?}", eof);
-                tokens.push(eof);
+            if matches!(self.next_token().kind, TokenKind::Eof) {
                 break;
             }
-
-            let (buf, token_kind) = match c {
-                'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
-                '0'..='9' => self.handle_number(),
-                '"' => self.handle_string(),
-                ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
-                ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' => self.handle_punctuation(),
-                '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' =>
-                    self.handle_operator(),
-                '#' => self.handle_comment(),
-                _ => self.handle_unknown(),
-            };
-
-            let token = Token {
-                kind: token_kind.unwrap_or(TokenKind::Unknown),
-                value: buf,
-            };
-
-            if !matches!(token.kind, TokenKind::Whitespace) && !matches!(token.kind,
-                TokenKind::Comment) {
-                println!("{:?}", token);
-                tokens.push(token);
-            }
         }
+    }
 
-        tokens
+    fn next_token(&mut self) -> Token {
+        let (buf, token_kind) = match self.current_char() {
+            '\0' => (None, TokenKind::Eof),
+            'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
+            '0'..='9' => self.handle_number(),
+            '"' => self.handle_string(),
+            ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
+            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.handle_punctuation(),
+            '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' =>
+                self.handle_operator(),
+            '#' => self.handle_comment(),
+            _ => self.handle_unknown(),
+        };
+
+        let token = Token {
+            kind: token_kind,
+            value: buf,
+        };
+
+        if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
+            return self.next_token();
+        }
+        println!("{:?}", token);
+
+        token
     }
 
     fn current_char(&self) -> char {
@@ -100,34 +115,26 @@ impl Lexer {
         self.position += 1;
     }
 
-    fn previous_char(&mut self) -> char {
-        self.position -= 1;
-        self.current_char()
-    }
-
-    fn handle_unknown(&mut self) -> (Option<String>, Option<TokenKind>) {
+    fn handle_unknown(&mut self) -> (Option<String>, TokenKind) {
         let mut buf = String::with_capacity(1);
         buf.push(self.current_char());
         self.consume();
 
-        (Some(buf), Some(TokenKind::Unknown))
+        (Some(buf), TokenKind::Unknown)
     }
 
-    fn handle_comment(&mut self) -> (Option<String>, Option<TokenKind>) {
-        let mut c = self.current_char();
+    fn handle_comment(&mut self) -> (Option<String>, TokenKind) {
         let mut buf = String::with_capacity(256);
-        buf.push(c);
-
-        c = self.current_char();
+        let mut c = self.next_char();
         while c != '\n' {
             buf.push(c);
             c = self.current_char();
         }
 
-        (Some(buf), Some(TokenKind::Comment))
+        (Some(buf), TokenKind::Comment)
     }
 
-    fn handle_operator(&mut self) -> (Option<String>, Option<TokenKind>) {
+    fn handle_operator(&mut self) -> (Option<String>, TokenKind) {
         let mut c = self.current_char();
         let mut buf = String::with_capacity(2);
         buf.push(c);
@@ -138,35 +145,31 @@ impl Lexer {
             self.consume();
         }
 
-        (Some(buf), Some(TokenKind::Operator))
+        (Some(buf), TokenKind::Operator)
     }
 
-    fn handle_punctuation(&mut self) -> (Option<String>, Option<TokenKind>) {
+    fn handle_punctuation(&mut self) -> (Option<String>, TokenKind) {
         let c = self.current_char();
         self.consume();
         let mut buf = String::with_capacity(1);
         buf.push(c);
 
-        (Some(buf), Some(TokenKind::Punctuation))
+        (Some(buf), TokenKind::Punctuation)
     }
 
-    fn handle_whitespace(&mut self) -> (Option<String>, Option<TokenKind>) {
-        let mut c = self.current_char();
-
-        c = self.next_char();
-
+    fn handle_whitespace(&mut self) -> (Option<String>, TokenKind) {
+        let mut c = self.next_char();
         while c.is_whitespace() || c == '\r' {
             c = self.next_char();
         }
 
-        (None, Some(TokenKind::Whitespace))
+        (None, TokenKind::Whitespace)
     }
 
-    fn handle_string(&mut self) -> (Option<String>, Option<TokenKind>) {
-        let mut c = self.current_char();
+    fn handle_string(&mut self) -> (Option<String>, TokenKind) {
         let mut buf = String::with_capacity(256);
 
-        c = self.next_char();
+        let mut c = self.next_char();
         while c != char::default() && c != '"' {
             buf.push(c);
             c = self.next_char();
@@ -178,10 +181,10 @@ impl Lexer {
         // Consume the closing quote.
         self.consume();
 
-        (Some(buf), Some(TokenKind::String))
+        (Some(buf), TokenKind::String)
     }
 
-    fn handle_number(&mut self) -> (Option<String>, Option<TokenKind>) {
+    fn handle_number(&mut self) -> (Option<String>, TokenKind) {
         let mut c = self.current_char();
         let mut buf = String::with_capacity(256);
         buf.push(c);
@@ -192,10 +195,10 @@ impl Lexer {
             c = self.current_char();
         }
 
-        (Some(buf), Some(TokenKind::Number))
+        (Some(buf), TokenKind::Number)
     }
 
-    fn handle_identifier(&mut self) -> (Option<String>, Option<TokenKind>) {
+    fn handle_identifier(&mut self) -> (Option<String>, TokenKind) {
         let mut c = self.current_char();
         let mut buf = String::with_capacity(256);
         buf.push(c);
@@ -206,6 +209,8 @@ impl Lexer {
             c = self.next_char();
         }
 
-        (Some(buf), Some(TokenKind::Identifier))
+        let kind = Keywords::try_from(buf.as_str()).map_or(TokenKind::Identifier, |_|
+            TokenKind::Keyword);
+        (Some(buf), kind)
     }
 }

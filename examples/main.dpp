@@ -1,5 +1,8 @@
 main(): pp {
     gfsays("Hello, world!\n");
     gfyells("Hello, world!\n");
+    let time: bigpp = gftellstime();
+    gfsays("Time: " + time + "\n");
+    gfsays("Time: {time}\n");
     bye 0;
 }
