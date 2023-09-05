@@ -7,9 +7,15 @@ pub struct SyntaxError {
     message: String,
 }
 
+impl SyntaxError {
+    pub fn new(row: usize, col: usize, message: String) -> Self {
+        SyntaxError { row, col, message }
+    }
+}
+
 #[derive(Debug)]
 pub struct UnknownKeywordError {
-    keyword: String,
+    pub keyword: String,
 }
 
 impl Display for SyntaxError {
@@ -28,7 +34,8 @@ impl Display for UnknownKeywordError {
     }
 }
 
-pub enum Keywords {
+#[derive(Debug, PartialEq, Eq)]
+pub enum Keyword {
     Xxlpp, // u64
     Pp,    // u32
     Spp,   // u16
@@ -40,7 +47,7 @@ pub enum Keywords {
     Func,
 }
 
-impl TryFrom<&str> for Keywords {
+impl TryFrom<&str> for Keyword {
     type Error = UnknownKeywordError;
 
     fn try_from(value: &str) -> Result<Self, UnknownKeywordError> {
@@ -63,11 +70,11 @@ impl TryFrom<&str> for Keywords {
 
 #[derive(Debug)]
 pub struct Token {
-    kind: TokenKind,
-    value: Option<String>,
+    pub kind: TokenKind,
+    pub value: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind {
     Identifier,
     Number,
@@ -93,6 +100,10 @@ impl Lexer {
         Lexer { chars, position: 0 }
     }
 
+    pub fn reset(&mut self) {
+        self.position = 0;
+    }
+
     pub fn lex(&mut self) {
         loop {
             if matches!(self.next_token().kind, TokenKind::Eof) {
@@ -101,7 +112,7 @@ impl Lexer {
         }
     }
 
-    fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Token {
         let token_res = match self.current_char() {
             '\0' => Ok(Token {
                 kind: TokenKind::Eof,
@@ -265,7 +276,7 @@ impl Lexer {
         }
 
         Ok(Token {
-            kind: Keywords::try_from(buf.as_str())
+            kind: Keyword::try_from(buf.as_str())
                 .map_or(TokenKind::Identifier, |_| TokenKind::Keyword),
             value: Some(buf),
         })

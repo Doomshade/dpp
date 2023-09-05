@@ -1,13 +1,19 @@
 use crate::lexer::Lexer;
+use crate::parser::Parser;
 use std::fs;
 
+mod ast;
 mod lexer;
-mod parse;
+mod parser;
 
 fn main() {
     let file =
         fs::read_to_string("examples/main.dpp").expect("Should have been able to read the file");
 
-    let mut lexer = Lexer::new(file.as_str());
-    lexer.lex();
+    let lexer = Lexer::new(file.as_str());
+    let mut parser = Parser::new(lexer);
+    match parser.parse() {
+        Ok(ast) => println!("OK: {ast:?}"),
+        Err(err) => panic!("ERROR: {err:?}"),
+    }
 }
