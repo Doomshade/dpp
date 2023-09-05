@@ -10,6 +10,8 @@ A KIV/FJP project at UWB Pilsen. The goal is to create a programming language th
 
 ## Usage
 
+You will need [Rust](https://www.rust-lang.org/) installed on your machine.
+
 You will either need to clone this repo:
 
 ```shell
@@ -36,16 +38,17 @@ Now you can run the compiler:
 You can find examples in the `examples` folder.
 
 ## Syntax
+TODO: Add BNFE
 
 ### Keywords
 
-| Keyword   | Description               | Equivalent to |
-|-----------|---------------------------|---------------|
-| `nogf`    | void                      | `void`        |
-| `bigpp`   | 64 bit number             | `long`        |
-| `pp`      | 32 bit number             | `int`         |
-| `smolpp`  | 16 bit number             | `short`       |
-| `tinypp`  | 8 bit number              | `byte`        |
-| `gfsays`  | Prints a string to stdout | `print`       |
-| `gfyells` | Prints a string to stderr | `printerr`    |
-| `bye`     | Prints a string to stderr | `printerr`    |
+| Keyword  | Description               | Equivalent to |
+|----------|---------------------------|---------------|
+| `nogf`   | void                      | `void`        |
+| `bigpp`  | 64 bit number             | `long`        |
+| `pp`     | 32 bit number             | `int`         |
+| `smolpp` | 16 bit number             | `short`       |
+| `tinypp` | 8 bit number              | `byte`        |
+| `say`    | Prints a string to stdout | `print`       |
+| `yell`   | Prints a string to stderr | `printerr`    |
+| `bye`    | Return from a function    | `return`      |

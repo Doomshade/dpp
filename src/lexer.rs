@@ -1,26 +1,62 @@
-pub enum Keywords {
-    Pp,
-    Bigpp,
-    Smolpp,
-    Let,
-    Gfsays,
-    Gfyells,
+use std::fmt::{Display, Formatter};
+
+#[derive(Debug)]
+pub struct SyntaxError {
+    row: usize,
+    col: usize,
+    message: String,
 }
 
-pub struct UnknownKeywordError;
+#[derive(Debug)]
+pub struct UnknownKeywordError {
+    keyword: String,
+}
+
+impl Display for SyntaxError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Syntax error at {}:{} - {}",
+            self.row, self.col, self.message
+        )
+    }
+}
+
+impl Display for UnknownKeywordError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unknown keyword: {}", self.keyword)
+    }
+}
+
+pub enum Keywords {
+    Xxlpp, // u64
+    Pp,    // u32
+    Spp,   // u16
+    Xspp,  // u8
+    Let,
+    Bye,
+    Gfsays,
+    Gfyells,
+    Func,
+}
 
 impl TryFrom<&str> for Keywords {
     type Error = UnknownKeywordError;
 
     fn try_from(value: &str) -> Result<Self, UnknownKeywordError> {
         match value {
+            "xxlpp" => Ok(Self::Xxlpp),
             "pp" => Ok(Self::Pp),
-            "bigpp" => Ok(Self::Bigpp),
-            "smolpp" => Ok(Self::Smolpp),
+            "spp" => Ok(Self::Spp),
+            "xspp" => Ok(Self::Xspp),
             "let" => Ok(Self::Let),
             "gfsays" => Ok(Self::Gfsays),
             "gfyells" => Ok(Self::Gfyells),
-            _ => Err(UnknownKeywordError),
+            "bye" => Ok(Self::Bye),
+            "FUNc" => Ok(Self::Func),
+            _ => Err(UnknownKeywordError {
+                keyword: String::from(value),
+            }),
         }
     }
 }
@@ -45,22 +81,16 @@ pub enum TokenKind {
     Unknown,
 }
 
-#[derive(Debug)]
-#[derive(Default)]
-pub struct Lexer<'a> {
-    input: &'a str,
+#[derive(Debug, Default)]
+pub struct Lexer {
     chars: Vec<char>,
     position: usize,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Self {
+impl Lexer {
+    pub fn new(input: &str) -> Self {
         let chars = input.chars().collect();
-        Lexer {
-            input,
-            chars,
-            position: 0,
-        }
+        Lexer { chars, position: 0 }
     }
 
     pub fn lex(&mut self) {
@@ -72,30 +102,36 @@ impl<'a> Lexer<'a> {
     }
 
     fn next_token(&mut self) -> Token {
-        let (buf, token_kind) = match self.current_char() {
-            '\0' => (None, TokenKind::Eof),
+        let token_res = match self.current_char() {
+            '\0' => Ok(Token {
+                kind: TokenKind::Eof,
+                value: None,
+            }),
             'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
             '0'..='9' => self.handle_number(),
             '"' => self.handle_string(),
             ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
             ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.handle_punctuation(),
-            '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' =>
-                self.handle_operator(),
+            '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
+                self.handle_operator()
+            }
             '#' => self.handle_comment(),
             _ => self.handle_unknown(),
         };
 
-        let token = Token {
-            kind: token_kind,
-            value: buf,
-        };
-
-        if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
-            return self.next_token();
+        match token_res {
+            Ok(token) => {
+                // Skip whitespace and comment tokens.
+                if matches!(token.kind, TokenKind::Whitespace)
+                    || matches!(token.kind, TokenKind::Comment)
+                {
+                    return self.next_token();
+                }
+                println!("{token:?}");
+                return token;
+            }
+            Err(error) => panic!("An unexpected error happened: {error}"),
         }
-        println!("{token:?}");
-
-        token
     }
 
     fn current_char(&self) -> char {
@@ -115,26 +151,30 @@ impl<'a> Lexer<'a> {
         self.position += 1;
     }
 
-    fn handle_unknown(&mut self) -> (Option<String>, TokenKind) {
+    fn handle_unknown(&mut self) -> Result<Token, SyntaxError> {
         let mut buf = String::with_capacity(1);
         buf.push(self.current_char());
         self.consume();
 
-        (Some(buf), TokenKind::Unknown)
+        Ok(Token {
+            kind: TokenKind::Unknown,
+            value: Some(buf),
+        })
     }
 
-    fn handle_comment(&mut self) -> (Option<String>, TokenKind) {
-        let mut buf = String::with_capacity(256);
+    fn handle_comment(&mut self) -> Result<Token, SyntaxError> {
         let mut c = self.next_char();
         while c != '\n' {
-            buf.push(c);
-            c = self.current_char();
+            c = self.next_char();
         }
 
-        (Some(buf), TokenKind::Comment)
+        Ok(Token {
+            kind: TokenKind::Comment,
+            value: None,
+        })
     }
 
-    fn handle_operator(&mut self) -> (Option<String>, TokenKind) {
+    fn handle_operator(&mut self) -> Result<Token, SyntaxError> {
         let mut c = self.current_char();
         let mut buf = String::with_capacity(2);
         buf.push(c);
@@ -145,28 +185,37 @@ impl<'a> Lexer<'a> {
             self.consume();
         }
 
-        (Some(buf), TokenKind::Operator)
+        Ok(Token {
+            kind: TokenKind::Operator,
+            value: Some(buf),
+        })
     }
 
-    fn handle_punctuation(&mut self) -> (Option<String>, TokenKind) {
+    fn handle_punctuation(&mut self) -> Result<Token, SyntaxError> {
         let c = self.current_char();
         self.consume();
         let mut buf = String::with_capacity(1);
         buf.push(c);
 
-        (Some(buf), TokenKind::Punctuation)
+        Ok(Token {
+            kind: TokenKind::Punctuation,
+            value: Some(buf),
+        })
     }
 
-    fn handle_whitespace(&mut self) -> (Option<String>, TokenKind) {
+    fn handle_whitespace(&mut self) -> Result<Token, SyntaxError> {
         let mut c = self.next_char();
         while c.is_whitespace() || c == '\r' {
             c = self.next_char();
         }
 
-        (None, TokenKind::Whitespace)
+        Ok(Token {
+            kind: TokenKind::Whitespace,
+            value: None,
+        })
     }
 
-    fn handle_string(&mut self) -> (Option<String>, TokenKind) {
+    fn handle_string(&mut self) -> Result<Token, SyntaxError> {
         let mut buf = String::with_capacity(256);
 
         let mut c = self.next_char();
@@ -181,10 +230,13 @@ impl<'a> Lexer<'a> {
         // Consume the closing quote.
         self.consume();
 
-        (Some(buf), TokenKind::String)
+        Ok(Token {
+            kind: TokenKind::String,
+            value: Some(buf),
+        })
     }
 
-    fn handle_number(&mut self) -> (Option<String>, TokenKind) {
+    fn handle_number(&mut self) -> Result<Token, SyntaxError> {
         let mut c = self.current_char();
         let mut buf = String::with_capacity(256);
         buf.push(c);
@@ -195,10 +247,13 @@ impl<'a> Lexer<'a> {
             c = self.current_char();
         }
 
-        (Some(buf), TokenKind::Number)
+        Ok(Token {
+            kind: TokenKind::Number,
+            value: Some(buf),
+        })
     }
 
-    fn handle_identifier(&mut self) -> (Option<String>, TokenKind) {
+    fn handle_identifier(&mut self) -> Result<Token, SyntaxError> {
         let mut c = self.current_char();
         let mut buf = String::with_capacity(256);
         buf.push(c);
@@ -209,8 +264,10 @@ impl<'a> Lexer<'a> {
             c = self.next_char();
         }
 
-        let kind = Keywords::try_from(buf.as_str()).map_or(TokenKind::Identifier, |_|
-            TokenKind::Keyword);
-        (Some(buf), kind)
+        Ok(Token {
+            kind: Keywords::try_from(buf.as_str())
+                .map_or(TokenKind::Identifier, |_| TokenKind::Keyword),
+            value: Some(buf),
+        })
     }
 }
