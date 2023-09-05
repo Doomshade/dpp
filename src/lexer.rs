@@ -41,7 +41,7 @@ impl Lexer {
 
     pub fn lex(&mut self, input: &str) -> Vec<Token> {
         let mut input = String::from(input);
-        input.push_str("\n");
+        input.push('\n');
 
         self.position = 0;
         self.chars = input.chars().collect();
@@ -69,7 +69,7 @@ impl Lexer {
             };
 
             let token = Token {
-                kind: token_kind.or(Some(TokenKind::Unknown)).unwrap(),
+                kind: token_kind.unwrap_or(TokenKind::Unknown),
                 value: buf,
             };
 
@@ -187,7 +187,7 @@ impl Lexer {
         buf.push(c);
 
         c = self.next_char();
-        while c.is_digit(10) {
+        while c.is_ascii_digit() {
             buf.push(c);
             c = self.current_char();
         }
