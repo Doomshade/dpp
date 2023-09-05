@@ -14,12 +14,12 @@ impl TryFrom<&str> for Keywords {
 
     fn try_from(value: &str) -> Result<Self, UnknownKeywordError> {
         match value {
-            "pp" => Ok(Keywords::Pp),
-            "bigpp" => Ok(Keywords::Bigpp),
-            "smolpp" => Ok(Keywords::Smolpp),
-            "let" => Ok(Keywords::Let),
-            "gfsays" => Ok(Keywords::Gfsays),
-            "gfyells" => Ok(Keywords::Gfyells),
+            "pp" => Ok(Self::Pp),
+            "bigpp" => Ok(Self::Bigpp),
+            "smolpp" => Ok(Self::Smolpp),
+            "let" => Ok(Self::Let),
+            "gfsays" => Ok(Self::Gfsays),
+            "gfyells" => Ok(Self::Gfyells),
             _ => Err(UnknownKeywordError),
         }
     }
@@ -93,7 +93,7 @@ impl<'a> Lexer<'a> {
         if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
             return self.next_token();
         }
-        println!("{:?}", token);
+        println!("{token:?}");
 
         token
     }
