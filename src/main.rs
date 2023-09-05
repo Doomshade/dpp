@@ -1,10 +1,13 @@
-fn main() {
-    println!("Hello, world!");
-    let a: i32;
-    let b: i32;
-    test();
-}
+use std::fs;
+use crate::lexer::Lexer;
 
-fn test() -> i32 {
-    5
+mod lexer;
+
+fn main() {
+    let mut lexer = Lexer::default();
+    let file = fs::read_to_string("examples/main.dpp").expect("Should have been able to read the \
+    file");
+
+    let vec = lexer.lex(file.as_str());
+    println!("{:?}", vec);
 }

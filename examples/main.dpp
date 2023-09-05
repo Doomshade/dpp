@@ -1,0 +1,5 @@
+main(): pp {
+    gfsays("Hello, world!\n");
+    gfyells("Hello, world!\n");
+    bye 0;
+}
