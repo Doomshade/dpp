@@ -10,7 +10,7 @@ fn main() {
     let file =
         fs::read_to_string("examples/main.dpp").expect("Should have been able to read the file");
 
-    let lexer = Lexer::new(file.as_str());
+    let lexer = Lexer::new(file);
     let mut parser = Parser::new(lexer);
     match parser.parse() {
         Ok(ast) => println!("OK: {ast:?}"),

@@ -9,7 +9,7 @@ pub struct Function;
 
 impl Parser {
     pub fn new(lexer: Lexer) -> Self {
-        Parser { lexer }
+        Self { lexer }
     }
 
     pub fn parse(&mut self) -> Result<Ast, SyntaxError> {
@@ -30,7 +30,7 @@ impl Parser {
     }
 
     fn expect_token(&mut self, expected_token_kind: TokenKind) -> Result<Token, SyntaxError> {
-        let token = self.lexer.next_token();
+        let token = self.lexer.next_token()?;
         if token.kind == expected_token_kind {
             println!("OK");
             return Ok(token);
@@ -43,7 +43,7 @@ impl Parser {
     }
 
     fn expect_keyword(&mut self, keyword: Keyword) -> Result<Token, SyntaxError> {
-        let token = self.lexer.next_token();
+        let token = self.lexer.next_token()?;
         if token.kind == TokenKind::Keyword {
             match Keyword::try_from(token.value.as_ref().expect("No value found").as_str()) {
                 Ok(kw) => {

@@ -8,8 +8,8 @@ pub struct SyntaxError {
 }
 
 impl SyntaxError {
-    pub fn new(row: usize, col: usize, message: String) -> Self {
-        SyntaxError { row, col, message }
+    pub const fn new(row: usize, col: usize, message: String) -> Self {
+        Self { row, col, message }
     }
 }
 
@@ -36,10 +36,14 @@ impl Display for UnknownKeywordError {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Keyword {
-    Xxlpp, // u64
-    Pp,    // u32
-    Spp,   // u16
-    Xspp,  // u8
+    Xxlpp,
+    // u64
+    Pp,
+    // u32
+    Spp,
+    // u16
+    Xspp,
+    // u8
     Let,
     Bye,
     Gfsays,
@@ -92,28 +96,30 @@ pub enum TokenKind {
 pub struct Lexer {
     chars: Vec<char>,
     position: usize,
+    tokens: Vec<*const Token>,
 }
 
 impl Lexer {
-    pub fn new(input: &str) -> Self {
+    pub fn new(input: String) -> Self {
         let chars = input.chars().collect();
-        Lexer { chars, position: 0 }
+        Self { chars, position: 0, tokens: Vec::new() }
     }
 
     pub fn reset(&mut self) {
         self.position = 0;
     }
 
-    pub fn lex(&mut self) {
-        loop {
-            if matches!(self.next_token().kind, TokenKind::Eof) {
-                break;
-            }
+    pub fn lex(&mut self) -> Result<(), SyntaxError> {
+        let mut token = self.next_token()?;
+        while token.kind != TokenKind::Eof {
+            self.tokens.push(&token);
+            token = self.next_token()?;
         }
+        Ok(())
     }
 
-    pub fn next_token(&mut self) -> Token {
-        let token_res = match self.current_char() {
+    pub fn next_token(&mut self) -> Result<Token, SyntaxError> {
+        let token = match self.current_char() {
             '\0' => Ok(Token {
                 kind: TokenKind::Eof,
                 value: None,
@@ -128,21 +134,15 @@ impl Lexer {
             }
             '#' => self.handle_comment(),
             _ => self.handle_unknown(),
-        };
+        }?;
 
-        match token_res {
-            Ok(token) => {
-                // Skip whitespace and comment tokens.
-                if matches!(token.kind, TokenKind::Whitespace)
-                    || matches!(token.kind, TokenKind::Comment)
-                {
-                    return self.next_token();
-                }
-                println!("{token:?}");
-                return token;
-            }
-            Err(error) => panic!("An unexpected error happened: {error}"),
+        if matches!(token.kind, TokenKind::Whitespace)
+            || matches!(token.kind, TokenKind::Comment)
+        {
+            return self.next_token();
         }
+        println!("{token:?}");
+        Ok(token)
     }
 
     fn current_char(&self) -> char {
