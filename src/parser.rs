@@ -8,7 +8,7 @@ pub struct Parser {
 pub struct Function;
 
 impl Parser {
-    pub fn new(lexer: Lexer) -> Self {
+    pub const fn new(lexer: Lexer) -> Self {
         Self { lexer }
     }
 

@@ -100,7 +100,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(input: String) -> Self {
+    pub fn new(input: &str) -> Self {
         let chars = input.chars().collect();
         Self { chars, position: 0, tokens: Vec::new() }
     }
