@@ -45,7 +45,7 @@ impl Parser {
         self.lexer.consume_token();
 
         let function_name_token = self.expect_token_kind(&TokenKind::Identifier)?;
-        let function_name = String::from(function_name_token.value.as_ref().unwrap());
+        let function_name = String::from(function_name_token.value.as_ref().expect("An identifier should have a value"));
         self.lexer.consume_token();
 
         self.expect_token(&Token {
@@ -95,7 +95,7 @@ impl Parser {
     }
 
     fn expect_token_kind(&self, expected_token_kind: &TokenKind) -> Result<&Token, SyntaxError> {
-        let token = self.lexer.token().unwrap();
+        let token = self.lexer.token().expect("No token found");
         let token_kind = &token.kind;
         if token_kind != expected_token_kind {
             return Err(SyntaxError {
@@ -132,8 +132,8 @@ impl Parser {
         }
 
         if token.value.is_some() {
-            let token_value = token.value.as_ref().unwrap();
-            let expected_token_value = expected_token.value.as_ref().unwrap();
+            let token_value = token.value.as_ref().expect("No value found");
+            let expected_token_value = expected_token.value.as_ref().expect("No value found");
             if token_value != expected_token_value {
                 return Err(SyntaxError {
                     row: 0,
@@ -148,7 +148,7 @@ impl Parser {
     }
 
     fn expect_keyword(&self, keyword: Keyword) -> Result<&Token, SyntaxError> {
-        let token = self.lexer.token().unwrap();
+        let token = self.lexer.token().expect("No token found");
         if token.kind == TokenKind::Keyword {
             match Keyword::try_from(token.value.as_ref().expect("No value found").as_str()) {
                 Ok(kw) => {
@@ -168,7 +168,7 @@ impl Parser {
         Err(SyntaxError {
             row: 0,
             col: 0,
-            message: String::from(format!("Unexpected keyword {token:?}. Expected {keyword:?}")),
+            message: format!("Unexpected keyword {token:?}. Expected {keyword:?}"),
         })
     }
 }

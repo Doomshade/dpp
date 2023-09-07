@@ -38,17 +38,44 @@ Now you can run the compiler:
 You can find examples in the `examples` folder.
 
 ## Syntax
+
 TODO: Add BNFE
 
 ### Keywords
 
 | Keyword  | Description               | Equivalent to |
 |----------|---------------------------|---------------|
-| `nogf`   | void                      | `void`        |
-| `bigpp`  | 64 bit number             | `long`        |
+| `nopp`   | no value                  | `void`        |
+| `xxlpp`  | 64 bit number             | `long`        |
 | `pp`     | 32 bit number             | `int`         |
-| `smolpp` | 16 bit number             | `short`       |
-| `tinypp` | 8 bit number              | `byte`        |
+| `spp`    | 16 bit number             | `short`       |
+| `xspp`   | 8 bit number              | `byte`        |
+| `p`      | character                 | `char`        |
+| `thread` | String                    | `String`      |
+| `boob`   | boolean value             | `bool`        |
 | `say`    | Prints a string to stdout | `print`       |
 | `yell`   | Prints a string to stderr | `printerr`    |
 | `bye`    | Return from a function    | `return`      |
+
+### Grammar
+
+```BNF
+<digit> ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+<letter> ::= a | b | c | d | e | f | g | h | i | j | k | l | m | n | o | p
+          | q | r | s | t | u | v | w | x | y | z | A | B | C | D | E | F
+          | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V
+          | W | X | Y | Z
+<operator> ::= + | - | * | / | %
+<data-type> ::= xxlpp | pp | spp | xspp | nopp | thread | boob | p
+<return> ::= bye <expression> ;
+<string> ::= " <letter> | <digit> | <operator> | <string> "
+<literal> ::= <digit> | <literal> <digit> | <string>
+<identifier> ::= <letter> | <identifier> <letter> | <identifier> <digit>
+<type> ::= <identifier>
+<expression> ::= <literal> | <identifier> | <operator> <expression> | <expression> <operator> <expression> | ( <expression> ) | 
+<statement> ::= <expression> | <type> <identifier> = <expression> | <type> <identifier> = <expression> <operator> <expression>
+<statements> ::= <statement> | <statements> <statement>
+<function> ::= <type> <identifier> ( <type> <identifier> ) <block>
+<block> ::= { <statements> }
+<program> ::= <function> 
+```

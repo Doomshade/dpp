@@ -60,6 +60,12 @@ pub enum DataType {
     Xspp,
     // void
     Nopp,
+    // String
+    Thread,
+    // bool
+    Boob,
+    // char
+    P,
 }
 
 impl TryFrom<&str> for DataType {
@@ -72,6 +78,9 @@ impl TryFrom<&str> for DataType {
             "spp" => Ok(Self::Spp),
             "xspp" => Ok(Self::Xspp),
             "nopp" => Ok(Self::Nopp),
+            "thread" => Ok(Self::Thread),
+            "boob" => Ok(Self::Boob),
+            "p" => Ok(Self::P),
             _ => Err(UnknownDataTypeError {
                 keyword: String::from(value),
             }),
@@ -128,7 +137,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn tokens(&self) -> &Vec<Token> {
+    pub const fn tokens(&self) -> &Vec<Token> {
         &self.tokens
     }
 
@@ -155,10 +164,10 @@ impl Lexer {
     }
 
     pub fn lex(&mut self) -> Result<(), SyntaxError> {
-        let mut token = self.parse_token().expect("No token found.");
+        let mut token = self.parse_token()?;
         while token.kind != TokenKind::Eof {
             self.tokens.push(token);
-            token = self.parse_token().unwrap();
+            token = self.parse_token()?;
         }
         Ok(())
     }
@@ -240,8 +249,7 @@ impl Lexer {
             return Err(SyntaxError {
                 row: self.row,
                 col: self.col,
-                message: format!("Unexpected comment tag '{}'",
-                                 comment_tag),
+                message: format!("Unexpected comment tag '{comment_tag}'"),
             });
         }
         self.consume();
@@ -272,7 +280,7 @@ impl Lexer {
             return Err(SyntaxError {
                 row: self.row,
                 col: self.col,
-                message: format!("Unexpected operator '{}'", c),
+                message: format!("Unexpected operator '{c}'"),
             });
         }
         self.consume();
@@ -365,7 +373,7 @@ impl Lexer {
             c = self.next_char();
         }
 
-        let mut token_kind: TokenKind;
+        let token_kind: TokenKind;
         if Keyword::try_from(buf.as_str()).is_ok() {
             token_kind = TokenKind::Keyword;
         } else if DataType::try_from(buf.as_str()).is_ok() {
