@@ -43,8 +43,9 @@ impl Display for UnknownDataTypeError {
 pub enum Keyword {
     Let,
     Bye,
-    Ppsays,
-    Ppyells,
+    Pprint,
+    Ppanic,
+    Ppin,
     Func,
 }
 
@@ -94,8 +95,9 @@ impl TryFrom<&str> for Keyword {
     fn try_from(value: &str) -> Result<Self, UnknownKeywordError> {
         match value {
             "let" => Ok(Self::Let),
-            "ppsays" => Ok(Self::Ppsays),
-            "ppyells" => Ok(Self::Ppyells),
+            "pprint" => Ok(Self::Pprint),
+            "ppanic" => Ok(Self::Ppanic),
+            "ppin" => Ok(Self::Ppin),
             "bye" => Ok(Self::Bye),
             "FUNc" => Ok(Self::Func),
             _ => Err(UnknownKeywordError {
