@@ -2,19 +2,18 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub struct SyntaxError {
-    row: usize,
-    col: usize,
-    message: String,
-}
-
-impl SyntaxError {
-    pub const fn new(row: usize, col: usize, message: String) -> Self {
-        Self { row, col, message }
-    }
+    pub row: usize,
+    pub col: usize,
+    pub message: String,
 }
 
 #[derive(Debug)]
 pub struct UnknownKeywordError {
+    pub keyword: String,
+}
+
+#[derive(Debug)]
+pub struct UnknownDataTypeError {
     pub keyword: String,
 }
 
@@ -34,21 +33,50 @@ impl Display for UnknownKeywordError {
     }
 }
 
+impl Display for UnknownDataTypeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unknown data type: {}", self.keyword)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Keyword {
-    Xxlpp,
-    // u64
-    Pp,
-    // u32
-    Spp,
-    // u16
-    Xspp,
-    // u8
     Let,
     Bye,
-    Gfsays,
-    Gfyells,
+    Ppsays,
+    Ppyells,
     Func,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum DataType {
+    // u64
+    Xxlpp,
+    // u32
+    Pp,
+    // u16
+    Spp,
+    // u8
+    Xspp,
+    // void
+    Nopp,
+}
+
+impl TryFrom<&str> for DataType {
+    type Error = UnknownDataTypeError;
+
+    fn try_from(value: &str) -> Result<Self, UnknownDataTypeError> {
+        match value {
+            "xxlpp" => Ok(Self::Xxlpp),
+            "pp" => Ok(Self::Pp),
+            "spp" => Ok(Self::Spp),
+            "xspp" => Ok(Self::Xspp),
+            "nopp" => Ok(Self::Nopp),
+            _ => Err(UnknownDataTypeError {
+                keyword: String::from(value),
+            }),
+        }
+    }
 }
 
 impl TryFrom<&str> for Keyword {
@@ -56,13 +84,9 @@ impl TryFrom<&str> for Keyword {
 
     fn try_from(value: &str) -> Result<Self, UnknownKeywordError> {
         match value {
-            "xxlpp" => Ok(Self::Xxlpp),
-            "pp" => Ok(Self::Pp),
-            "spp" => Ok(Self::Spp),
-            "xspp" => Ok(Self::Xspp),
             "let" => Ok(Self::Let),
-            "gfsays" => Ok(Self::Gfsays),
-            "gfyells" => Ok(Self::Gfyells),
+            "ppsays" => Ok(Self::Ppsays),
+            "ppyells" => Ok(Self::Ppyells),
             "bye" => Ok(Self::Bye),
             "FUNc" => Ok(Self::Func),
             _ => Err(UnknownKeywordError {
@@ -86,6 +110,7 @@ pub enum TokenKind {
     Operator,
     Punctuation,
     Keyword,
+    DataType,
     Comment,
     Whitespace,
     Eof,
@@ -96,30 +121,61 @@ pub enum TokenKind {
 pub struct Lexer {
     chars: Vec<char>,
     position: usize,
-    tokens: Vec<*const Token>,
+    tokens: Vec<Token>,
+    curr_token_index: usize,
+    row: usize,
+    col: usize,
 }
 
 impl Lexer {
+    pub fn tokens(&self) -> &Vec<Token> {
+        &self.tokens
+    }
+
     pub fn new(input: &str) -> Self {
         let chars = input.chars().collect();
-        Self { chars, position: 0, tokens: Vec::new() }
+        Self {
+            chars,
+            position: 0,
+            tokens: Vec::new(),
+            curr_token_index:
+            0,
+            row:
+            0,
+            col: 0,
+        }
     }
 
     pub fn reset(&mut self) {
+        self.tokens.clear();
+        self.row = 0;
+        self.col = 0;
+        self.curr_token_index = 0;
         self.position = 0;
     }
 
     pub fn lex(&mut self) -> Result<(), SyntaxError> {
-        let mut token = self.next_token()?;
+        let mut token = self.parse_token().expect("No token found.");
         while token.kind != TokenKind::Eof {
-            self.tokens.push(&token);
-            token = self.next_token()?;
+            self.tokens.push(token);
+            token = self.parse_token().unwrap();
         }
         Ok(())
     }
 
-    pub fn next_token(&mut self) -> Result<Token, SyntaxError> {
-        let token = match self.current_char() {
+    pub fn consume_token(&mut self) {
+        self.curr_token_index += 1;
+    }
+
+    pub fn token(&self) -> Option<&Token> {
+        if self.curr_token_index >= self.tokens.len() {
+            return None;
+        }
+        Some(&self.tokens[self.curr_token_index])
+    }
+
+    fn parse_token(&mut self) -> Result<Token, SyntaxError> {
+        let token = match self.peek() {
             '\0' => Ok(Token {
                 kind: TokenKind::Eof,
                 value: None,
@@ -139,32 +195,37 @@ impl Lexer {
         if matches!(token.kind, TokenKind::Whitespace)
             || matches!(token.kind, TokenKind::Comment)
         {
-            return self.next_token();
+            return self.parse_token();
         }
-        println!("{token:?}");
+        dbg!(&token);
         Ok(token)
     }
 
-    fn current_char(&self) -> char {
-        if self.position >= self.chars.len() {
+    fn peek(&self) -> char {
+        self.peek_ahead(0)
+    }
+
+    fn peek_ahead(&self, ahead: usize) -> char {
+        if self.position + ahead >= self.chars.len() {
             return char::default();
         }
 
-        self.chars[self.position]
+        self.chars[self.position + ahead]
     }
 
     fn next_char(&mut self) -> char {
         self.consume();
-        self.current_char()
+        self.peek()
     }
 
     fn consume(&mut self) {
+        self.col += 1;
         self.position += 1;
     }
 
     fn handle_unknown(&mut self) -> Result<Token, SyntaxError> {
         let mut buf = String::with_capacity(1);
-        buf.push(self.current_char());
+        buf.push(self.peek());
         self.consume();
 
         Ok(Token {
@@ -174,10 +235,24 @@ impl Lexer {
     }
 
     fn handle_comment(&mut self) -> Result<Token, SyntaxError> {
-        let mut c = self.next_char();
-        while c != '\n' {
-            c = self.next_char();
+        let comment_tag = self.peek();
+        if comment_tag != '#' {
+            return Err(SyntaxError {
+                row: self.row,
+                col: self.col,
+                message: format!("Unexpected comment tag '{}'",
+                                 comment_tag),
+            });
         }
+        self.consume();
+
+        let mut c = self.peek();
+        while c != '\n' {
+            self.col += 1;
+            self.consume();
+            c = self.peek();
+        }
+        self.new_line();
 
         Ok(Token {
             kind: TokenKind::Comment,
@@ -185,8 +260,23 @@ impl Lexer {
         })
     }
 
+    fn new_line(&mut self) {
+        self.col = 0;
+        self.row += 1;
+    }
+
     fn handle_operator(&mut self) -> Result<Token, SyntaxError> {
-        let mut c = self.current_char();
+        let ops = "+-*/%^=<>!&|~";
+        let mut c = self.peek();
+        if !ops.contains(c) {
+            return Err(SyntaxError {
+                row: self.row,
+                col: self.col,
+                message: format!("Unexpected operator '{}'", c),
+            });
+        }
+        self.consume();
+
         let mut buf = String::with_capacity(2);
         buf.push(c);
 
@@ -203,7 +293,7 @@ impl Lexer {
     }
 
     fn handle_punctuation(&mut self) -> Result<Token, SyntaxError> {
-        let c = self.current_char();
+        let c = self.peek();
         self.consume();
         let mut buf = String::with_capacity(1);
         buf.push(c);
@@ -248,14 +338,14 @@ impl Lexer {
     }
 
     fn handle_number(&mut self) -> Result<Token, SyntaxError> {
-        let mut c = self.current_char();
+        let mut c = self.peek();
         let mut buf = String::with_capacity(256);
         buf.push(c);
 
         c = self.next_char();
         while c.is_ascii_digit() {
             buf.push(c);
-            c = self.current_char();
+            c = self.peek();
         }
 
         Ok(Token {
@@ -265,7 +355,7 @@ impl Lexer {
     }
 
     fn handle_identifier(&mut self) -> Result<Token, SyntaxError> {
-        let mut c = self.current_char();
+        let mut c = self.peek();
         let mut buf = String::with_capacity(256);
         buf.push(c);
 
@@ -275,9 +365,17 @@ impl Lexer {
             c = self.next_char();
         }
 
+        let mut token_kind: TokenKind;
+        if Keyword::try_from(buf.as_str()).is_ok() {
+            token_kind = TokenKind::Keyword;
+        } else if DataType::try_from(buf.as_str()).is_ok() {
+            token_kind = TokenKind::DataType;
+        } else {
+            token_kind = TokenKind::Identifier;
+        }
+
         Ok(Token {
-            kind: Keyword::try_from(buf.as_str())
-                .map_or(TokenKind::Identifier, |_| TokenKind::Keyword),
+            kind: token_kind,
             value: Some(buf),
         })
     }

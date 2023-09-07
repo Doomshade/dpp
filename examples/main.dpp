@@ -1,4 +1,2 @@
 FUNc main(): pp {
-    gfsays("Hello, world!\n");
-    bye 0;
 }

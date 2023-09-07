@@ -12,8 +12,6 @@ fn main() {
 
     let lexer = Lexer::new(file.as_str());
     let mut parser = Parser::new(lexer);
-    match parser.parse() {
-        Ok(ast) => println!("OK: {ast:?}"),
-        Err(err) => panic!("ERROR: {err:?}"),
-    }
+    let ast = parser.parse();
+    dbg!(ast).expect("TODO: panic message");
 }
