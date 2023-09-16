@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::ast::Ast;
 use crate::lexer::{Keyword, Lexer, SyntaxError, Token, TokenKind};
 
@@ -9,20 +8,20 @@ pub struct Parser {
 }
 
 #[derive(Debug)]
-pub struct Expression {
-    value: String,
+pub struct Program {
+    binary_expression: BinaryExpression,
 }
 
 #[derive(Debug)]
-pub struct Identifier {
-    value: String,
+pub struct BinaryExpression {
+    num1: i64,
+    op: Op,
+    num2: i64,
 }
 
 #[derive(Debug)]
-pub struct Function {
-    name: String,
-    parameters: HashMap<String, Identifier>,
-    body: Vec<Expression>,
+pub enum Op {
+    Add,
 }
 
 impl Parser {
@@ -30,74 +29,51 @@ impl Parser {
         Self { lexer, row: 0, col: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Ast, SyntaxError> {
+    pub fn parse(&mut self) -> Result<Program, SyntaxError> {
         self.lexer.reset();
         self.lexer.lex()?;
-
-        let func = self.parse_function()?;
-        dbg!(func);
-
-        Ok(Ast)
+        self.parse_program()
     }
 
-    fn parse_function(&mut self) -> Result<Function, SyntaxError> {
-        self.expect_keyword(Keyword::Func)?;
+    fn parse_program(&mut self) -> Result<Program, SyntaxError> {
+        let binary_expression = self.parse_binary_expression()?;
+        Ok(Program { binary_expression })
+    }
+
+    fn parse_binary_expression(&mut self) -> Result<BinaryExpression, SyntaxError> {
+        let num1 = self.expect_number()?;
         self.lexer.consume_token();
-
-        let function_name_token = self.expect_token_kind(&TokenKind::Identifier)?;
-        let function_name = String::from(function_name_token.value.as_ref().expect("An identifier should have a value"));
+        let op = self.expect_operator()?;
         self.lexer.consume_token();
-
-        self.expect_token(&Token {
-            kind: TokenKind::Punctuation,
-            value: Some(String::from("(")),
-        })?;
+        let num2 = self.expect_number()?;
         self.lexer.consume_token();
+        Ok(BinaryExpression { num1, op, num2 })
+    }
 
-        // TODO: Parse parameters
-
-        self.expect_token(&Token {
-            kind: TokenKind::Punctuation,
-            value: Some(String::from(")")),
-        })?;
-        self.lexer.consume_token();
-
-        self.expect_token(&Token {
-            kind: TokenKind::Punctuation,
-            value: Some(String::from(":")),
-        })?;
-        self.lexer.consume_token();
-
-        self.expect_token_kind(&TokenKind::Identifier)
-            .or(self.expect_token_kind
-            (&TokenKind::DataType))?;
-
-        self.lexer.consume_token();
-
-        self.expect_token(&Token {
-            kind: TokenKind::Punctuation,
-            value: Some(String::from("{")),
-        })?;
-        self.lexer.consume_token();
-
-        // TODO: Parse body
-        self.expect_token(&Token {
-            kind: TokenKind::Punctuation,
-            value: Some(String::from("}")),
-        })?;
-        self.lexer.consume_token();
-
-        Ok(Function {
-            name: function_name,
-            parameters: HashMap::new(),
-            body: Vec::new(),
+    fn expect_number(&self) -> Result<i64, SyntaxError> {
+        let num_token = self.expect_token_kind(TokenKind::Number)?;
+        num_token.value.as_ref().expect("Expected value").parse::<i64>().map_err(|_| SyntaxError {
+            row: 0,
+            col: 0,
+            message: "".to_string(),
         })
     }
 
-    fn expect_token_kind(&self, expected_token_kind: &TokenKind) -> Result<&Token, SyntaxError> {
+    fn expect_operator(&self) -> Result<Op, SyntaxError> {
+        let op_token = self.expect_token_kind(TokenKind::Operator)?;
+        return match op_token.value.as_ref().expect("Expected value").as_str() {
+            "+" => Ok(Op::Add),
+            _ => Err(SyntaxError {
+                row: 0,
+                col: 0,
+                message: "".to_string(),
+            })
+        };
+    }
+
+    fn expect_token_kind(&self, expected_token_kind: TokenKind) -> Result<&Token, SyntaxError> {
         let token = self.lexer.token().expect("No token found");
-        let token_kind = &token.kind;
-        if token_kind != expected_token_kind {
+        if token.kind != expected_token_kind {
             return Err(SyntaxError {
                 row: 0,
                 col: 0,
@@ -105,70 +81,6 @@ impl Parser {
                 '{expected_token_kind:?}'"),
             });
         }
-
         Ok(token)
-    }
-
-    fn expect_token(&self, expected_token: &Token) -> Result<&Token, SyntaxError> {
-        let token = self.expect_token_kind(&expected_token.kind)?;
-        let token_kind = &token.kind;
-        let expected_token_kind = &expected_token.kind;
-        if *token_kind != *expected_token_kind {
-            return Err(SyntaxError {
-                row: 0,
-                col: 0,
-                message: format!("Unexpected token kind '{token:?}'. Expected \
-                '{expected_token:?}'"),
-            });
-        }
-
-        if token.value != expected_token.value {
-            return Err(SyntaxError {
-                row: 0,
-                col: 0,
-                message: format!("Unexpected token '{token:?}'. Expected \
-                '{expected_token:?}'"),
-            });
-        }
-
-        if token.value.is_some() {
-            let token_value = token.value.as_ref().expect("No value found");
-            let expected_token_value = expected_token.value.as_ref().expect("No value found");
-            if token_value != expected_token_value {
-                return Err(SyntaxError {
-                    row: 0,
-                    col: 0,
-                    message: format!("Unexpected token '{token_kind:?}'. Expected \
-                    '{expected_token_kind:?}'"),
-                });
-            }
-        }
-
-        Ok(token)
-    }
-
-    fn expect_keyword(&self, keyword: Keyword) -> Result<&Token, SyntaxError> {
-        let token = self.lexer.token().expect("No token found");
-        if token.kind == TokenKind::Keyword {
-            match Keyword::try_from(token.value.as_ref().expect("No value found").as_str()) {
-                Ok(kw) => {
-                    if kw == keyword {
-                        return Ok(token);
-                    }
-                }
-                Err(err) => return Err(SyntaxError {
-                    row: 0,
-                    col: 0,
-                    message: err.keyword,
-                }),
-            };
-        }
-
-
-        Err(SyntaxError {
-            row: 0,
-            col: 0,
-            message: format!("Unexpected keyword {token:?}. Expected {keyword:?}"),
-        })
     }
 }

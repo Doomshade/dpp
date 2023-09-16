@@ -180,10 +180,14 @@ impl Lexer {
     }
 
     pub fn token(&self) -> Option<&Token> {
-        if self.curr_token_index >= self.tokens.len() {
+        self.token_lookahead(0)
+    }
+
+    pub fn token_lookahead(&self, ahead: usize) -> Option<&Token> {
+        if self.curr_token_index + ahead >= self.tokens.len() {
             return None;
         }
-        Some(&self.tokens[self.curr_token_index])
+        Some(&self.tokens[self.curr_token_index + ahead])
     }
 
     fn parse_token(&mut self) -> Result<Token, SyntaxError> {

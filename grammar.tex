@@ -1,0 +1,25 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage{amsmath}
+\newcommand{\ebnfnode}[2]{%
+\text{#1} &=
+\begin{cases}
+    #2
+\end{cases}\\
+}
+
+\begin{document}
+    \begin{align}
+        \ebnfnode{program}{\text{binary\textunderscore expression}}
+        \ebnfnode{binary\textunderscore expression}{\text{Number op Number ';'}}
+        \ebnfnode{op}{\text{+}}
+%        \text{functions} &=
+%        \begin{cases}
+%            \text{function} \\
+%            \text{function functions}
+%        \end{cases}\\
+%        \text{function} &=
+%        \begin{cases}
+%            \text{"FUNc" Name '(' [parameters] ')'}
+%        \end{cases}
+    \end{align}
+\end{document}

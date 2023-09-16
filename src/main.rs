@@ -8,7 +8,7 @@ mod parser;
 
 fn main() {
     let file =
-        fs::read_to_string("examples/main.dpp").expect("Should have been able to read the file");
+        fs::read_to_string("examples/first_simple_example.dpp").expect("Should have been able to read the file");
 
     let lexer = Lexer::new(file.as_str());
     let mut parser = Parser::new(lexer);
