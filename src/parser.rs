@@ -1,35 +1,61 @@
-use crate::ast::Ast;
-use crate::lexer::{Keyword, Lexer, SyntaxError, Token, TokenKind};
+use crate::lexer::{Lexer, SyntaxError, Token, TokenKind};
 
 pub struct Parser {
     lexer: Lexer,
     row: usize,
     col: usize,
+    program: Option<Program>,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Program {
     binary_expression: BinaryExpression,
 }
 
-#[derive(Debug)]
+impl Program {
+    pub fn binary_expression(&self) -> &BinaryExpression {
+        &self.binary_expression
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct BinaryExpression {
     num1: i64,
     op: Op,
     num2: i64,
 }
 
-#[derive(Debug)]
+impl BinaryExpression {
+    pub fn num1(&self) -> i64 {
+        self.num1
+    }
+    pub fn op(&self) -> &Op {
+        &self.op
+    }
+
+    pub fn num2(&self) -> i64 {
+        self.num2
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum Op {
     Add,
 }
 
+pub enum Punctuation {
+    Semicolon,
+}
+
 impl Parser {
     pub const fn new(lexer: Lexer) -> Self {
-        Self { lexer, row: 0, col: 0 }
+        Self { lexer, row: 0, col: 0, program: None }
     }
 
     pub fn parse(&mut self) -> Result<Program, SyntaxError> {
+        if self.program.is_some() {
+            return Ok(self.program.unwrap());
+        }
         self.lexer.reset();
         self.lexer.lex()?;
         self.parse_program()
@@ -42,26 +68,54 @@ impl Parser {
 
     fn parse_binary_expression(&mut self) -> Result<BinaryExpression, SyntaxError> {
         let num1 = self.expect_number()?;
-        self.lexer.consume_token();
         let op = self.expect_operator()?;
-        self.lexer.consume_token();
         let num2 = self.expect_number()?;
-        self.lexer.consume_token();
+        self.expect_punctuation(Punctuation::Semicolon)?;
         Ok(BinaryExpression { num1, op, num2 })
     }
 
-    fn expect_number(&self) -> Result<i64, SyntaxError> {
+    fn expect_punctuation(&mut self, punct: Punctuation) -> Result<(), SyntaxError> {
+        let punct_value = match punct { Punctuation::Semicolon => { ';' } };
+        self.expect_token(TokenKind::Punctuation, String::from(punct_value))?;
+        self.lexer.consume_token();
+        Ok(())
+    }
+
+    fn expect_token(&mut self, expected_token_kind: TokenKind, expected_value: String) -> Result<(), SyntaxError> {
+        let token = self.lexer.token().unwrap_or_else(|| panic!("Expected {expected_value}"));
+        if token.kind != expected_token_kind {
+            return Err(SyntaxError {
+                row: 0,
+                col: 0,
+                message: format!("Invalid token '{}', expected '{expected_value}'", token.value.as_ref().unwrap().as_str()).to_string(),
+            });
+        }
+        let value = token.value.as_ref().expect("Expected value");
+        if value.eq(&expected_value) {
+            Ok(())
+        } else {
+            Err(SyntaxError {
+                row: 0,
+                col: 0,
+                message: format!("Expected {expected_value}").to_string(),
+            })
+        }
+    }
+
+    fn expect_number(&mut self) -> Result<i64, SyntaxError> {
         let num_token = self.expect_token_kind(TokenKind::Number)?;
-        num_token.value.as_ref().expect("Expected value").parse::<i64>().map_err(|_| SyntaxError {
+        let result = num_token.value.as_ref().expect("Expected value").parse::<i64>().map_err(|_| SyntaxError {
             row: 0,
             col: 0,
             message: "".to_string(),
-        })
+        });
+        self.lexer.consume_token();
+        result
     }
 
-    fn expect_operator(&self) -> Result<Op, SyntaxError> {
+    fn expect_operator(&mut self) -> Result<Op, SyntaxError> {
         let op_token = self.expect_token_kind(TokenKind::Operator)?;
-        return match op_token.value.as_ref().expect("Expected value").as_str() {
+        let result = match op_token.value.as_ref().expect("Expected value").as_str() {
             "+" => Ok(Op::Add),
             _ => Err(SyntaxError {
                 row: 0,
@@ -69,10 +123,12 @@ impl Parser {
                 message: "".to_string(),
             })
         };
+        self.lexer.consume_token();
+        result
     }
 
     fn expect_token_kind(&self, expected_token_kind: TokenKind) -> Result<&Token, SyntaxError> {
-        let token = self.lexer.token().expect("No token found");
+        let token = self.lexer.token().unwrap_or_else(|| panic!("Expected {:?}", expected_token_kind));
         if token.kind != expected_token_kind {
             return Err(SyntaxError {
                 row: 0,
