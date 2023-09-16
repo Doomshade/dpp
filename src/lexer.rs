@@ -118,6 +118,7 @@ pub enum TokenKind {
     Identifier,
     Number,
     String,
+    Character,
     Operator,
     Punctuation,
     Keyword,
@@ -200,6 +201,7 @@ impl Lexer {
                 self.handle_operator()
             }
             '#' => self.handle_comment(),
+            '\'' => self.handle_char(),
             _ => self.handle_unknown(),
         }?;
 
@@ -224,45 +226,48 @@ impl Lexer {
         self.chars[self.position + ahead]
     }
 
-    fn next_char(&mut self) -> char {
-        self.consume();
-        self.peek()
-    }
-
     fn consume(&mut self) {
         self.col += 1;
         self.position += 1;
     }
 
+    fn handle_char(&mut self) -> Result<Token, SyntaxError> {
+        // Consume opening quote.
+        self.consume();
+        let mut c = self.peek();
+        self.consume();
+        if c == '\\' {
+            c = self.peek();
+            self.consume();
+        }
+
+        // Consume closing quote.
+        self.consume();
+        Ok(Token {
+            kind: TokenKind::Character,
+            value: Some(String::from(c)),
+        })
+    }
+
     fn handle_unknown(&mut self) -> Result<Token, SyntaxError> {
-        let mut buf = String::with_capacity(1);
-        buf.push(self.peek());
+        let c = self.peek();
         self.consume();
 
         Ok(Token {
             kind: TokenKind::Unknown,
-            value: Some(buf),
+            value: Some(String::from(c)),
         })
     }
 
     fn handle_comment(&mut self) -> Result<Token, SyntaxError> {
-        let comment_tag = self.peek();
-        if comment_tag != '#' {
-            return Err(SyntaxError {
-                row: self.row,
-                col: self.col,
-                message: format!("Unexpected comment tag '{comment_tag}'"),
-            });
-        }
+        // Consume the comment tag
         self.consume();
 
         let mut c = self.peek();
         while c != '\n' {
-            self.col += 1;
             self.consume();
             c = self.peek();
         }
-        self.new_line();
 
         Ok(Token {
             kind: TokenKind::Comment,
@@ -270,54 +275,32 @@ impl Lexer {
         })
     }
 
-    fn new_line(&mut self) {
-        self.col = 0;
-        self.row += 1;
-    }
 
     fn handle_operator(&mut self) -> Result<Token, SyntaxError> {
-        let ops = "+-*/%^=<>!&|~";
-        let mut c = self.peek();
-        if !ops.contains(c) {
-            return Err(SyntaxError {
-                row: self.row,
-                col: self.col,
-                message: format!("Unexpected operator '{c}'"),
-            });
-        }
+        let c = self.peek();
         self.consume();
-
-        let mut buf = String::with_capacity(2);
-        buf.push(c);
-
-        c = self.next_char();
-        if "+-*/%^=<>!&|~".contains(c) {
-            buf.push(c);
-            self.consume();
-        }
 
         Ok(Token {
             kind: TokenKind::Operator,
-            value: Some(buf),
+            value: Some(String::from(c)),
         })
     }
 
     fn handle_punctuation(&mut self) -> Result<Token, SyntaxError> {
         let c = self.peek();
         self.consume();
-        let mut buf = String::with_capacity(1);
-        buf.push(c);
 
         Ok(Token {
             kind: TokenKind::Punctuation,
-            value: Some(buf),
+            value: Some(String::from(c)),
         })
     }
 
     fn handle_whitespace(&mut self) -> Result<Token, SyntaxError> {
-        let mut c = self.next_char();
+        let mut c = self.peek();
         while c.is_whitespace() || c == '\r' {
-            c = self.next_char();
+            self.consume();
+            c = self.peek();
         }
 
         Ok(Token {
@@ -328,15 +311,28 @@ impl Lexer {
 
     fn handle_string(&mut self) -> Result<Token, SyntaxError> {
         let mut buf = String::with_capacity(256);
+        // Consume the opening quote.
+        self.consume();
 
-        let mut c = self.next_char();
+        let mut c = self.peek();
         while c != char::default() && c != '"' {
             buf.push(c);
-            c = self.next_char();
+            self.consume();
+            c = self.peek();
+
             if c == '\\' {
                 buf.push(c);
-                c = self.next_char();
+                self.consume();
+                c = self.peek();
             }
+        }
+
+        if c == char::default() {
+            return Err(SyntaxError {
+                row: 0,
+                col: 0,
+                message: String::from("Missing end of string"),
+            });
         }
         // Consume the closing quote.
         self.consume();
@@ -348,13 +344,12 @@ impl Lexer {
     }
 
     fn handle_number(&mut self) -> Result<Token, SyntaxError> {
-        let mut c = self.peek();
         let mut buf = String::with_capacity(256);
-        buf.push(c);
 
-        c = self.next_char();
+        let mut c = self.peek();
         while c.is_ascii_digit() {
             buf.push(c);
+            self.consume();
             c = self.peek();
         }
 
@@ -364,25 +359,24 @@ impl Lexer {
         })
     }
 
-    fn handle_identifier(&mut self) -> Result<Token, SyntaxError> {
-        let mut c = self.peek();
-        let mut buf = String::with_capacity(256);
-        buf.push(c);
+    fn is_keyword(identifier: &str) -> bool {
+        matches!(identifier, "xxlpp" | "pp" | "spp" | "xspp" | "p" | "nopp" | "boob" | "let" | "bye" | "pprint" | "ppanic" | "ppin" | "FUNc")
+    }
 
-        c = self.next_char();
+    fn handle_identifier(&mut self) -> Result<Token, SyntaxError> {
+        let mut buf = String::with_capacity(256);
+
+        let mut c = self.peek();
         while c.is_alphabetic() || c == '_' && !c.is_whitespace() {
             buf.push(c);
-            c = self.next_char();
+            self.consume();
+            c = self.peek();
         }
-
-        let token_kind: TokenKind;
-        if Keyword::try_from(buf.as_str()).is_ok() {
-            token_kind = TokenKind::Keyword;
-        } else if DataType::try_from(buf.as_str()).is_ok() {
-            token_kind = TokenKind::DataType;
+        let token_kind = if Lexer::is_keyword(buf.as_str()) {
+            TokenKind::Keyword
         } else {
-            token_kind = TokenKind::Identifier;
-        }
+            TokenKind::Identifier
+        };
 
         Ok(Token {
             kind: token_kind,
