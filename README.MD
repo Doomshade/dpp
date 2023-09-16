@@ -10,7 +10,7 @@ A KIV/FJP project at UWB Pilsen. The goal is to create a programming language th
 
 ## Usage
 
-You will need [Rust](https://www.rust-lang.org/) installed on your machine.
+You will need [Rust](https://www.rust-lang.org/) installed on your machine to compile it.
 
 You will either need to clone this repo:
 
@@ -32,6 +32,8 @@ Now you can run the compiler:
 ```shell
 > ./target/release/dppc.exe <input_file> <output_file>
 ```
+
+[//]: # (Or just download the executable)
 
 ## Examples
 
