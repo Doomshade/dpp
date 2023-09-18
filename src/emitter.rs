@@ -2,7 +2,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufWriter;
 use std::fs::File;
-use crate::parser::{BinaryExpression, Op, Program};
+use crate::parser::{Program};
 
 pub struct Emitter {
     program: Program,
