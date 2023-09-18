@@ -3,25 +3,51 @@ use crate::lexer::{Lexer, SyntaxError, Token, TokenKind};
 
 pub struct Parser {
     lexer: Lexer,
-    program: Option<Program>,
 }
 
-#[derive(Clone)]
 pub struct Program {
     expression: Option<Box<Expression>>,
 }
 
-#[derive(Clone)]
+impl Program {
+    pub fn expression(&self) -> &Option<Box<Expression>> {
+        &self.expression
+    }
+}
+
 pub struct Expression {
     num: Option<i64>,
     binary_expression: Option<Box<BinaryExpression>>,
 }
 
-#[derive(Clone)]
+impl Expression {
+    pub fn num(&self) -> &Option<i64> {
+        &self.num
+    }
+
+    pub fn binary_expression(&self) -> &Option<Box<BinaryExpression>> {
+        &self.binary_expression
+    }
+}
+
 pub struct BinaryExpression {
     lhs: Box<Expression>,
     op: Op,
     rhs: Box<Expression>,
+}
+
+impl BinaryExpression {
+    pub fn lhs(&self) -> &Expression {
+        &self.lhs
+    }
+
+    pub fn op(&self) -> &Op {
+        &self.op
+    }
+
+    pub fn rhs(&self) -> &Expression {
+        &self.rhs
+    }
 }
 
 impl fmt::Debug for Program {
@@ -58,17 +84,17 @@ impl fmt::Debug for BinaryExpression {
 #[derive(Copy, Clone, Debug)]
 pub enum Op {
     Add,
+    Subtract,
+    Multiply,
+    Divide,
 }
 
 impl Parser {
     pub const fn new(lexer: Lexer) -> Self {
-        Self { lexer, program: None }
+        Self { lexer }
     }
 
     pub fn parse(&mut self) -> Result<Program, SyntaxError> {
-        if self.program.is_some() {
-            return Ok(self.program.as_mut().unwrap().clone());
-        }
         self.lexer.reset();
         self.lexer.lex()?;
         self.parse_program()
@@ -120,6 +146,9 @@ impl Parser {
         let op_token = self.parse_token_kind(TokenKind::Operator)?;
         let result = match op_token.value.as_ref().expect("Expected value").as_str() {
             "+" => Ok(Op::Add),
+            "-" => Ok(Op::Subtract),
+            "*" => Ok(Op::Multiply),
+            "/" => Ok(Op::Divide),
             _ => Err(SyntaxError {
                 file: file!().to_string(),
 
