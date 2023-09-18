@@ -18,29 +18,41 @@ impl Emitter {
         {
             let mut writer = BufWriter::new(file);
             Self::emit_binary_start(&mut writer)?;
-            self.emit_program(&mut writer)?;
+            let stack = &mut 0u32;
+            self.emit_program(stack, &mut writer)?;
         }
         Ok(())
     }
 
-    fn emit_push(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.stack += 1;
+    fn emit_push(
+        &self,
+        stack: &mut u32,
+        register: &str,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
+        *stack += 1;
         writer.write_all(format!("    push {register} ; {}\n", self.stack).as_bytes())
     }
 
-    fn emit_pop(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.stack -= 1;
+    fn emit_pop(
+        &self,
+        stack: &mut u32,
+        register: &str,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
+        *stack -= 1;
+
         writer.write_all(format!("    pop {register} ; {}\n", self.stack).as_bytes())
     }
-    fn emit_program(&mut self, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn emit_program(&mut self, stack: &mut u32, writer: &mut BufWriter<&File>) -> io::Result<()> {
         if let Some(expr) = self.program.expression() {
-            self.emit_expression(writer, expr)?;
+            self.emit_expression(stack, writer, expr)?;
         }
 
-        self.emit_pop("eax", writer)?;
-        self.emit_push("eax", writer)?;
-        self.emit_push("eax", writer)?;
-        self.emit_push("format", writer)?;
+        self.emit_pop(stack, "eax", writer)?;
+        self.emit_push(stack, "eax", writer)?;
+        self.emit_push(stack, "eax", writer)?;
+        self.emit_push(stack, "format", writer)?;
         writer.write_all(b"    call _printf\n")?;
         writer.write_all(b"    add esp,8\n")?;
         writer.write_all(b"    ret\n")?;
@@ -51,24 +63,28 @@ impl Emitter {
 
     fn emit_expression(
         &self,
+        stack: &mut u32,
         writer: &mut BufWriter<&File>,
         expression: &Expression,
     ) -> io::Result<()> {
         if let Some(num) = expression.num() {
-            self.emit_number(writer, *num, "eax")?;
+            self.emit_number(stack, writer, *num, "eax")?;
         } else if let Some(binary_expression) = expression.binary_expression() {
-            self.emit_binary_expression(writer, binary_expression)?;
+            self.emit_binary_expression(stack, writer, binary_expression)?;
         }
         Ok(())
     }
 
     fn emit_number(
         &self,
+        stack: &mut u32,
+
         writer: &mut BufWriter<&File>,
         num: i64,
         register: &str,
     ) -> io::Result<()> {
         writer.write_all(format!("    mov {register}, {num}\n").as_bytes())?;
+        self.emit_push(stack, register, writer)?;
         writer.write_all(format!("    push {register}\n").as_bytes())?;
         Ok(())
     }
@@ -83,11 +99,12 @@ impl Emitter {
 
     fn emit_binary_expression(
         &self,
+        stack: &mut u32,
         writer: &mut BufWriter<&File>,
         binary_expression: &BinaryExpression,
     ) -> io::Result<()> {
-        self.emit_expression(writer, binary_expression.lhs())?;
-        self.emit_expression(writer, binary_expression.rhs())?;
+        self.emit_expression(stack, writer, binary_expression.lhs())?;
+        self.emit_expression(stack, writer, binary_expression.rhs())?;
         writer.write_all(b"    pop ecx\n")?;
         writer.write_all(b"    pop eax\n")?;
 
