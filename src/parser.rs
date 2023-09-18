@@ -10,19 +10,29 @@ pub struct Parser {
 
 #[derive(Clone)]
 pub struct Program {
-    expression: Box<Expression>,
+    expression: Option<Box<Expression>>,
 }
 
 impl Program {
-    pub fn expression(&self) -> &Box<Expression> {
+    pub fn expression(&self) -> &Option<Box<Expression>> {
         &self.expression
     }
 }
 
 #[derive(Clone)]
 pub struct Expression {
-    pub num: Option<i64>,
-    pub binary_expression: Option<Box<BinaryExpression>>,
+    num: Option<i64>,
+    binary_expression: Option<Box<BinaryExpression>>,
+}
+
+impl Expression {
+    pub fn num(&self) -> &Option<i64> {
+        &self.num
+    }
+
+    pub fn binary_expression(&self) -> &Option<Box<BinaryExpression>> {
+        &self.binary_expression
+    }
 }
 
 #[derive(Clone)]
@@ -105,7 +115,7 @@ impl Parser {
     }
 
     fn parse_program(&mut self) -> Result<Program, SyntaxError> {
-        let expression = Box::new(self.parse_expression()?);
+        let expression = Some(Box::new(self.parse_expression()?));
         Ok(Program { expression })
     }
 
