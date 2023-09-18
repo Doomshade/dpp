@@ -16,8 +16,10 @@ fn main() {
     let lexer = Lexer::new(file.as_str());
     let mut parser = Parser::new(lexer);
     let program = parser.parse().expect("Syntax error occured.");
+    parser.print_parse_tree();
     let mut emitter = Emitter::new(program);
     let file_name = String::from("out/dpp/first_simple_example.asm");
-    let file = File::create(&file_name).unwrap_or_else(|_| panic!("Failed to create file {file_name}"));
+    let file = File::create(&file_name).unwrap_or_else(|er| panic!("Failed to create file \
+    {file_name}: {er}"));
     dbg!(emitter.emit(&file)).expect("Failed to emit assembly code");
 }

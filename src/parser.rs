@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use crate::lexer::{Lexer, SyntaxError, Token, TokenKind};
 
 pub struct Parser {
@@ -7,7 +8,7 @@ pub struct Parser {
     program: Option<Program>,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Program {
     binary_expression: BinaryExpression,
 }
@@ -18,23 +19,28 @@ impl Program {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
+pub struct Expression {
+    pub num: i64,
+}
+
+#[derive(Clone, Debug)]
 pub struct BinaryExpression {
-    num1: i64,
+    lhs: Box<Expression>,
     op: Op,
-    num2: i64,
+    rhs: Box<Expression>,
 }
 
 impl BinaryExpression {
-    pub fn num1(&self) -> i64 {
-        self.num1
+    pub fn lhs(&self) -> &Box<Expression> {
+        &self.lhs
     }
     pub fn op(&self) -> &Op {
         &self.op
     }
 
-    pub fn num2(&self) -> i64 {
-        self.num2
+    pub fn rhs(&self) -> &Box<Expression> {
+        &self.rhs
     }
 }
 
@@ -54,11 +60,16 @@ impl Parser {
 
     pub fn parse(&mut self) -> Result<Program, SyntaxError> {
         if self.program.is_some() {
-            return Ok(self.program.unwrap());
+            return Ok(self.program.as_mut().unwrap().to_owned());
         }
         self.lexer.reset();
         self.lexer.lex()?;
         self.parse_program()
+    }
+
+    pub fn print_parse_tree(&mut self) {
+        let program = self.parse().expect("Failed to parse program");
+        println!("{:#?}", program);
     }
 
     fn parse_program(&mut self) -> Result<Program, SyntaxError> {
@@ -67,11 +78,11 @@ impl Parser {
     }
 
     fn parse_binary_expression(&mut self) -> Result<BinaryExpression, SyntaxError> {
-        let num1 = self.expect_number()?;
+        let lhs = self.expect_expression()?;
         let op = self.expect_operator()?;
-        let num2 = self.expect_number()?;
+        let rhs = self.expect_expression()?;
         self.expect_punctuation(Punctuation::Semicolon)?;
-        Ok(BinaryExpression { num1, op, num2 })
+        Ok(BinaryExpression { lhs: Box::new(lhs), op, rhs: Box::new(rhs) })
     }
 
     fn expect_punctuation(&mut self, punct: Punctuation) -> Result<(), SyntaxError> {
@@ -100,6 +111,11 @@ impl Parser {
                 message: format!("Expected {expected_value}"),
             })
         }
+    }
+
+    fn expect_expression(&mut self) -> Result<Expression, SyntaxError> {
+        let num = self.expect_number()?;
+        Ok(Expression { num })
     }
 
     fn expect_number(&mut self) -> Result<i64, SyntaxError> {

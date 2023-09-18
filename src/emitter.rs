@@ -45,10 +45,10 @@ impl Emitter {
     }
 
     fn emit_binary_expression(&self, binary_expression: &BinaryExpression, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        let num1 = binary_expression.num1();
-        let num2 = binary_expression.num2();
-        writer.write_all(format!("    mov eax, {num1}\n").as_bytes())?;
-        writer.write_all(format!("    mov ebx, {num2}\n").as_bytes())?;
+        let lhs = binary_expression.lhs();
+        let rhs = binary_expression.rhs();
+        writer.write_all(format!("    mov eax, {}\n", lhs.num).as_bytes())?;
+        writer.write_all(format!("    mov ebx, {}\n", rhs.num).as_bytes())?;
         match binary_expression.op() {
             Op::Add => {
                 writer.write_all(b"    add eax, ebx\n")?;
