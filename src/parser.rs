@@ -52,7 +52,7 @@ impl BinaryExpression {
 
 impl fmt::Debug for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Program")
+        return f.debug_struct("Program")
          .field("expression", &self.expression)
          .finish()
     }
@@ -73,7 +73,7 @@ impl fmt::Debug for Expression {
 
 impl fmt::Debug for BinaryExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BinaryExpression")
+        return f.debug_struct("BinaryExpression")
          .field("lhs", &self.lhs)
          .field("op", &self.op)
          .field("rhs", &self.rhs)

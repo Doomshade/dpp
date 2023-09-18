@@ -174,7 +174,7 @@ impl Lexer {
     }
 
     pub fn token(&self) -> Option<&Token> {
-        self.token_lookahead(0)
+        return self.token_lookahead(0);
     }
 
     pub fn token_lookahead(&self, ahead: usize) -> Option<&Token> {
@@ -203,9 +203,7 @@ impl Lexer {
             _ => Ok(self.handle_unknown()),
         }?;
 
-        if matches!(token.kind, TokenKind::Whitespace)
-            || matches!(token.kind, TokenKind::Comment)
-        {
+        if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
             return self.parse_token();
         }
         dbg!(&token);
@@ -272,7 +270,6 @@ impl Lexer {
             value: None,
         }
     }
-
 
     fn handle_operator(&mut self) -> Token {
         let c = self.peek();
@@ -359,7 +356,22 @@ impl Lexer {
     }
 
     fn is_keyword(identifier: &str) -> bool {
-        matches!(identifier, "xxlpp" | "pp" | "spp" | "xspp" | "p" | "nopp" | "boob" | "let" | "bye" | "pprint" | "ppanic" | "ppin" | "FUNc")
+        matches!(
+            identifier,
+            "xxlpp"
+                | "pp"
+                | "spp"
+                | "xspp"
+                | "p"
+                | "nopp"
+                | "boob"
+                | "let"
+                | "bye"
+                | "pprint"
+                | "ppanic"
+                | "ppin"
+                | "FUNc"
+        )
     }
 
     fn handle_identifier(&mut self) -> Token {
