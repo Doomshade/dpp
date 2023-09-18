@@ -46,8 +46,8 @@ impl Emitter {
     }
 
     fn emit_number(&self, writer: &mut BufWriter<&File>, num: i64, register: &str) -> io::Result<()> {
-        writer.write_all(format!("    mov {}, {}\n", register, num).as_bytes())?;
-        writer.write_all(format!("    push {}\n", register).as_bytes())?;
+        writer.write_all(format!("    mov {register}, {num}\n").as_bytes())?;
+        writer.write_all(format!("    push {register}\n").as_bytes())?;
         Ok(())
 
     }
