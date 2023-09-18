@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::lexer::{Lexer, SyntaxError, Token, TokenKind};
+use std::fmt;
 
 pub struct Parser {
     lexer: Lexer,
@@ -52,9 +52,10 @@ impl BinaryExpression {
 
 impl fmt::Debug for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        return f.debug_struct("Program")
-         .field("expression", &self.expression)
-         .finish()
+        return f
+            .debug_struct("Program")
+            .field("expression", &self.expression)
+            .finish();
     }
 }
 
@@ -73,11 +74,12 @@ impl fmt::Debug for Expression {
 
 impl fmt::Debug for BinaryExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        return f.debug_struct("BinaryExpression")
-         .field("lhs", &self.lhs)
-         .field("op", &self.op)
-         .field("rhs", &self.rhs)
-         .finish()
+        return f
+            .debug_struct("BinaryExpression")
+            .field("lhs", &self.lhs)
+            .field("op", &self.op)
+            .field("rhs", &self.rhs)
+            .finish();
     }
 }
 
@@ -114,8 +116,13 @@ impl Parser {
         let num = self.parse_number()?;
 
         let op_token = self.lexer.token();
-        if op_token.is_some() && op_token.expect("Should have something").kind == TokenKind::Operator {
-            let lhs = Expression { num: Some(num), binary_expression: None };
+        if op_token.is_some()
+            && op_token.expect("Should have something").kind == TokenKind::Operator
+        {
+            let lhs = Expression {
+                num: Some(num),
+                binary_expression: None,
+            };
             let op = self.parse_operator()?;
             let rhs = self.parse_expression()?;
             return Ok(Expression {
@@ -127,17 +134,25 @@ impl Parser {
                 })),
             });
         }
-        Ok(Expression { num: Some(num), binary_expression: None })
+        Ok(Expression {
+            num: Some(num),
+            binary_expression: None,
+        })
     }
 
     fn parse_number(&mut self) -> Result<i64, SyntaxError> {
         let num_token = self.parse_token_kind(&TokenKind::Number)?;
-        let result = num_token.value.as_ref().expect("Expected value").parse::<i64>().map_err(|_| SyntaxError {
-            file: file!().to_string(),
-            row: line!() as usize,
-            col: column!() as usize,
-            message: String::new(),
-        });
+        let result = num_token
+            .value
+            .as_ref()
+            .expect("Expected value")
+            .parse::<i64>()
+            .map_err(|_| SyntaxError {
+                file: file!().to_string(),
+                row: line!() as usize,
+                col: column!() as usize,
+                message: String::new(),
+            });
         self.lexer.consume_token();
         result
     }
@@ -155,21 +170,26 @@ impl Parser {
                 row: line!() as usize,
                 col: column!() as usize,
                 message: String::new(),
-            })
+            }),
         };
         self.lexer.consume_token();
         result
     }
 
     fn parse_token_kind(&self, expected_token_kind: &TokenKind) -> Result<&Token, SyntaxError> {
-        let token = self.lexer.token().unwrap_or_else(|| panic!("Expected {expected_token_kind:?}"));
+        let token = self
+            .lexer
+            .token()
+            .unwrap_or_else(|| panic!("Expected {expected_token_kind:?}"));
         if token.kind != *expected_token_kind {
             return Err(SyntaxError {
                 file: file!().to_string(),
                 row: line!() as usize,
                 col: column!() as usize,
-                message: format!("Unexpected token kind '{token:?}'. Expected \
-                '{expected_token_kind:?}'"),
+                message: format!(
+                    "Unexpected token kind '{token:?}'. Expected \
+                '{expected_token_kind:?}'"
+                ),
             });
         }
         Ok(token)

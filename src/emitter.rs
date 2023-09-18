@@ -1,8 +1,8 @@
+use crate::parser::{BinaryExpression, Expression, Op, Program};
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufWriter;
-use std::fs::File;
-use crate::parser::{BinaryExpression, Expression, Op, Program};
 
 pub struct Emitter {
     program: Program,
@@ -10,9 +10,7 @@ pub struct Emitter {
 
 impl Emitter {
     pub const fn new(program: Program) -> Self {
-        Self {
-            program
-        }
+        Self { program }
     }
 
     pub fn emit(&mut self, file: &File) -> io::Result<()> {
@@ -35,7 +33,11 @@ impl Emitter {
         Ok(())
     }
 
-    fn emit_expression(&self, writer: &mut BufWriter<&File>, expression: &Expression) -> io::Result<()> {
+    fn emit_expression(
+        &self,
+        writer: &mut BufWriter<&File>,
+        expression: &Expression,
+    ) -> io::Result<()> {
         if let Some(num) = expression.num() {
             // TODO: Emit it properly.
             Self::emit_number(writer, *num, "eax")?;
@@ -49,9 +51,7 @@ impl Emitter {
         writer.write_all(format!("    mov {register}, {num}\n").as_bytes())?;
         writer.write_all(format!("    push {register}\n").as_bytes())?;
         Ok(())
-
     }
-
 
     fn emit_binary_start(writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"global _main\n")?;
@@ -71,17 +71,21 @@ impl Emitter {
     //
     //     Ok(())
     // }
-    fn emit_binary_expression(&self, writer: &mut BufWriter<&File>, binary_expression: &BinaryExpression) -> io::Result<()> {
+    fn emit_binary_expression(
+        &self,
+        writer: &mut BufWriter<&File>,
+        binary_expression: &BinaryExpression,
+    ) -> io::Result<()> {
         self.emit_expression(writer, binary_expression.lhs())?;
         self.emit_expression(writer, binary_expression.rhs())?;
         writer.write_all(b"    pop ebx\n")?;
         writer.write_all(b"    pop eax\n")?;
 
         match binary_expression.op() {
-            Op::Add =>      writer.write_all(b"    add eax, ebx\n"),
+            Op::Add => writer.write_all(b"    add eax, ebx\n"),
             Op::Subtract => writer.write_all(b"    sub eax, ebx\n"),
             Op::Multiply => writer.write_all(b"    mul ebx\n"),
-            Op::Divide =>   writer.write_all(b"    div ebx\n"),
+            Op::Divide => writer.write_all(b"    div ebx\n"),
         }?;
         writer.write_all(b"    push eax\n")?;
         Ok(())
