@@ -140,10 +140,6 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub const fn tokens(&self) -> &Vec<Token> {
-        &self.tokens
-    }
-
     pub fn new(input: &str) -> Self {
         let chars = input.chars().collect();
         Self {
