@@ -50,7 +50,7 @@ impl Emitter {
     }
 
     fn emit_expression(
-        &mut self,
+        &self,
         writer: &mut BufWriter<&File>,
         expression: &Expression,
     ) -> io::Result<()> {
@@ -63,7 +63,7 @@ impl Emitter {
     }
 
     fn emit_number(
-        &mut self,
+        &self,
         writer: &mut BufWriter<&File>,
         num: i64,
         register: &str,
@@ -82,7 +82,7 @@ impl Emitter {
     }
 
     fn emit_binary_expression(
-        &mut self,
+        &self,
         writer: &mut BufWriter<&File>,
         binary_expression: &BinaryExpression,
     ) -> io::Result<()> {
