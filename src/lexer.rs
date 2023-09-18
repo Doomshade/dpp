@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub struct SyntaxError {
+    pub file: String,
     pub row: usize,
     pub col: usize,
     pub message: String,
@@ -21,8 +22,8 @@ impl Display for SyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Syntax error at {}:{} - {}",
-            self.row, self.col, self.message
+            "Syntax error in file {} at {}:{} - {}",
+            self.file, self.row, self.col, self.message
         )
     }
 }
@@ -149,10 +150,8 @@ impl Lexer {
             chars,
             position: 0,
             tokens: Vec::new(),
-            curr_token_index:
-            0,
-            row:
-            0,
+            curr_token_index: 0,
+            row: 0,
             col: 0,
         }
     }
@@ -332,8 +331,9 @@ impl Lexer {
 
         if c == char::default() {
             return Err(SyntaxError {
-                row: 0,
-                col: 0,
+                file: file!().to_string(),
+                row: line!() as usize,
+                col: column!() as usize,
                 message: String::from("Missing end of string"),
             });
         }
@@ -375,7 +375,7 @@ impl Lexer {
             self.consume();
             c = self.peek();
         }
-        let token_kind = if Lexer::is_keyword(buf.as_str()) {
+        let token_kind = if Self::is_keyword(buf.as_str()) {
             TokenKind::Keyword
         } else {
             TokenKind::Identifier

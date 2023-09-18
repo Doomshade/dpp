@@ -30,11 +30,11 @@ impl Emitter {
         }
         Ok(())
     }
-
-    fn emit_program(&self, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.emit_binary_expression(self.program.binary_expression(), writer)
-    }
-
+    //
+    // fn emit_program(&self, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    //     self.emit_binary_expression(self.program.binary_expression(), writer)
+    // }
+    //
     fn emit_hello_world(&self, writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"    push message\n")?;
         writer.write_all(b"    call _printf\n")?;
@@ -43,19 +43,19 @@ impl Emitter {
 
         Ok(())
     }
-
-    fn emit_binary_expression(&self, binary_expression: &BinaryExpression, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        let lhs = binary_expression.lhs();
-        let rhs = binary_expression.rhs();
-        writer.write_all(format!("    mov eax, {}\n", lhs.num).as_bytes())?;
-        writer.write_all(format!("    mov ebx, {}\n", rhs.num).as_bytes())?;
-        match binary_expression.op() {
-            Op::Add => {
-                writer.write_all(b"    add eax, ebx\n")?;
-            }
-        }
-        writer.write_all(b"    push eax\n")?;
-
-        Ok(())
-    }
+    //
+    // fn emit_binary_expression(&self, binary_expression: &BinaryExpression, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    //     let lhs = binary_expression.lhs();
+    //     let rhs = binary_expression.rhs();
+    //     writer.write_all(format!("    mov eax, {}\n", lhs.num).as_bytes())?;
+    //     writer.write_all(format!("    mov ebx, {}\n", rhs.num).as_bytes())?;
+    //     match binary_expression.op() {
+    //         Op::Add => {
+    //             writer.write_all(b"    add eax, ebx\n")?;
+    //         }
+    //     }
+    //     writer.write_all(b"    push eax\n")?;
+    //
+    //     Ok(())
+    // }
 }
