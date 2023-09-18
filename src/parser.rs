@@ -10,7 +10,7 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn expression(&self) -> &Option<Box<Expression>> {
+    pub const fn expression(&self) -> &Option<Box<Expression>> {
         &self.expression
     }
 }
@@ -21,11 +21,11 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub fn num(&self) -> &Option<i64> {
+    pub const fn num(&self) -> &Option<i64> {
         &self.num
     }
 
-    pub fn binary_expression(&self) -> &Option<Box<BinaryExpression>> {
+    pub const fn binary_expression(&self) -> &Option<Box<BinaryExpression>> {
         &self.binary_expression
     }
 }
@@ -37,15 +37,15 @@ pub struct BinaryExpression {
 }
 
 impl BinaryExpression {
-    pub fn lhs(&self) -> &Expression {
+    pub const fn lhs(&self) -> &Expression {
         &self.lhs
     }
 
-    pub fn op(&self) -> &Op {
+    pub const fn op(&self) -> &Op {
         &self.op
     }
 
-    pub fn rhs(&self) -> &Expression {
+    pub const fn rhs(&self) -> &Expression {
         &self.rhs
     }
 }
@@ -114,7 +114,7 @@ impl Parser {
         let num = self.parse_number()?;
 
         let op_token = self.lexer.token();
-        if op_token.is_some() && op_token.unwrap().kind == TokenKind::Operator {
+        if op_token.is_some() && op_token.expect("Should have something").kind == TokenKind::Operator {
             let lhs = Expression { num: Some(num), binary_expression: None };
             let op = self.parse_operator()?;
             let rhs = self.parse_expression()?;
@@ -131,7 +131,7 @@ impl Parser {
     }
 
     fn parse_number(&mut self) -> Result<i64, SyntaxError> {
-        let num_token = self.parse_token_kind(TokenKind::Number)?;
+        let num_token = self.parse_token_kind(&TokenKind::Number)?;
         let result = num_token.value.as_ref().expect("Expected value").parse::<i64>().map_err(|_| SyntaxError {
             file: file!().to_string(),
             row: line!() as usize,
@@ -143,7 +143,7 @@ impl Parser {
     }
 
     fn parse_operator(&mut self) -> Result<Op, SyntaxError> {
-        let op_token = self.parse_token_kind(TokenKind::Operator)?;
+        let op_token = self.parse_token_kind(&TokenKind::Operator)?;
         let result = match op_token.value.as_ref().expect("Expected value").as_str() {
             "+" => Ok(Op::Add),
             "-" => Ok(Op::Subtract),
@@ -161,9 +161,9 @@ impl Parser {
         result
     }
 
-    fn parse_token_kind(&self, expected_token_kind: TokenKind) -> Result<&Token, SyntaxError> {
+    fn parse_token_kind(&self, expected_token_kind: &TokenKind) -> Result<&Token, SyntaxError> {
         let token = self.lexer.token().unwrap_or_else(|| panic!("Expected {expected_token_kind:?}"));
-        if token.kind != expected_token_kind {
+        if token.kind != *expected_token_kind {
             return Err(SyntaxError {
                 file: file!().to_string(),
                 row: line!() as usize,

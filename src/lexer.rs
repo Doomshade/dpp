@@ -190,17 +190,17 @@ impl Lexer {
                 kind: TokenKind::Eof,
                 value: None,
             }),
-            'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
-            '0'..='9' => self.handle_number(),
+            'a'..='z' | 'A'..='Z' | '_' => Ok(self.handle_identifier()),
+            '0'..='9' => Ok(self.handle_number()),
             '"' => self.handle_string(),
-            ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
-            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.handle_punctuation(),
+            ' ' | '\t' | '\n' | '\r' => Ok(self.handle_whitespace()),
+            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => Ok(self.handle_punctuation()),
             '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
-                self.handle_operator()
+                Ok(self.handle_operator())
             }
-            '#' => self.handle_comment(),
-            '\'' => self.handle_char(),
-            _ => self.handle_unknown(),
+            '#' => Ok(self.handle_comment()),
+            '\'' => Ok(self.handle_char()),
+            _ => Ok(self.handle_unknown()),
         }?;
 
         if matches!(token.kind, TokenKind::Whitespace)
@@ -229,7 +229,7 @@ impl Lexer {
         self.position += 1;
     }
 
-    fn handle_char(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_char(&mut self) -> Token {
         // Consume opening quote.
         self.consume();
         let mut c = self.peek();
@@ -241,23 +241,23 @@ impl Lexer {
 
         // Consume closing quote.
         self.consume();
-        Ok(Token {
+        Token {
             kind: TokenKind::Character,
             value: Some(String::from(c)),
-        })
+        }
     }
 
-    fn handle_unknown(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_unknown(&mut self) -> Token {
         let c = self.peek();
         self.consume();
 
-        Ok(Token {
+        Token {
             kind: TokenKind::Unknown,
             value: Some(String::from(c)),
-        })
+        }
     }
 
-    fn handle_comment(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_comment(&mut self) -> Token {
         // Consume the comment tag
         self.consume();
 
@@ -267,44 +267,44 @@ impl Lexer {
             c = self.peek();
         }
 
-        Ok(Token {
+        Token {
             kind: TokenKind::Comment,
             value: None,
-        })
+        }
     }
 
 
-    fn handle_operator(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_operator(&mut self) -> Token {
         let c = self.peek();
         self.consume();
 
-        Ok(Token {
+        Token {
             kind: TokenKind::Operator,
             value: Some(String::from(c)),
-        })
+        }
     }
 
-    fn handle_punctuation(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_punctuation(&mut self) -> Token {
         let c = self.peek();
         self.consume();
 
-        Ok(Token {
+        Token {
             kind: TokenKind::Punctuation,
             value: Some(String::from(c)),
-        })
+        }
     }
 
-    fn handle_whitespace(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_whitespace(&mut self) -> Token {
         let mut c = self.peek();
         while c.is_whitespace() || c == '\r' {
             self.consume();
             c = self.peek();
         }
 
-        Ok(Token {
+        Token {
             kind: TokenKind::Whitespace,
             value: None,
-        })
+        }
     }
 
     fn handle_string(&mut self) -> Result<Token, SyntaxError> {
@@ -342,7 +342,7 @@ impl Lexer {
         })
     }
 
-    fn handle_number(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_number(&mut self) -> Token {
         let mut buf = String::with_capacity(256);
 
         let mut c = self.peek();
@@ -352,17 +352,17 @@ impl Lexer {
             c = self.peek();
         }
 
-        Ok(Token {
+        Token {
             kind: TokenKind::Number,
             value: Some(buf),
-        })
+        }
     }
 
     fn is_keyword(identifier: &str) -> bool {
         matches!(identifier, "xxlpp" | "pp" | "spp" | "xspp" | "p" | "nopp" | "boob" | "let" | "bye" | "pprint" | "ppanic" | "ppin" | "FUNc")
     }
 
-    fn handle_identifier(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_identifier(&mut self) -> Token {
         let mut buf = String::with_capacity(256);
 
         let mut c = self.peek();
@@ -377,9 +377,9 @@ impl Lexer {
             TokenKind::Identifier
         };
 
-        Ok(Token {
+        Token {
             kind: token_kind,
             value: Some(buf),
-        })
+        }
     }
 }

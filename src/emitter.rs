@@ -9,7 +9,7 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    pub fn new(program: Program) -> Self {
+    pub const fn new(program: Program) -> Self {
         Self {
             program
         }
@@ -38,14 +38,14 @@ impl Emitter {
     fn emit_expression(&self, writer: &mut BufWriter<&File>, expression: &Expression) -> io::Result<()> {
         if let Some(num) = expression.num() {
             // TODO: Emit it properly.
-            self.emit_number(writer, *num, "eax")?;
+            Self::emit_number(writer, *num, "eax")?;
         } else if let Some(binary_expression) = expression.binary_expression() {
             self.emit_binary_expression(writer, binary_expression)?;
         }
         Ok(())
     }
 
-    fn emit_number(&self, writer: &mut BufWriter<&File>, num: i64, register: &str) -> io::Result<()> {
+    fn emit_number(writer: &mut BufWriter<&File>, num: i64, register: &str) -> io::Result<()> {
         writer.write_all(format!("    mov {register}, {num}\n").as_bytes())?;
         writer.write_all(format!("    push {register}\n").as_bytes())?;
         Ok(())
