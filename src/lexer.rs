@@ -122,7 +122,6 @@ pub enum TokenKind {
     Operator,
     Punctuation,
     Keyword,
-    DataType,
     Comment,
     Whitespace,
     Eof,

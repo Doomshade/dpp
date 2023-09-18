@@ -10,7 +10,7 @@ pub struct Emitter {
 
 impl Emitter {
     pub fn new(program: Program) -> Self {
-        Emitter {
+        Self {
             program
         }
     }
@@ -18,13 +18,13 @@ impl Emitter {
     pub fn emit(&mut self, file: &File) -> io::Result<()> {
         {
             let mut writer = BufWriter::new(file);
-            writer.write_all("global _main\n".as_bytes())?;
-            writer.write_all("    extern  _printf\n".as_bytes())?;
-            writer.write_all("segment .data\n".as_bytes())?;
-            writer.write_all("  message:\n".as_bytes())?;
-            writer.write_all("    db 'Hello World', 0\n".as_bytes())?;
-            writer.write_all("section .text\n".as_bytes())?;
-            writer.write_all("  _main:\n".as_bytes())?;
+            writer.write_all(b"global _main\n")?;
+            writer.write_all(b"    extern  _printf\n")?;
+            writer.write_all(b"segment .data\n")?;
+            writer.write_all(b"  message:\n")?;
+            writer.write_all(b"    db 'Hello World', 0\n")?;
+            writer.write_all(b"section .text\n")?;
+            writer.write_all(b"  _main:\n")?;
             // self.emit_program(&mut writer)?;
             self.emit_hello_world(&mut writer)?;
         }
@@ -36,10 +36,10 @@ impl Emitter {
     }
 
     fn emit_hello_world(&self, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        writer.write_all("    push message\n".as_bytes())?;
-        writer.write_all("    call _printf\n".as_bytes())?;
-        writer.write_all("    add esp,4\n".as_bytes())?;
-        writer.write_all("    ret\n".as_bytes())?;
+        writer.write_all(b"    push message\n")?;
+        writer.write_all(b"    call _printf\n")?;
+        writer.write_all(b"    add esp,4\n")?;
+        writer.write_all(b"    ret\n")?;
 
         Ok(())
     }
@@ -47,14 +47,14 @@ impl Emitter {
     fn emit_binary_expression(&self, binary_expression: &BinaryExpression, writer: &mut BufWriter<&File>) -> io::Result<()> {
         let num1 = binary_expression.num1();
         let num2 = binary_expression.num2();
-        writer.write_all(format!("    mov eax, {}\n", num1).as_bytes())?;
-        writer.write_all(format!("    mov ebx, {}\n", num2).as_bytes())?;
+        writer.write_all(format!("    mov eax, {num1}\n").as_bytes())?;
+        writer.write_all(format!("    mov ebx, {num2}\n").as_bytes())?;
         match binary_expression.op() {
             Op::Add => {
-                writer.write_all("    add eax, ebx\n".as_bytes())?;
+                writer.write_all(b"    add eax, ebx\n")?;
             }
         }
-        writer.write_all("    push eax\n".as_bytes())?;
+        writer.write_all(b"    push eax\n")?;
 
         Ok(())
     }

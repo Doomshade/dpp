@@ -87,7 +87,7 @@ impl Parser {
             return Err(SyntaxError {
                 row: 0,
                 col: 0,
-                message: format!("Invalid token '{}', expected '{expected_value}'", token.value.as_ref().unwrap().as_str()).to_string(),
+                message: format!("Invalid token '{}', expected '{expected_value}'", token.value.as_ref().unwrap().as_str()),
             });
         }
         let value = token.value.as_ref().expect("Expected value");
@@ -97,7 +97,7 @@ impl Parser {
             Err(SyntaxError {
                 row: 0,
                 col: 0,
-                message: format!("Expected {expected_value}").to_string(),
+                message: format!("Expected {expected_value}"),
             })
         }
     }
@@ -107,7 +107,7 @@ impl Parser {
         let result = num_token.value.as_ref().expect("Expected value").parse::<i64>().map_err(|_| SyntaxError {
             row: 0,
             col: 0,
-            message: "".to_string(),
+            message: String::new(),
         });
         self.lexer.consume_token();
         result
@@ -120,7 +120,7 @@ impl Parser {
             _ => Err(SyntaxError {
                 row: 0,
                 col: 0,
-                message: "".to_string(),
+                message: String::new(),
             })
         };
         self.lexer.consume_token();
@@ -128,7 +128,7 @@ impl Parser {
     }
 
     fn expect_token_kind(&self, expected_token_kind: TokenKind) -> Result<&Token, SyntaxError> {
-        let token = self.lexer.token().unwrap_or_else(|| panic!("Expected {:?}", expected_token_kind));
+        let token = self.lexer.token().unwrap_or_else(|| panic!("Expected {expected_token_kind:?}"));
         if token.kind != expected_token_kind {
             return Err(SyntaxError {
                 row: 0,
