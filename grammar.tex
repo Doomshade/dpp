@@ -1,25 +1,24 @@
 \documentclass[12pt, a4paper]{article}
 \usepackage{amsmath}
+\newcommand{\ttt}[1]{
+    \text{\texttt{#1}}
+}
 \newcommand{\ebnfnode}[2]{%
-\text{#1} &=
-\begin{cases}
-    #2
-\end{cases}\\
+    #1\hspace{20px} &\to #2\\
+}
+
+\newcommand{\ebnfnodett}[2]{%
+    \ebnfnode{\ttt{#1}}{\ttt{#2}}
 }
 
 \begin{document}
-    \begin{align}
-        \ebnfnode{program}{\text{binary\textunderscore expression}}
-        \ebnfnode{binary\textunderscore expression}{\text{Number op Number ';'}}
-        \ebnfnode{op}{\text{+}}
-%        \text{functions} &=
-%        \begin{cases}
-%            \text{function} \\
-%            \text{function functions}
-%        \end{cases}\\
-%        \text{function} &=
-%        \begin{cases}
-%            \text{"FUNc" Name '(' [parameters] ')'}
-%        \end{cases}
-    \end{align}
+    \begin{align*}
+        \ebnfnodett{expression}{equality}
+        \ebnfnodett{equality}{comparison ( ( "!=" | "==" ) comparison )* ;}
+        \ebnfnodett{comparison}{term ( ( ">" | ">=" | "<" | "<=" ) term )* ;}
+        \ebnfnodett{term}{factor ( ( "-" | "+" ) factor )* ;}
+        \ebnfnodett{factor}{unary ( ( "/" | "*" ) unary )* ;}
+        \ebnfnode{\ttt{unary}}{\ttt{( "!" | "-" ) unary}\\&\ttt{ | primary ;}}
+        \ebnfnode{\ttt{primary}}{\ttt{NUMBER | STRING | "true" | "false"}\\&\ttt{ | "nil" | "(" expression ")" ;}}
+    \end{align*}
 \end{document}

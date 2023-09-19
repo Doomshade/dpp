@@ -99,7 +99,7 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Program, SyntaxError> {
         self.lexer.reset();
         self.lexer.lex()?;
-        self.parse_program()
+        self.program()
     }
 
     pub fn print_parse_tree(&mut self) {
@@ -107,13 +107,13 @@ impl Parser {
         println!("{program:#?}");
     }
 
-    fn parse_program(&mut self) -> Result<Program, SyntaxError> {
-        let expression = Some(Box::new(self.parse_expression()?));
+    fn program(&mut self) -> Result<Program, SyntaxError> {
+        let expression = Some(Box::new(self.expression()?));
         Ok(Program { expression })
     }
 
-    fn parse_expression(&mut self) -> Result<Expression, SyntaxError> {
-        let num = self.parse_number()?;
+    fn expression(&mut self) -> Result<Expression, SyntaxError> {
+        let num = self.number()?;
 
         let op_token = self.lexer.token();
         if op_token.is_some()
@@ -123,8 +123,8 @@ impl Parser {
                 num: Some(num),
                 binary_expression: None,
             };
-            let op = self.parse_operator()?;
-            let rhs = self.parse_expression()?;
+            let op = self.operator()?;
+            let rhs = self.expression()?;
             return Ok(Expression {
                 num: None,
                 binary_expression: Some(Box::new(BinaryExpression {
@@ -140,8 +140,8 @@ impl Parser {
         })
     }
 
-    fn parse_number(&mut self) -> Result<i64, SyntaxError> {
-        let num_token = self.parse_token_kind(&TokenKind::Number)?;
+    fn number(&mut self) -> Result<i64, SyntaxError> {
+        let num_token = self.token_kind(&TokenKind::Number)?;
         let result = num_token
             .value
             .as_ref()
@@ -157,8 +157,8 @@ impl Parser {
         result
     }
 
-    fn parse_operator(&mut self) -> Result<Op, SyntaxError> {
-        let op_token = self.parse_token_kind(&TokenKind::Operator)?;
+    fn operator(&mut self) -> Result<Op, SyntaxError> {
+        let op_token = self.token_kind(&TokenKind::Operator)?;
         let result = match op_token.value.as_ref().expect("Expected value").as_str() {
             "+" => Ok(Op::Add),
             "-" => Ok(Op::Subtract),
@@ -176,7 +176,7 @@ impl Parser {
         result
     }
 
-    fn parse_token_kind(&self, expected_token_kind: &TokenKind) -> Result<&Token, SyntaxError> {
+    fn token_kind(&self, expected_token_kind: &TokenKind) -> Result<&Token, SyntaxError> {
         let token = self
             .lexer
             .token()
