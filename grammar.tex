@@ -18,7 +18,7 @@
         \ebnfnodett{comparison}{term ( ( ">" | ">=" | "<" | "<=" ) term )* ;}
         \ebnfnodett{term}{factor ( ( "-" | "+" ) factor )* ;}
         \ebnfnodett{factor}{unary ( ( "/" | "*" ) unary )* ;}
-        \ebnfnode{\ttt{unary}}{\ttt{( "!" | "-" ) unary}\\&\ttt{ | primary ;}}
+        \ebnfnodett{unary}{( "!" | "-" ) unary | primary ;}
         \ebnfnode{\ttt{primary}}{\ttt{NUMBER | STRING | "true" | "false"}\\&\ttt{ | "nil" | "(" expression ")" ;}}
     \end{align*}
 \end{document}
