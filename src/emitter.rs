@@ -18,9 +18,7 @@ impl Emitter {
             let mut writer = BufWriter::new(file);
             Self::emit_binary_start(&mut writer)?;
             self.emit_program(program, &mut writer)?;
-            if self.stack != 0 {
-                panic!("{} bytes remaining on stack!", self.stack);
-            }
+            assert_eq!(self.stack, 0, "{} bytes remaining on stack!", self.stack);
         }
         Ok(())
     }
@@ -47,20 +45,11 @@ impl Emitter {
             self.emit_expression(writer, expr)?;
         }
 
-        self.emit_pop("eax", writer)?;
-        writer.write_all(b"    xor eax, eax\n")?;
-        writer.write_all(b"    xor ebx, ebx\n")?;
-        writer.write_all(b"    xor ecx, ecx\n")?;
-        writer.write_all(b"    xor edx, edx\n")?;
         self.emit_push("format", writer)?;
         writer.write_all(b"    call _printf\n")?;
-        self.emit_remove_stack_bytes(4, writer)?;
-        //  ;interrupt to exit
-        //  MOV AH,4CH
-        //  INT 21H
+        self.emit_remove_stack_bytes(8, writer)?;
+        writer.write_all(b"    xor eax, eax\n")?;
         writer.write_all(b"    ret\n")?;
-        writer.write_all(b"format:\n")?;
-        writer.write_all(b"    db 'Hello World!', 10, 0\n")?;
         Ok(())
     }
 
@@ -91,6 +80,8 @@ impl Emitter {
     fn emit_binary_start(writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"    global _main\n")?;
         writer.write_all(b"    extern  _printf\n")?;
+        writer.write_all(b"format:\n")?;
+        writer.write_all(b"    db '%d', 10, 0\n")?;
         writer.write_all(b"    section .text\n")?;
         writer.write_all(b"_main:\n")?;
         Ok(())
