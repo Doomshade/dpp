@@ -22,10 +22,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut parser = Parser::new(lexer);
     let program = parser.parse().expect("Syntax error occured.");
     parser.print_parse_tree();
-    let mut emitter = Emitter::new(program);
+    let mut emitter = Emitter::default();
     let file_name = String::from("out/dpp/first_simple_example.asm");
     let file = File::create(file_name)?;
-    emitter.emit(&file)?;
+    emitter.emit(program, &file)?;
 
     Ok(())
 }

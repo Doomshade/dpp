@@ -4,53 +4,68 @@ use std::io;
 use std::io::prelude::*;
 use std::io::BufWriter;
 
+
+#[derive(Default)]
 pub struct Emitter {
-    program: Program,
+    /// The number of bytes remaining on the stack. Each function will have its stack var
+    /// eventually.
     stack: u32,
 }
 
 impl Emitter {
-    #[must_use] pub const fn new(program: Program) -> Self {
-        Self { program, stack: 0 }
-    }
-
-    pub fn emit(&mut self, file: &File) -> io::Result<()> {
+    pub fn emit(&mut self, program: Program, file: &File) -> io::Result<()> {
         {
             let mut writer = BufWriter::new(file);
             Self::emit_binary_start(&mut writer)?;
-            self.emit_program(&mut writer)?;
+            self.emit_program(program, &mut writer)?;
+            if self.stack != 0 {
+                panic!("{} bytes remaining on stack!", self.stack);
+            }
         }
         Ok(())
     }
 
     fn emit_push(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.stack += 1;
+        self.stack += 4; // TODO: Hardcoded size
         writer.write_all(format!("    push {register} ; {}\n", self.stack).as_bytes())
     }
 
     fn emit_pop(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.stack -= 1;
+        self.stack -= 4; // TODO: Hardcoded size
         writer.write_all(format!("    pop {register} ; {}\n", self.stack).as_bytes())
     }
-    fn emit_program(&mut self, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        if let Some(expr) = self.program.expression() {
+
+    fn emit_remove_stack_bytes(&mut self, by: u32, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        self.stack -= by;
+        writer.write_all(format!("    add esp, {} ; {}\n", by, self.stack).as_bytes())?; // TODO:
+        // Hardcoded size
+        Ok(())
+    }
+
+    fn emit_program(&mut self, program: Program, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        if let Some(expr) = program.expression() {
             self.emit_expression(writer, expr)?;
         }
 
         self.emit_pop("eax", writer)?;
-        self.emit_push("eax", writer)?;
-        self.emit_push("eax", writer)?;
+        writer.write_all(b"    xor eax, eax\n")?;
+        writer.write_all(b"    xor ebx, ebx\n")?;
+        writer.write_all(b"    xor ecx, ecx\n")?;
+        writer.write_all(b"    xor edx, edx\n")?;
         self.emit_push("format", writer)?;
         writer.write_all(b"    call _printf\n")?;
-        writer.write_all(b"    add esp,8\n")?;
+        self.emit_remove_stack_bytes(4, writer)?;
+        //  ;interrupt to exit
+        //  MOV AH,4CH
+        //  INT 21H
         writer.write_all(b"    ret\n")?;
         writer.write_all(b"format:\n")?;
-        writer.write_all(b"    db '%d', 10, 0\n")?;
+        writer.write_all(b"    db 'Hello World!', 10, 0\n")?;
         Ok(())
     }
 
     fn emit_expression(
-        &self,
+        &mut self,
         writer: &mut BufWriter<&File>,
         expression: &Expression,
     ) -> io::Result<()> {
@@ -63,13 +78,13 @@ impl Emitter {
     }
 
     fn emit_number(
-        &self,
+        &mut self,
         writer: &mut BufWriter<&File>,
         num: i64,
         register: &str,
     ) -> io::Result<()> {
         writer.write_all(format!("    mov {register}, {num}\n").as_bytes())?;
-        writer.write_all(format!("    push {register}\n").as_bytes())?;
+        self.emit_push(register, writer)?;
         Ok(())
     }
 
@@ -82,14 +97,14 @@ impl Emitter {
     }
 
     fn emit_binary_expression(
-        &self,
+        &mut self,
         writer: &mut BufWriter<&File>,
         binary_expression: &BinaryExpression,
     ) -> io::Result<()> {
         self.emit_expression(writer, binary_expression.lhs())?;
         self.emit_expression(writer, binary_expression.rhs())?;
-        writer.write_all(b"    pop ecx\n")?;
-        writer.write_all(b"    pop eax\n")?;
+        self.emit_pop("ecx", writer)?; // rhs
+        self.emit_pop("eax", writer)?; // lhs
 
         match binary_expression.op() {
             Op::Add => writer.write_all(b"    add eax, ecx\n"),
@@ -97,7 +112,7 @@ impl Emitter {
             Op::Multiply => writer.write_all(b"    mul ecx\n"),
             Op::Divide => writer.write_all(b"    div ecx\n"),
         }?;
-        writer.write_all(b"    push eax\n")?;
+        self.emit_push("eax", writer)?; // result
         Ok(())
     }
 }
