@@ -140,7 +140,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(input: &str) -> Self {
+    #[must_use] pub fn new(input: &str) -> Self {
         let chars = input.chars().collect();
         Self {
             chars,
@@ -173,11 +173,11 @@ impl Lexer {
         self.curr_token_index += 1;
     }
 
-    pub fn token(&self) -> Option<&Token> {
+    #[must_use] pub fn token(&self) -> Option<&Token> {
         return self.token_lookahead(0);
     }
 
-    pub fn token_lookahead(&self, ahead: usize) -> Option<&Token> {
+    #[must_use] pub fn token_lookahead(&self, ahead: usize) -> Option<&Token> {
         if self.curr_token_index + ahead >= self.tokens.len() {
             return None;
         }

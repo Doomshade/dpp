@@ -10,7 +10,7 @@ pub struct Program {
 }
 
 impl Program {
-    pub const fn expression(&self) -> &Option<Box<Expression>> {
+    #[must_use] pub const fn expression(&self) -> &Option<Box<Expression>> {
         &self.expression
     }
 }
@@ -21,11 +21,11 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub const fn num(&self) -> &Option<i64> {
+    #[must_use] pub const fn num(&self) -> &Option<i64> {
         &self.num
     }
 
-    pub const fn binary_expression(&self) -> &Option<Box<BinaryExpression>> {
+    #[must_use] pub const fn binary_expression(&self) -> &Option<Box<BinaryExpression>> {
         &self.binary_expression
     }
 }
@@ -37,15 +37,15 @@ pub struct BinaryExpression {
 }
 
 impl BinaryExpression {
-    pub const fn lhs(&self) -> &Expression {
+    #[must_use] pub const fn lhs(&self) -> &Expression {
         &self.lhs
     }
 
-    pub const fn op(&self) -> &Op {
+    #[must_use] pub const fn op(&self) -> &Op {
         &self.op
     }
 
-    pub const fn rhs(&self) -> &Expression {
+    #[must_use] pub const fn rhs(&self) -> &Expression {
         &self.rhs
     }
 }
@@ -92,7 +92,7 @@ pub enum Op {
 }
 
 impl Parser {
-    pub const fn new(lexer: Lexer) -> Self {
+    #[must_use] pub const fn new(lexer: Lexer) -> Self {
         Self { lexer }
     }
 

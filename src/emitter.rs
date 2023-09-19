@@ -10,7 +10,7 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    pub const fn new(program: Program) -> Self {
+    #[must_use] pub const fn new(program: Program) -> Self {
         Self { program, stack: 0 }
     }
 
