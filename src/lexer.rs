@@ -321,7 +321,7 @@ impl Lexer {
             "+-" => TokenKind::PlusDash,
             "+=" => TokenKind::PlusEqual,
             "-=" => TokenKind::MinusEqual,
-            _ => panic!("Unknown operator: {}", buf)
+            _ => panic!("Unknown operator: {buf}")
         };
 
         Token {

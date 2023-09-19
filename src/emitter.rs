@@ -1,10 +1,3 @@
-use std::fs::File;
-use std::io;
-use std::io::BufWriter;
-use std::io::prelude::*;
-
-use crate::parser::{BoundBinaryExpression, Expression, Program, Op};
-
 #[derive(Default)]
 pub struct Emitter {
     /// The number of bytes remaining on the stack. Each function will have its stack var

@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token, TokenKind};
+use crate::lexer::{Lexer, TokenKind};
 
 
 #[derive(Default)]
@@ -15,7 +15,7 @@ pub enum Expression {
 pub struct Program {}
 
 impl Program {
-    pub fn expression(&self) -> Option<Expression> {
+    #[must_use] pub fn expression(&self) -> Option<Expression> {
         todo!()
     }
 }
@@ -137,8 +137,7 @@ impl Parser {
 
         while self.matches_token_kind(lexer, TokenKind::BangEqual) ||
             self.matches_token_kind(lexer, TokenKind::EqualEqual) {
-            expression = Expression::BinaryExpression {
-                0: BoundBinaryExpression {
+            expression = Expression::BinaryExpression(BoundBinaryExpression {
                     lhs: Box::new(expression),
                     op: self.op(lexer, |kind| {
                         match kind {
@@ -148,8 +147,7 @@ impl Parser {
                         }
                     }),
                     rhs: Box::new(self.comparison(lexer)),
-                },
-            };
+                });
             println!("Equality!");
             dbg!(&expression);
         }
@@ -163,8 +161,7 @@ impl Parser {
             self.matches_token_kind(lexer, TokenKind::GreaterEqual) ||
             self.matches_token_kind(lexer, TokenKind::Less) ||
             self.matches_token_kind(lexer, TokenKind::LessEqual) {
-            expression = Expression::BinaryExpression {
-                0: BoundBinaryExpression {
+            expression = Expression::BinaryExpression(BoundBinaryExpression {
                     lhs: Box::new(expression),
                     op: self.op(lexer, |kind| {
                         match kind {
@@ -176,8 +173,7 @@ impl Parser {
                         }
                     }),
                     rhs: Box::new(self.term(lexer)),
-                },
-            };
+                });
             println!("Comparison!");
             dbg!(&expression);
         }
@@ -189,8 +185,7 @@ impl Parser {
 
         while self.matches_token_kind(lexer, TokenKind::Dash) ||
             self.matches_token_kind(lexer, TokenKind::Plus) {
-            expression = Expression::BinaryExpression {
-                0: BoundBinaryExpression {
+            expression = Expression::BinaryExpression(BoundBinaryExpression {
                     lhs: Box::new(expression),
                     op: self.op(lexer, |kind| {
                         match kind {
@@ -200,8 +195,7 @@ impl Parser {
                         }
                     }),
                     rhs: Box::new(self.factor(lexer)),
-                },
-            };
+                });
             println!("Addition or subtraction!");
             dbg!(&expression);
         }
@@ -234,8 +228,7 @@ impl Parser {
     fn unary(&self, lexer: &mut Lexer) -> Expression {
         if self.matches_token_kind(lexer, TokenKind::Bang) ||
             self.matches_token_kind(lexer, TokenKind::Dash) {
-            let expression = Expression::UnaryExpression {
-                0: BoundUnaryExpression {
+            let expression = Expression::UnaryExpression(BoundUnaryExpression {
                     op: self.op(lexer, |kind| {
                         match kind {
                             TokenKind::Bang => Op::Not,
@@ -244,8 +237,7 @@ impl Parser {
                         }
                     }),
                     operand: Box::new(self.unary(lexer)),
-                },
-            };
+                });
             println!("Unary!");
             dbg!(&expression);
             return expression;
@@ -255,7 +247,7 @@ impl Parser {
     }
 
     fn primary(&self, lexer: &mut Lexer) -> Expression {
-        if self.matches_token_kind(&lexer, TokenKind::False) {
+        if self.matches_token_kind(lexer, TokenKind::False) {
             let expression = Expression::LiteralExpression(BoundLiteralExpression {
                 number: None,
                 string: None,
@@ -263,7 +255,7 @@ impl Parser {
             lexer.consume_token();
             return expression;
         }
-        if self.matches_token_kind(&lexer, TokenKind::True) {
+        if self.matches_token_kind(lexer, TokenKind::True) {
             let expression = Expression::LiteralExpression(BoundLiteralExpression {
                 number: None,
                 string: None,
@@ -271,7 +263,7 @@ impl Parser {
             lexer.consume_token();
             return expression;
         }
-        if self.matches_token_kind(&lexer, TokenKind::Number) {
+        if self.matches_token_kind(lexer, TokenKind::Number) {
             let expression = Expression::LiteralExpression(BoundLiteralExpression {
                 number: Some(lexer.token().unwrap().value.as_ref().unwrap().parse::<i32>().unwrap()),
                 string: None,
@@ -281,7 +273,7 @@ impl Parser {
             lexer.consume_token();
             return expression;
         }
-        if self.matches_token_kind(&lexer, TokenKind::String) {
+        if self.matches_token_kind(lexer, TokenKind::String) {
             let expression = Expression::LiteralExpression(BoundLiteralExpression {
                 number: None,
                 string: Some(lexer.token().unwrap().value.as_ref().unwrap().parse().unwrap()),
@@ -292,7 +284,7 @@ impl Parser {
             return expression;
         }
 
-        if self.matches_token_kind(&lexer, TokenKind::Eof) {
+        if self.matches_token_kind(lexer, TokenKind::Eof) {
             let expression = Expression::LiteralExpression(BoundLiteralExpression {
                 number: None,
                 string: None,

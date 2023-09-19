@@ -19,12 +19,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file = fs::read_to_string("examples/first_simple_example.dpp")?;
 
     let mut lexer = Lexer::new(file.as_str());
-    let mut parser = Parser::default();
-    let program = parser.parse(&mut lexer);
+    let parser = Parser::default();
+    let _program = parser.parse(&mut lexer);
     parser.print_parse_tree(&mut lexer);
-    let mut emitter = Emitter::default();
+    let _emitter = Emitter::default();
     let file_name = String::from("out/dpp/first_simple_example.asm");
-    let file = File::create(file_name)?;
+    let _file = File::create(file_name)?;
     // emitter.emit(program, &file)?;
 
     Ok(())
