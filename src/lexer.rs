@@ -120,13 +120,30 @@ pub enum TokenKind {
     Number,
     String,
     Character,
-    Operator,
+    BangEqual,
     Punctuation,
     Keyword,
     Comment,
     Whitespace,
     Eof,
     Unknown,
+    EqualEqual,
+    Equal,
+    Bang,
+    Star,
+    ForwardSlash,
+    BackSlash,
+    Plus,
+    MinusEqual,
+    PlusEqual,
+    PlusDash,
+    Dash,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    False,
+    True,
 }
 
 #[derive(Debug, Default)]
@@ -140,7 +157,8 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    #[must_use] pub fn new(input: &str) -> Self {
+    #[must_use]
+    pub fn new(input: &str) -> Self {
         let chars = input.chars().collect();
         Self {
             chars,
@@ -173,11 +191,13 @@ impl Lexer {
         self.curr_token_index += 1;
     }
 
-    #[must_use] pub fn token(&self) -> Option<&Token> {
+    #[must_use]
+    pub fn token(&self) -> Option<&Token> {
         return self.token_lookahead(0);
     }
 
-    #[must_use] pub fn token_lookahead(&self, ahead: usize) -> Option<&Token> {
+    #[must_use]
+    pub fn token_lookahead(&self, ahead: usize) -> Option<&Token> {
         if self.curr_token_index + ahead >= self.tokens.len() {
             return None;
         }
@@ -272,12 +292,41 @@ impl Lexer {
     }
 
     fn handle_operator(&mut self) -> Token {
-        let c = self.peek();
+        let mut buf = String::with_capacity(2);
+        buf.push(self.peek());
         self.consume();
 
+        match self.peek() {
+            '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
+                buf.push(self.peek());
+                self.consume();
+            }
+            _ => {}
+        }
+
+        let kind: TokenKind = match buf.as_str() {
+            ">" => TokenKind::Greater,
+            ">=" => TokenKind::GreaterEqual,
+            "<" => TokenKind::Less,
+            "<=" => TokenKind::LessEqual,
+            "!" => TokenKind::Bang,
+            "=" => TokenKind::Equal,
+            "!=" => TokenKind::BangEqual,
+            "==" => TokenKind::EqualEqual,
+            "*" => TokenKind::Star,
+            "/" => TokenKind::ForwardSlash,
+            "\\" => TokenKind::BackSlash,
+            "+" => TokenKind::Plus,
+            "-" => TokenKind::Dash,
+            "+-" => TokenKind::PlusDash,
+            "+=" => TokenKind::PlusEqual,
+            "-=" => TokenKind::MinusEqual,
+            _ => panic!("Unknown operator: {}", buf)
+        };
+
         Token {
-            kind: TokenKind::Operator,
-            value: Some(String::from(c)),
+            kind,
+            value: Some(buf),
         }
     }
 
