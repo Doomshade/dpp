@@ -5,6 +5,7 @@
 use std::error::Error;
 use std::fs;
 use std::fs::File;
+use std::io::BufWriter;
 
 use crate::emitter::Emitter;
 use crate::lexer::Lexer;
@@ -19,12 +20,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file = fs::read_to_string("examples/first_simple_example.dpp")?;
 
     let mut lexer = Lexer::new(file.as_str());
-    let parser = Parser::default();
-    let _program = parser.parse(&mut lexer);
-    parser.print_parse_tree(&mut lexer);
-    let _emitter = Emitter::default();
+    let parser = Parser;
+    let mut emitter = Emitter::default();
     let file_name = String::from("out/dpp/first_simple_example.asm");
-    let _file = File::create(file_name)?;
+    let file = File::create(file_name)?;
+    let mut writer = BufWriter::new(&file);
+    let expression = parser.parse(&mut lexer);
+    emitter.emit(&expression, &mut writer)?;
     // emitter.emit(program, &file)?;
 
     Ok(())
