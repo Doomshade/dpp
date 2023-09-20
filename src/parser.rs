@@ -27,6 +27,9 @@ pub enum Statement {
     ReturnStatement {
         expression: Expression,
     },
+    BlockStatement {
+        block: Box<Block>,
+    },
 }
 
 #[derive(Debug)]
@@ -359,22 +362,21 @@ impl Parser {
     fn block(lexer: &mut Lexer) -> Option<Block> {
         if Self::matches_token_kind(lexer, TokenKind::OpenBrace) {
             lexer.consume_token();
+            let mut statements = Vec::<Statement>::new();
             if let Some(statement) = Self::statement(lexer) {
-                let mut statements = Vec::<Statement>::new();
                 statements.push(statement);
 
                 while let Some(statement) = Self::statement(lexer) {
                     statements.push(statement);
                 }
-
-                assert!(
-                    Self::matches_token_kind(lexer, TokenKind::CloseBrace),
-                    "Expected closing brace"
-                );
-                lexer.consume_token();
-
-                return Some(Block { statements });
             }
+            assert!(
+                Self::matches_token_kind(lexer, TokenKind::CloseBrace),
+                "Expected closing brace"
+            );
+            lexer.consume_token();
+
+            return Some(Block { statements });
         }
 
         None
@@ -411,6 +413,10 @@ impl Parser {
                     });
                 }
             }
+        } else if let Some(block) = Self::block(lexer) {
+            return Some(Statement::BlockStatement {
+                block: Box::new(block),
+            });
         } else if Self::matches_token_kind(lexer, TokenKind::ByeKeyword) {
             lexer.consume_token();
             if let Some(expression) = Self::expression(lexer) {

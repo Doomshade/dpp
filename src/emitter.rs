@@ -55,12 +55,7 @@ impl Emitter {
         translation_unit: TranslationUnit,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        match translation_unit {
-            TranslationUnit {
-                functions,
-                variables: _,
-            } => self.functions(functions, writer),
-        }
+        self.functions(translation_unit.functions, writer)
     }
 
     fn functions(
@@ -112,9 +107,10 @@ impl Emitter {
                 expression,
             } => self.expression(expression, writer)?,
             Statement::IfStatement { expression, block } => {
-                self.if_statement(expression, *block, writer)?
+                self.if_statement(expression, *block, writer)?;
             }
             Statement::ReturnStatement { expression } => {}
+            Statement::BlockStatement { .. } => {}
         };
         Ok(())
     }
