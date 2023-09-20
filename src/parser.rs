@@ -25,6 +25,14 @@ pub enum Statement {
 }
 
 #[derive(Debug)]
+pub enum TranslationUnit {
+    TranslationUnit {
+        functions: Vec<Function>,
+        variables: Vec<Statement>,
+    },
+}
+
+#[derive(Debug)]
 pub enum Function {
     Function {
         identifier: String,
@@ -53,10 +61,13 @@ pub enum Block {
 
 #[derive(Debug)]
 pub enum Expression {
-    PpExpression(BoundPpExpression),
+    PpExpression(i32),
     BoobaExpression(bool),
-    FiberExpression(BoundFiberExpression),
-    UnaryExpression(BoundUnaryExpression),
+    FiberExpression(String),
+    UnaryExpression {
+        op: Op,
+        operand: Box<Expression>,
+    },
     BinaryExpression {
         lhs: Box<Expression>,
         op: Op,
@@ -67,106 +78,14 @@ pub enum Expression {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum DataType {
     Pp,
     Struct(Struct),
 }
 
-#[derive(Debug)]
-pub struct BoundPpDataType {
-    pp: i32,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Struct {}
-
-#[derive(Debug)]
-pub struct Program {}
-
-impl Program {
-    #[must_use]
-    pub fn expression(&self) -> Option<Expression> {
-        todo!()
-    }
-}
-
-#[derive(Debug)]
-pub struct BoundUnaryExpression {
-    op: Op,
-    operand: Box<Expression>,
-}
-
-impl BoundUnaryExpression {
-    #[must_use]
-    pub const fn op(&self) -> &Op {
-        &self.op
-    }
-    #[must_use]
-    pub const fn operand(&self) -> &Box<Expression> {
-        &self.operand
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct BoundPpExpression {
-    pp: i32,
-}
-
-impl BoundPpExpression {
-    #[must_use]
-    pub const fn pp(&self) -> i32 {
-        self.pp
-    }
-}
-
-#[derive(Debug)]
-pub struct BoundFiberExpression {
-    fiber: String,
-}
-
-impl BoundFiberExpression {
-    #[must_use]
-    pub const fn fiber(&self) -> &String {
-        &self.fiber
-    }
-}
-
-#[derive(Debug)]
-pub struct BoundBoobaExpression {
-    booba: bool,
-}
-
-impl BoundBoobaExpression {
-    #[must_use]
-    pub const fn booba(&self) -> bool {
-        self.booba
-    }
-}
-
-#[derive(Debug)]
-pub struct BoundBinaryExpression {
-    lhs: Box<Expression>,
-    op: Op,
-    rhs: Box<Expression>,
-}
-
-impl BoundBinaryExpression {
-    #[must_use]
-    pub const fn lhs(&self) -> &Expression {
-        &self.lhs
-    }
-
-    #[must_use]
-    pub const fn op(&self) -> &Op {
-        &self.op
-    }
-
-    #[must_use]
-    pub const fn rhs(&self) -> &Expression {
-        &self.rhs
-    }
-}
 
 #[derive(Copy, Clone, Debug)]
 pub enum Op {
@@ -182,23 +101,6 @@ pub enum Op {
     LessThanOrEqual,
     Not,
     Negate,
-}
-
-#[derive(Debug)]
-pub struct BoundIfStatement {
-    expression: Expression,
-    block: Box<Block>,
-}
-
-impl BoundIfStatement {
-    #[must_use]
-    pub fn expression(&self) -> &Expression {
-        &self.expression
-    }
-    #[must_use]
-    pub fn block(&self) -> &Block {
-        &self.block
-    }
 }
 
 impl Parser {
@@ -219,6 +121,101 @@ impl Parser {
     pub fn print_parse_tree(&self, lexer: &mut Lexer) {
         let program = self.parse(lexer);
         println!("{program:#?}");
+    }
+
+    fn translation_unit(&self, lexer: &mut Lexer) -> TranslationUnit {
+        let mut functions = Vec::<Function>::new();
+        let mut variables = Vec::<Statement>::new();
+        loop {
+            if let Some(function) = self.function(lexer) {
+                functions.push(function);
+            } else {
+                let variable_decl_common = self.variable_declaration_common(lexer);
+                if let Some(variable_declaration) =
+                    self.variable_declaration(lexer, variable_decl_common.clone())
+                {
+                    variables.push(variable_declaration);
+                } else if let Some(variable_declaration_and_assignment) =
+                    self.variable_declaration_and_assignment(lexer, variable_decl_common)
+                {
+                    variables.push(variable_declaration_and_assignment);
+                } else {
+                    break;
+                }
+            }
+        }
+        TranslationUnit::TranslationUnit {
+            functions,
+            variables,
+        }
+    }
+
+    fn variable_declaration_common(&self, lexer: &mut Lexer) -> Option<(String, DataType)> {
+        if !self.matches_token_kind(lexer, TokenKind::LetKeyword) {
+            return None;
+        }
+        lexer.consume_token();
+
+        if !self.matches_token_kind(lexer, TokenKind::Identifier) {
+            panic!("Expected identifier")
+        }
+
+        let identifier = lexer.token_value().unwrap();
+        lexer.consume_token();
+        if !self.matches_token_kind(lexer, TokenKind::Colon) {
+            panic!("Expected \":\"")
+        }
+        lexer.consume_token();
+        if let Some(data_type) = self.data_type(lexer) {
+            Some((identifier, data_type))
+        } else {
+            panic!("Expected data type")
+        }
+    }
+
+    fn variable_declaration(
+        &self,
+        lexer: &mut Lexer,
+        var_decl_common: Option<(String, DataType)>,
+    ) -> Option<Statement> {
+        if let None = var_decl_common {
+            return None;
+        }
+        let x = var_decl_common.unwrap();
+        if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
+            return None;
+        }
+        lexer.consume_token();
+
+        Some(Statement::VariableDeclaration {
+            identifier: x.0,
+            data_type: x.1,
+        })
+    }
+
+    fn variable_declaration_and_assignment(
+        &self,
+        lexer: &mut Lexer,
+        var_decl_common: Option<(String, DataType)>,
+    ) -> Option<Statement> {
+        if let None = var_decl_common {
+            return None;
+        }
+
+        if !self.matches_token_kind(lexer, TokenKind::Equal) {
+            return None;
+        }
+        lexer.consume_token();
+
+        let x = var_decl_common.unwrap();
+        if let Some(expression) = self.expression(lexer) {
+            return Some(Statement::VariableDeclarationAndInitialization {
+                identifier: x.0,
+                data_type: x.1,
+                expression,
+            });
+        }
+        None
     }
 
     fn functions(&self, lexer: &mut Lexer) -> Vec<Function> {
@@ -558,10 +555,10 @@ impl Parser {
                 _ => unreachable!(),
             });
             if let Some(unary) = self.unary(lexer) {
-                return Some(Expression::UnaryExpression(BoundUnaryExpression {
+                return Some(Expression::UnaryExpression {
                     op,
                     operand: Box::new(unary),
-                }));
+                });
             }
         }
 
@@ -587,30 +584,14 @@ impl Parser {
             return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::Number) {
-            let expression = Expression::PpExpression(BoundPpExpression {
-                pp: lexer
-                    .token()
-                    .unwrap()
-                    .value
-                    .as_ref()
-                    .unwrap()
-                    .parse::<i32>()
-                    .unwrap(),
-            });
+            let expression =
+                Expression::PpExpression(lexer.token_value().unwrap().parse::<i32>().unwrap());
             lexer.consume_token();
             return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::String) {
-            let expression = Expression::FiberExpression(BoundFiberExpression {
-                fiber: lexer
-                    .token()
-                    .unwrap()
-                    .value
-                    .as_ref()
-                    .unwrap()
-                    .parse()
-                    .unwrap(),
-            });
+            let expression =
+                Expression::FiberExpression(lexer.token_value().unwrap().parse().unwrap());
             lexer.consume_token();
             return Some(expression);
         }

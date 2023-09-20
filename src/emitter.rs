@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufWriter, Write};
 
-use crate::parser::{Block, BoundPpExpression, Expression, Function, Op, Statement};
+use crate::parser::{Block, Expression, Function, Op, Statement};
 
 #[derive(Default)]
 pub struct Emitter {
@@ -123,7 +123,7 @@ impl Emitter {
             Expression::PpExpression(pp_expression) => self.pp_expression(pp_expression, writer),
             Expression::BoobaExpression(booba) => self.booba_expression(booba, writer),
             Expression::FiberExpression(_fiber_expression) => Ok(()),
-            Expression::UnaryExpression(_unary_expression) => Ok(()),
+            Expression::UnaryExpression { op, operand } => Ok(()),
             Expression::BinaryExpression { lhs, op, rhs } => {
                 self.binary_expression(lhs, op, rhs, writer)
             }
@@ -172,10 +172,10 @@ impl Emitter {
 
     fn pp_expression(
         &mut self,
-        pp_expression: &BoundPpExpression,
+        pp_expression: &i32,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        self.mov("eax", pp_expression.pp().to_string().as_str(), writer)?;
+        self.mov("eax", pp_expression.to_string().as_str(), writer)?;
         self.push("eax", writer)
     }
 

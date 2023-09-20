@@ -128,7 +128,7 @@ pub enum TokenKind {
     XsppType,      // u8
     NoppType,      // void
     PType,         // char
-    BoobType,      // bool
+    BoobaType,     // bool
     ThreadType,    // String
     ElseKeyword,
 }
@@ -429,7 +429,7 @@ impl Lexer {
             "xspp" => TokenKind::XsppType,
             "p" => TokenKind::PType,
             "nopp" => TokenKind::NoppType,
-            "boob" => TokenKind::BoobType,
+            "booba" => TokenKind::BoobaType,
             "if" => TokenKind::IfKeyword,
             "else" => TokenKind::ElseKeyword,
             "let" => TokenKind::LetKeyword,
