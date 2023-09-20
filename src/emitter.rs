@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufWriter, Write};
 
-use crate::parser::{Block, Expression, Function, Op, Statement};
+use crate::parser::{Block, Expression, Function, Op, Statement, TranslationUnit};
 
 #[derive(Default)]
 pub struct Emitter {
@@ -41,14 +41,35 @@ impl Emitter {
 
     pub fn emit(
         &mut self,
-        functions: &Vec<Function>,
+        translation_unit: &TranslationUnit,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         Self::start(writer)?;
+        Self::end(writer)?;
+        Ok(())
+    }
+
+    fn translation_unit(
+        &mut self,
+        translation_unit: TranslationUnit,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
+        match translation_unit {
+            TranslationUnit::TranslationUnit {
+                functions,
+                variables,
+            } => self.functions(&functions, writer),
+        }
+    }
+
+    fn functions(
+        &mut self,
+        functions: &Vec<Function>,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
         for function in functions {
             self.function(function, writer)?;
         }
-        Self::end(writer)?;
         Ok(())
     }
 
@@ -123,7 +144,7 @@ impl Emitter {
             Expression::PpExpression(pp_expression) => self.pp_expression(pp_expression, writer),
             Expression::BoobaExpression(booba) => self.booba_expression(booba, writer),
             Expression::FiberExpression(_fiber_expression) => Ok(()),
-            Expression::UnaryExpression { op, operand } => Ok(()),
+            Expression::UnaryExpression { op: _, operand: _ } => Ok(()),
             Expression::BinaryExpression { lhs, op, rhs } => {
                 self.binary_expression(lhs, op, rhs, writer)
             }

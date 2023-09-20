@@ -25,9 +25,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file_name = String::from("out/dpp/first_simple_example.asm");
     let file = File::create(file_name)?;
     let mut writer = BufWriter::new(&file);
-    let functions = parser.parse(&mut lexer);
-    dbg!(&functions);
-    emitter.emit(&functions, &mut writer)?;
+    let translation_unit = parser.parse(&mut lexer);
+    dbg!(&translation_unit);
+    emitter.emit(&translation_unit, &mut writer)?;
     // emitter.emit(program, &file)?;
 
     Ok(())

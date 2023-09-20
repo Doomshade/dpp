@@ -104,10 +104,10 @@ pub enum Op {
 }
 
 impl Parser {
-    pub fn parse(&self, lexer: &mut Lexer) -> Vec<Function> {
+    pub fn parse(&self, lexer: &mut Lexer) -> TranslationUnit {
         lexer.reset();
         lexer.lex().expect("LUL");
-        self.functions(lexer)
+        self.translation_unit(lexer)
     }
 
     fn op(&self, lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> Op) -> Op {
@@ -118,30 +118,23 @@ impl Parser {
         op
     }
 
-    pub fn print_parse_tree(&self, lexer: &mut Lexer) {
-        let program = self.parse(lexer);
-        println!("{program:#?}");
-    }
-
     fn translation_unit(&self, lexer: &mut Lexer) -> TranslationUnit {
         let mut functions = Vec::<Function>::new();
         let mut variables = Vec::<Statement>::new();
         loop {
+            let variable_decl_common = self.variable_declaration_common(lexer);
             if let Some(function) = self.function(lexer) {
                 functions.push(function);
+            } else if let Some(variable_declaration) =
+                self.variable_declaration(lexer, variable_decl_common.clone())
+            {
+                variables.push(variable_declaration);
+            } else if let Some(variable_declaration_and_assignment) =
+                self.variable_declaration_and_assignment(lexer, variable_decl_common)
+            {
+                variables.push(variable_declaration_and_assignment);
             } else {
-                let variable_decl_common = self.variable_declaration_common(lexer);
-                if let Some(variable_declaration) =
-                    self.variable_declaration(lexer, variable_decl_common.clone())
-                {
-                    variables.push(variable_declaration);
-                } else if let Some(variable_declaration_and_assignment) =
-                    self.variable_declaration_and_assignment(lexer, variable_decl_common)
-                {
-                    variables.push(variable_declaration_and_assignment);
-                } else {
-                    break;
-                }
+                break;
             }
         }
         TranslationUnit::TranslationUnit {
@@ -156,16 +149,19 @@ impl Parser {
         }
         lexer.consume_token();
 
-        if !self.matches_token_kind(lexer, TokenKind::Identifier) {
-            panic!("Expected identifier")
-        }
-
+        assert!(
+            self.matches_token_kind(lexer, TokenKind::Identifier),
+            "Expected identifier"
+        );
         let identifier = lexer.token_value().unwrap();
         lexer.consume_token();
-        if !self.matches_token_kind(lexer, TokenKind::Colon) {
-            panic!("Expected \":\"")
-        }
+
+        assert!(
+            self.matches_token_kind(lexer, TokenKind::Colon),
+            "Expected \":\""
+        );
         lexer.consume_token();
+
         if let Some(data_type) = self.data_type(lexer) {
             Some((identifier, data_type))
         } else {
@@ -178,7 +174,7 @@ impl Parser {
         lexer: &mut Lexer,
         var_decl_common: Option<(String, DataType)>,
     ) -> Option<Statement> {
-        if let None = var_decl_common {
+        if matches!(var_decl_common, None) {
             return None;
         }
         let x = var_decl_common.unwrap();
@@ -198,7 +194,7 @@ impl Parser {
         lexer: &mut Lexer,
         var_decl_common: Option<(String, DataType)>,
     ) -> Option<Statement> {
-        if let None = var_decl_common {
+        if matches!(var_decl_common, None) {
             return None;
         }
 
@@ -209,6 +205,11 @@ impl Parser {
 
         let x = var_decl_common.unwrap();
         if let Some(expression) = self.expression(lexer) {
+            assert!(
+                self.matches_token_kind(lexer, TokenKind::Semicolon),
+                "Expected \";\""
+            );
+            lexer.consume_token();
             return Some(Statement::VariableDeclarationAndInitialization {
                 identifier: x.0,
                 data_type: x.1,
