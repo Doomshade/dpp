@@ -31,40 +31,6 @@ pub enum Block {
 }
 
 #[derive(Debug)]
-pub struct BoundVariableDeclarationAndInitialization {
-    identifier: String,
-    data_type: DataType,
-    expression: Expression,
-}
-
-impl BoundVariableDeclarationAndInitialization {
-    pub fn identifier(&self) -> &str {
-        &self.identifier
-    }
-    pub fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-    pub fn expression(&self) -> &Expression {
-        &self.expression
-    }
-}
-
-#[derive(Debug)]
-pub struct BoundVariableDeclaration {
-    identifier: String,
-    data_type: DataType,
-}
-
-impl BoundVariableDeclaration {
-    pub fn identifier(&self) -> &str {
-        &self.identifier
-    }
-    pub fn _type(&self) -> &DataType {
-        &self.data_type
-    }
-}
-
-#[derive(Debug)]
 pub enum Expression {
     PpExpression(BoundPpExpression),
     BoobaExpression(BoundBoobaExpression),
@@ -230,9 +196,11 @@ pub struct BoundIfStatement {
 }
 
 impl BoundIfStatement {
+    #[must_use]
     pub fn expression(&self) -> &Expression {
         &self.expression
     }
+    #[must_use]
     pub fn block(&self) -> &Block {
         &self.block
     }
@@ -269,9 +237,10 @@ impl Parser {
                     statements.push(statement);
                 }
 
-                if !self.matches_token_kind(lexer, TokenKind::CloseBrace) {
-                    panic!("Expected closing brace")
-                }
+                assert!(
+                    self.matches_token_kind(lexer, TokenKind::CloseBrace),
+                    "Expected closing brace"
+                );
                 lexer.consume_token();
 
                 return if statements.len() == 1 {
@@ -288,25 +257,28 @@ impl Parser {
     fn statement(&self, lexer: &mut Lexer) -> Option<Statement> {
         if self.matches_token_kind(lexer, TokenKind::LetKeyword) {
             lexer.consume_token();
-            if !self.matches_token_kind(lexer, TokenKind::Identifier) {
-                panic!("Expected identifier")
-            }
+            assert!(
+                self.matches_token_kind(lexer, TokenKind::Identifier),
+                "Expected identifier"
+            );
 
             let identifier = lexer.token().unwrap().value.as_ref().unwrap().to_string();
             lexer.consume_token();
 
-            if !self.matches_token_kind(lexer, TokenKind::Colon) {
-                panic!("Expected \":\"")
-            }
+            assert!(
+                self.matches_token_kind(lexer, TokenKind::Colon),
+                "Expected \":\""
+            );
             lexer.consume_token();
 
             if let Some(data_type) = self.data_type(lexer) {
                 if self.matches_token_kind(lexer, TokenKind::Equal) {
                     lexer.consume_token();
                     if let Some(expression) = self.expression(lexer) {
-                        if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
-                            panic!("Expected \";\"")
-                        }
+                        assert!(
+                            self.matches_token_kind(lexer, TokenKind::Semicolon),
+                            "Expected \";\""
+                        );
                         lexer.consume_token();
 
                         return Some(Statement::VariableDeclarationAndInitialization {
@@ -334,9 +306,10 @@ impl Parser {
             if self.matches_token_kind(lexer, TokenKind::Equal) {
                 lexer.consume_token();
                 if let Some(expression) = self.expression(lexer) {
-                    if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
-                        panic!("Expected \";\"")
-                    }
+                    assert!(
+                        self.matches_token_kind(lexer, TokenKind::Semicolon),
+                        "Expected \";\""
+                    );
                     lexer.consume_token();
 
                     return Some(Statement::VariableInitialization {
@@ -349,14 +322,16 @@ impl Parser {
             }
         } else if self.matches_token_kind(lexer, TokenKind::IfKeyword) {
             lexer.consume_token();
-            if !self.matches_token_kind(lexer, TokenKind::OpenParen) {
-                panic!("Expected \"(\"")
-            }
+            assert!(
+                self.matches_token_kind(lexer, TokenKind::OpenParen),
+                "Expected \"(\""
+            );
             lexer.consume_token();
             if let Some(expression) = self.expression(lexer) {
-                if !self.matches_token_kind(lexer, TokenKind::CloseParen) {
-                    panic!("Expected \")\"")
-                }
+                assert!(
+                    self.matches_token_kind(lexer, TokenKind::CloseParen),
+                    "Expected \")\""
+                );
                 lexer.consume_token();
                 if let Some(block) = self.block(lexer) {
                     return Some(Statement::IfStatement {
@@ -383,7 +358,7 @@ impl Parser {
         panic!("No token")
     }
 
-    fn struct_(&self, lexer: &mut Lexer) -> Option<DataType> {
+    fn struct_(&self, _lexer: &mut Lexer) -> Option<DataType> {
         todo!()
     }
 
@@ -397,7 +372,7 @@ impl Parser {
         while self.matches_token_kind(lexer, TokenKind::BangEqual)
             || self.matches_token_kind(lexer, TokenKind::EqualEqual)
         {
-            if let Some(_) = expression {
+            if expression.is_some() {
                 let op = self.op(lexer, |kind| match kind {
                     TokenKind::BangEqual => Op::NotEqual,
                     TokenKind::EqualEqual => Op::Equal,
@@ -423,7 +398,7 @@ impl Parser {
             || self.matches_token_kind(lexer, TokenKind::Less)
             || self.matches_token_kind(lexer, TokenKind::LessEqual)
         {
-            if let Some(_) = expression {
+            if expression.is_some() {
                 let op = self.op(lexer, |kind| match kind {
                     TokenKind::Greater => Op::GreaterThan,
                     TokenKind::GreaterEqual => Op::GreaterThanOrEqual,
@@ -449,7 +424,7 @@ impl Parser {
         while self.matches_token_kind(lexer, TokenKind::Dash)
             || self.matches_token_kind(lexer, TokenKind::Plus)
         {
-            if let Some(_) = expression {
+            if expression.is_some() {
                 let op = self.op(lexer, |kind| match kind {
                     TokenKind::Dash => Op::Subtract,
                     TokenKind::Plus => Op::Add,
@@ -474,7 +449,7 @@ impl Parser {
         while self.matches_token_kind(lexer, TokenKind::ForwardSlash)
             || self.matches_token_kind(lexer, TokenKind::Star)
         {
-            if let Some(_) = expression {
+            if expression.is_some() {
                 let op = self.op(lexer, |kind| match kind {
                     TokenKind::ForwardSlash => Op::Divide,
                     TokenKind::Star => Op::Multiply,
@@ -554,9 +529,10 @@ impl Parser {
         if self.matches_token_kind(lexer, TokenKind::OpenParen) {
             lexer.consume_token();
             let expression = self.expression(lexer);
-            if !self.matches_token_kind(lexer, TokenKind::CloseParen) {
-                panic!("Expected closing parenthesis");
-            }
+            assert!(
+                self.matches_token_kind(lexer, TokenKind::CloseParen),
+                "Expected closing parenthesis"
+            );
             lexer.consume_token();
             return expression;
         }

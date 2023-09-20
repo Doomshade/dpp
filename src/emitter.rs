@@ -71,20 +71,20 @@ impl Emitter {
     ) -> io::Result<()> {
         match statement {
             Statement::VariableInitialization {
-                identifier,
+                identifier: _,
                 expression,
             } => self.expression(expression, writer)?,
 
             Statement::VariableDeclaration {
-                identifier,
-                data_type,
+                identifier: _,
+                data_type: _,
             } => {}
             Statement::VariableDeclarationAndInitialization {
-                identifier,
-                data_type,
+                identifier: _,
+                data_type: _,
                 expression,
             } => self.expression(expression, writer)?,
-            Statement::IfStatement { expression, block } => self.expression(expression, writer)?,
+            Statement::IfStatement { expression, block: _ } => self.expression(expression, writer)?,
         };
         Ok(())
     }
