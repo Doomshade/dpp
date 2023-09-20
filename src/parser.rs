@@ -65,12 +65,12 @@ pub enum Expression {
     BoobaExpression(bool),
     FiberExpression(String),
     UnaryExpression {
-        op: Op,
+        op: UnaryOperator,
         operand: Box<Expression>,
     },
     BinaryExpression {
         lhs: Box<Expression>,
-        op: Op,
+        op: BinaryOperator,
         rhs: Box<Expression>,
     },
     IdentifierExpression {
@@ -88,7 +88,7 @@ pub enum DataType {
 pub enum Struct {}
 
 #[derive(Copy, Clone, Debug)]
-pub enum Op {
+pub enum BinaryOperator {
     Add,
     Subtract,
     Multiply,
@@ -99,6 +99,10 @@ pub enum Op {
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum UnaryOperator {
     Not,
     Negate,
 }
@@ -110,7 +114,15 @@ impl Parser {
         Self::translation_unit(lexer)
     }
 
-    fn op(lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> Op) -> Op {
+    fn binop(lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> BinaryOperator) -> BinaryOperator {
+        let operator = lexer.token().expect("Failed to get token");
+        let kind = &operator.kind;
+        let op = op_matcher(kind);
+        lexer.consume_token();
+        op
+    }
+
+    fn unop(lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> UnaryOperator) -> UnaryOperator {
         let operator = lexer.token().expect("Failed to get token");
         let kind = &operator.kind;
         let op = op_matcher(kind);
@@ -449,9 +461,9 @@ impl Parser {
             || Self::matches_token_kind(lexer, TokenKind::EqualEqual)
         {
             if expression.is_some() {
-                let op = Self::op(lexer, |kind| match kind {
-                    TokenKind::BangEqual => Op::NotEqual,
-                    TokenKind::EqualEqual => Op::Equal,
+                let op = Self::binop(lexer, |kind| match kind {
+                    TokenKind::BangEqual => BinaryOperator::NotEqual,
+                    TokenKind::EqualEqual => BinaryOperator::Equal,
                     _ => unreachable!(),
                 });
                 if let Some(rhs) = Self::comparison(lexer) {
@@ -475,11 +487,11 @@ impl Parser {
             || Self::matches_token_kind(lexer, TokenKind::LessEqual)
         {
             if expression.is_some() {
-                let op = Self::op(lexer, |kind| match kind {
-                    TokenKind::Greater => Op::GreaterThan,
-                    TokenKind::GreaterEqual => Op::GreaterThanOrEqual,
-                    TokenKind::Less => Op::LessThan,
-                    TokenKind::LessEqual => Op::LessThanOrEqual,
+                let op = Self::binop(lexer, |kind| match kind {
+                    TokenKind::Greater => BinaryOperator::GreaterThan,
+                    TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
+                    TokenKind::Less => BinaryOperator::LessThan,
+                    TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
                     _ => unreachable!(),
                 });
                 if let Some(rhs) = Self::term(lexer) {
@@ -501,9 +513,9 @@ impl Parser {
             || Self::matches_token_kind(lexer, TokenKind::Plus)
         {
             if expression.is_some() {
-                let op = Self::op(lexer, |kind| match kind {
-                    TokenKind::Dash => Op::Subtract,
-                    TokenKind::Plus => Op::Add,
+                let op = Self::binop(lexer, |kind| match kind {
+                    TokenKind::Dash => BinaryOperator::Subtract,
+                    TokenKind::Plus => BinaryOperator::Add,
                     _ => unreachable!(),
                 });
                 if let Some(factor) = Self::factor(lexer) {
@@ -526,9 +538,9 @@ impl Parser {
             || Self::matches_token_kind(lexer, TokenKind::Star)
         {
             if expression.is_some() {
-                let op = Self::op(lexer, |kind| match kind {
-                    TokenKind::ForwardSlash => Op::Divide,
-                    TokenKind::Star => Op::Multiply,
+                let op = Self::binop(lexer, |kind| match kind {
+                    TokenKind::ForwardSlash => BinaryOperator::Divide,
+                    TokenKind::Star => BinaryOperator::Multiply,
                     _ => unreachable!(),
                 });
                 if let Some(unary) = Self::unary(lexer) {
@@ -547,9 +559,9 @@ impl Parser {
         if Self::matches_token_kind(lexer, TokenKind::Bang)
             || Self::matches_token_kind(lexer, TokenKind::Dash)
         {
-            let op = Self::op(lexer, |kind| match kind {
-                TokenKind::Bang => Op::Not,
-                TokenKind::Dash => Op::Negate,
+            let op = Self::unop(lexer, |kind| match kind {
+                TokenKind::Bang => UnaryOperator::Not,
+                TokenKind::Dash => UnaryOperator::Negate,
                 _ => unreachable!(),
             });
             if let Some(unary) = Self::unary(lexer) {

@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufWriter, Write};
 
-use crate::parser::{Block, Expression, Function, Op, Statement, TranslationUnit};
+use crate::parser::{BinaryOperator, Block, Expression, Function, Statement, TranslationUnit};
 
 #[derive(Default)]
 pub struct Emitter {
@@ -141,15 +141,15 @@ impl Emitter {
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         match expression {
-            Expression::PpExpression(pp_expression) => self.pp_expression(pp_expression, writer),
-            Expression::BoobaExpression(booba) => self.booba_expression(booba, writer),
+            Expression::PpExpression(pp_expression) => self.pp_expression(*pp_expression, writer),
+            Expression::BoobaExpression(booba) => self.booba_expression(*booba, writer),
             Expression::FiberExpression(_fiber_expression) => Ok(()),
             Expression::UnaryExpression { op: _, operand: _ } => Ok(()),
             Expression::BinaryExpression { lhs, op, rhs } => {
-                self.binary_expression(lhs, op, rhs, writer)
+                self.binary_expression(lhs, *op, rhs, writer)
             }
             Expression::IdentifierExpression { identifier } => {
-                self.mov("eax", identifier, writer)?;
+                Self::mov("eax", identifier, writer)?;
                 self.push("eax", writer)
             }
         }
@@ -158,7 +158,7 @@ impl Emitter {
     fn binary_expression(
         &mut self,
         lhs: &Expression,
-        op: &Op,
+        op: BinaryOperator,
         rhs: &Expression,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
@@ -168,39 +168,38 @@ impl Emitter {
         self.pop("eax", writer)?;
 
         match op {
-            Op::Add => writer.write_all(b"    add eax, ecx\n")?,
-            Op::Subtract => writer.write_all(b"    sub eax, ecx\n")?,
-            Op::Multiply => writer.write_all(b"    mul ecx\n")?,
-            Op::Divide => writer.write_all(b"    div ecx\n")?,
-            Op::NotEqual => writer.write_all(b"add eax, ecx")?,
-            Op::Equal => writer.write_all(b"add eax, ecx")?,
-            Op::GreaterThan => writer.write_all(b"add eax, ecx")?,
-            Op::GreaterThanOrEqual => writer.write_all(b"add eax, ecx")?,
-            Op::LessThan => writer.write_all(b"add eax, ecx")?,
-            Op::LessThanOrEqual => writer.write_all(b"add eax, ecx")?,
-            Op::Not => writer.write_all(b"add eax, ecx")?,
-            Op::Negate => writer.write_all(b"add eax, ecx")?,
+            BinaryOperator::Add => writer.write_all(b"    add eax, ecx\n")?,
+            BinaryOperator::Subtract => writer.write_all(b"    sub eax, ecx\n")?,
+            BinaryOperator::Multiply => writer.write_all(b"    mul ecx\n")?,
+            BinaryOperator::Divide => writer.write_all(b"    div ecx\n")?,
+            BinaryOperator::NotEqual => todo!("Not implemented"),
+            BinaryOperator::Equal => todo!("Not implemented"),
+            BinaryOperator::GreaterThan => todo!("Not implemented"),
+            BinaryOperator::GreaterThanOrEqual => todo!("Not implemented"),
+            BinaryOperator::LessThan => todo!("Not implemented"),
+            BinaryOperator::LessThanOrEqual => todo!("Not implemented"),
+            _ => unreachable!(),
         };
         self.push("eax", writer)?;
 
         Ok(())
     }
 
-    fn booba_expression(&mut self, booba: &bool, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.mov("eax", booba.to_string().as_str(), writer)?;
+    fn booba_expression(&mut self, booba: bool, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        Self::mov("eax", booba.to_string().as_str(), writer)?;
         self.push("eax", writer)
     }
 
     fn pp_expression(
         &mut self,
-        pp_expression: &i32,
+        pp_expression: i32,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        self.mov("eax", pp_expression.to_string().as_str(), writer)?;
+        Self::mov("eax", pp_expression.to_string().as_str(), writer)?;
         self.push("eax", writer)
     }
 
-    fn mov(&mut self, op1: &str, op2: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn mov(op1: &str, op2: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(format!("    mov {op1}, {op2}\n").as_bytes())
     }
 
