@@ -51,9 +51,9 @@ impl Emitter {
     fn function(&mut self, function: &Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
         match function {
             Function::Function {
-                identifier,
-                return_type,
-                parameters,
+                identifier: _,
+                return_type: _,
+                parameters: _,
                 block,
             } => {
                 self.block(block, writer)?;

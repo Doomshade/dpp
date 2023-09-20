@@ -1,5 +1,5 @@
 use crate::lexer::{Lexer, TokenKind};
-use std::ffi::c_double;
+
 
 #[derive(Default)]
 pub struct Parser;
@@ -227,26 +227,18 @@ impl Parser {
             return None;
         }
         lexer.consume_token();
-        if !self.matches_token_kind(lexer, TokenKind::Identifier) {
-            panic!("Expected identifier");
-        }
+        assert!(self.matches_token_kind(lexer, TokenKind::Identifier), "Expected identifier");
         let identifier = lexer.token_value().unwrap();
         lexer.consume_token();
 
-        if !self.matches_token_kind(lexer, TokenKind::OpenParen) {
-            panic!("Expected \"(\"");
-        }
+        assert!(self.matches_token_kind(lexer, TokenKind::OpenParen), "Expected \"(\"");
         lexer.consume_token();
 
         let parameters = self.parameters(lexer);
-        if !self.matches_token_kind(lexer, TokenKind::CloseParen) {
-            panic!("Expected \")\"");
-        }
+        assert!(self.matches_token_kind(lexer, TokenKind::CloseParen), "Expected \")\"");
         lexer.consume_token();
 
-        if !self.matches_token_kind(lexer, TokenKind::Colon) {
-            panic!("Expected \":\"");
-        }
+        assert!(self.matches_token_kind(lexer, TokenKind::Colon), "Expected \":\"");
         lexer.consume_token();
 
         if let Some(return_type) = self.data_type(lexer) {
@@ -284,16 +276,14 @@ impl Parser {
         let identifier = lexer.token_value().unwrap();
         lexer.consume_token();
 
-        if !self.matches_token_kind(lexer, TokenKind::Colon) {
-            panic!("Expected \":\"");
-        }
+        assert!(self.matches_token_kind(lexer, TokenKind::Colon), "Expected \":\"");
         lexer.consume_token();
 
         if let Some(data_type) = self.data_type(lexer) {
-            return Some(Parameter::Parameter {
+            Some(Parameter::Parameter {
                 identifier,
                 data_type,
-            });
+            })
         } else {
             panic!("Expected data type");
         }
