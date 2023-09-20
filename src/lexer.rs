@@ -102,8 +102,8 @@ pub enum TokenKind {
     GreaterEqual,
     Less,
     LessEqual,
-    False,
-    True,
+    NomKeyword,
+    YemKeyword,
     OpenParen,
     CloseParen,
     OpenBrace,
@@ -438,6 +438,8 @@ impl Lexer {
             "ppanic" => TokenKind::PpanicKeyword,
             "ppin" => TokenKind::PpinKeyword,
             "FUNc" => TokenKind::FUNcKeyword,
+            "yem" => TokenKind::YemKeyword,
+            "nom" => TokenKind::NomKeyword,
             _ => TokenKind::Identifier,
         };
 

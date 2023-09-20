@@ -4,13 +4,17 @@ let y: pp = 5;
 FUNc test(aa: pp, bb: pp): pp {
     let test: pp = (1 + 2) * 3;
     let testasd: pp;
+    abcd(123 > 2, test(yem) < 1);
     {
+        {
+            let a: pp;
+        }
     }
     testasd = 123;
     testasd = test + 4 * 2 - 1;
 
     if (123) {
-        let test: pp = true;
+        let test: pp = yem;
     }
 }
 

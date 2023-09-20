@@ -28,8 +28,8 @@
             &\ttt{ | var-decl-and-assign }\\
             &\ttt{ | "if" "(" expression ")" block ("else" block)?}\\
             &\ttt{ | block }\\
-            &\ttt{ | "bye" expression ";" }
-            &\ttt{ | IDENTIFIER "(" parameters* ")" }
+            &\ttt{ | "bye" expression ";" }\\
+            &\ttt{ | expression ";" }
         }
         \ebnfnodett{var-decl}{var-decl-common ";"}
         \ebnfnodett{var-decl-and-assign}{var-decl-common "=" expression ";"}
@@ -55,8 +55,8 @@
         \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
         \ebnfnode{\ttt{primary}}
         {%
-            \ttt{IDENTIFIER | NUMBER | STRING}\\
-            &\ttt{ | "true" | "false" | "(" expression ")"}
+            \ttt{IDENTIFIER ("(" IDENTIFIER ("," IDENTIFIER)* ")")? | NUMBER | STRING}\\
+            &\ttt{ | "yem" | "nom" | "(" expression ")"}
         }
     \end{align*}
 \end{document}

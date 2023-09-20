@@ -30,6 +30,9 @@ pub enum Statement {
     BlockStatement {
         block: Box<Block>,
     },
+    Expression {
+        expression: Expression,
+    },
 }
 
 #[derive(Debug)]
@@ -83,6 +86,9 @@ pub enum Expression {
     },
     IdentifierExpression {
         identifier: String,
+    },
+    FunctionCall {
+        arguments: Vec<Expression>,
     },
 }
 
@@ -197,12 +203,12 @@ impl Parser {
         if !Self::matches_token_kind(lexer, TokenKind::Identifier) {
             return None;
         }
+        if !Self::matches_token_kind_ahead(lexer, TokenKind::Equal, 1) {
+            return None;
+        }
         let identifier = lexer.token_value().unwrap();
         lexer.consume_token();
 
-        if !Self::matches_token_kind(lexer, TokenKind::Equal) {
-            return None;
-        }
         lexer.consume_token();
         let statement = Self::expression(lexer).map_or_else(
             || {
@@ -321,6 +327,27 @@ impl Parser {
         }
     }
 
+    fn identifiers(lexer: &mut Lexer) -> Vec<String> {
+        let mut identifiers = Vec::<String>::new();
+        while let Some(identifier) = Self::identifier(lexer) {
+            identifiers.push(identifier);
+            if !Self::matches_token_kind(lexer, TokenKind::Comma) {
+                break;
+            }
+            lexer.consume_token();
+        }
+        identifiers
+    }
+
+    fn identifier(lexer: &mut Lexer) -> Option<String> {
+        if Self::matches_token_kind(lexer, TokenKind::Identifier) {
+            let option = lexer.token_value();
+            lexer.consume_token();
+            return option;
+        }
+        None
+    }
+
     fn parameters(lexer: &mut Lexer) -> Vec<Parameter> {
         let mut parameters = Vec::<Parameter>::new();
         while let Some(parameter) = Self::parameter(lexer) {
@@ -372,7 +399,7 @@ impl Parser {
             }
             assert!(
                 Self::matches_token_kind(lexer, TokenKind::CloseBrace),
-                "Expected closing brace"
+                "Expected \"}}\""
             );
             lexer.consume_token();
 
@@ -386,8 +413,7 @@ impl Parser {
         let common = Self::variable_declaration_common(lexer);
         if let Some(variable_declaration) = Self::variable_declaration(lexer, common.clone()) {
             return Some(variable_declaration);
-        }
-        if let Some(variable_decl_and_assign) =
+        } else if let Some(variable_decl_and_assign) =
             Self::variable_declaration_and_assignment(lexer, common)
         {
             return Some(variable_decl_and_assign);
@@ -424,10 +450,18 @@ impl Parser {
                     Self::matches_token_kind(lexer, TokenKind::Semicolon),
                     "Expected \";\""
                 );
+                lexer.consume_token();
                 return Some(Statement::ReturnStatement { expression });
             }
 
             panic!("Expected expression");
+        } else if let Some(expression) = Self::expression(lexer) {
+            assert!(
+                Self::matches_token_kind(lexer, TokenKind::Semicolon),
+                "Expected \";\""
+            );
+            lexer.consume_token();
+            return Some(Statement::Expression { expression });
         }
 
         None
@@ -577,46 +611,67 @@ impl Parser {
 
     fn primary(lexer: &mut Lexer) -> Option<Expression> {
         if Self::matches_token_kind(lexer, TokenKind::Identifier) {
-            let expression = Expression::IdentifierExpression {
-                identifier: String::from(lexer.token().unwrap().value.as_ref().unwrap()),
-            };
+            let identifier = lexer.token_value().unwrap();
             lexer.consume_token();
+            if Self::matches_token_kind(lexer, TokenKind::OpenParen) {
+                lexer.consume_token();
+                let arguments = Self::arguments(lexer);
+                assert!(
+                    Self::matches_token_kind(lexer, TokenKind::CloseParen),
+                    "Expected \")\""
+                );
+                lexer.consume_token();
+                return Some(Expression::FunctionCall { arguments });
+            }
+            let expression = Expression::IdentifierExpression { identifier };
             return Some(expression);
-        }
-        if Self::matches_token_kind(lexer, TokenKind::False) {
-            let expression = Expression::BoobaExpression(false);
+        } else if Self::matches_token_kind(lexer, TokenKind::NomKeyword) {
             lexer.consume_token();
-            return Some(expression);
-        }
-        if Self::matches_token_kind(lexer, TokenKind::True) {
-            let expression = Expression::BoobaExpression(true);
+            return Some(Expression::BoobaExpression(false));
+        } else if Self::matches_token_kind(lexer, TokenKind::YemKeyword) {
             lexer.consume_token();
-            return Some(expression);
-        }
-        if Self::matches_token_kind(lexer, TokenKind::Number) {
+            return Some(Expression::BoobaExpression(true));
+        } else if Self::matches_token_kind(lexer, TokenKind::Number) {
             let expression =
                 Expression::PpExpression(lexer.token_value().unwrap().parse::<i32>().unwrap());
             lexer.consume_token();
             return Some(expression);
-        }
-        if Self::matches_token_kind(lexer, TokenKind::String) {
-            let expression =
-                Expression::FiberExpression(lexer.token_value().unwrap().parse().unwrap());
+        } else if Self::matches_token_kind(lexer, TokenKind::String) {
+            let expression = Expression::FiberExpression(lexer.token_value().unwrap());
             lexer.consume_token();
             return Some(expression);
-        }
-        if Self::matches_token_kind(lexer, TokenKind::OpenParen) {
+        } else if Self::matches_token_kind(lexer, TokenKind::OpenParen) {
             lexer.consume_token();
             let expression = Self::expression(lexer);
             assert!(
                 Self::matches_token_kind(lexer, TokenKind::CloseParen),
-                "Expected closing parenthesis"
+                "Expected \")\""
             );
             lexer.consume_token();
             return expression;
         }
 
         None
+    }
+
+    fn arguments(lexer: &mut Lexer) -> Vec<Expression> {
+        let mut args = Vec::<Expression>::new();
+        while let Some(expression) = Self::expression(lexer) {
+            args.push(expression);
+            if !Self::matches_token_kind(lexer, TokenKind::Comma) {
+                break;
+            }
+            lexer.consume_token();
+        }
+
+        args
+    }
+
+    fn matches_token_kind_ahead(lexer: &Lexer, token_kind: TokenKind, ahead: usize) -> bool {
+        if let Some(token) = lexer.token_lookahead(ahead) {
+            return token.kind == token_kind;
+        }
+        false
     }
 
     fn matches_token_kind(lexer: &Lexer, token_kind: TokenKind) -> bool {

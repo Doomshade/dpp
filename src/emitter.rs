@@ -91,26 +91,8 @@ impl Emitter {
     }
 
     fn statement(&mut self, statement: Statement, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        match statement {
-            Statement::VariableAssignment {
-                identifier: _,
-                expression,
-            } => self.expression(expression, writer)?,
-
-            Statement::VariableDeclaration {
-                identifier: _,
-                data_type: _,
-            } => {}
-            Statement::VariableDeclarationAndAssignment {
-                identifier: _,
-                data_type: _,
-                expression,
-            } => self.expression(expression, writer)?,
-            Statement::IfStatement { expression, block } => {
-                self.if_statement(expression, *block, writer)?;
-            }
-            Statement::ReturnStatement { expression } => {}
-            Statement::BlockStatement { .. } => {}
+        if let Statement::IfStatement { expression, block } = statement {
+            self.if_statement(expression, *block, writer)?;
         };
         Ok(())
     }
@@ -164,6 +146,7 @@ impl Emitter {
                 Self::mov("eax", identifier.as_str(), writer)?;
                 self.push("eax", writer)
             }
+            Expression::FunctionCall { .. } => panic!("Not implemeneted"),
         }
     }
 
