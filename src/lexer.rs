@@ -115,6 +115,7 @@ pub enum TokenKind {
     Ampersand,
     Pipe,
     Comma,
+    IfKeyword,     // if
     LetKeyword,    // let
     ByeKeyword,    // return
     PprintKeyword, // print()
@@ -129,6 +130,7 @@ pub enum TokenKind {
     PType,         // char
     BoobType,      // bool
     ThreadType,    // String
+    ElseKeyword,
 }
 
 #[derive(Debug, Default)]
@@ -419,6 +421,8 @@ impl Lexer {
             "p" => TokenKind::PType,
             "nopp" => TokenKind::NoppType,
             "boob" => TokenKind::BoobType,
+            "if" => TokenKind::IfKeyword,
+            "else" => TokenKind::ElseKeyword,
             "let" => TokenKind::LetKeyword,
             "bye" => TokenKind::ByeKeyword,
             "pprint" => TokenKind::PprintKeyword,

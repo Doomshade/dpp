@@ -1,4 +1,9 @@
 {
     let test: pp = (1 + 2) * 3;
-    let test: pp;
+    let testasd: pp;
+    testasd = 123;
+
+    if (123) {
+        let test: pp = 123;
+    }
 }

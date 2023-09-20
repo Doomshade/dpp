@@ -70,14 +70,21 @@ impl Emitter {
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         match statement {
-            Statement::VariableInitialization(variable_initialization) => {
-                self.expression(variable_initialization.expression(), writer)?
-            }
+            Statement::VariableInitialization {
+                identifier,
+                expression,
+            } => self.expression(expression, writer)?,
 
-            Statement::VariableDeclaration(_variable_declaration) => {}
+            Statement::VariableDeclaration {
+                identifier,
+                data_type,
+            } => {}
             Statement::VariableDeclarationAndInitialization(
                 variable_declaration_and_initialization,
             ) => self.expression(variable_declaration_and_initialization.expression(), writer)?,
+            Statement::IfStatement(if_statement) => {
+                self.expression(if_statement.expression(), writer)?
+            }
         };
         Ok(())
     }

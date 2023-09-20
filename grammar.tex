@@ -4,7 +4,7 @@
     \text{\texttt{#1}}
 }
 \newcommand{\ebnfnode}[2]{%
-    #1\hspace{20px} &\to #2\\
+    #1\hspace{20px} &\to #2\ttt{ ;}\\
 }
 
 \newcommand{\ebnfnodett}[2]{%
@@ -13,8 +13,13 @@
 
 \begin{document}
     \begin{align*}
-        \ebnfnodett{block}{"\{" (statement | statement statements) "\}";}
-        \ebnfnodett{statement}{"let" IDENTIFIER ":" data-type ("=" expression ";" | ";") ;}
+        \ebnfnodett{block}{"\{" (statement | statement statements) "\}"}
+        \ebnfnode{\ttt{statement}}
+        {%
+            \ttt{"let" IDENTIFIER ":" data-type ("=" expression ";" | ";")}\\
+            &\ttt{ | IDENTIFIER "=" expression ";" }\\
+            &\ttt{ | "if" "(" expression ")" block ("else" block)?}
+        }
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\
@@ -28,11 +33,15 @@
         }
         \ebnfnodett{struct}{IDENTIFIER}
         \ebnfnodett{expression}{equality}
-        \ebnfnodett{equality}{comparison ( ( "!=" | "==" ) comparison )* ;}
-        \ebnfnodett{comparison}{term ( ( ">" | ">=" | "<" | "<=" ) term )* ;}
-        \ebnfnodett{term}{factor ( ( "-" | "+" ) factor )* ;}
-        \ebnfnodett{factor}{unary ( ( "/" | "*" ) unary )* ;}
-        \ebnfnodett{unary}{( "!" | "-" ) unary | primary ;}
-        \ebnfnode{\ttt{primary}}{\ttt{NUMBER | STRING | "true" | "false"}\\&\ttt{ | "nil" | "(" expression ")" ;}}
+        \ebnfnodett{equality}{comparison ( ( "!=" | "==" ) comparison )*}
+        \ebnfnodett{comparison}{term ( ( ">" | ">=" | "<" | "<=" ) term )*}
+        \ebnfnodett{term}{factor ( ( "-" | "+" ) factor )*}
+        \ebnfnodett{factor}{unary ( ( "/" | "*" ) unary )*}
+        \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
+        \ebnfnode{\ttt{primary}}
+        {
+            \ttt{NUMBER | STRING | "true" | "false"}\\
+            &\ttt{ | "nil" | "(" expression ")"}
+        }
     \end{align*}
 \end{document}

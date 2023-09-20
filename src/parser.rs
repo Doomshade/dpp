@@ -5,9 +5,16 @@ pub struct Parser;
 
 #[derive(Debug)]
 pub enum Statement {
-    VariableDeclaration(BoundVariableDeclaration),
-    VariableInitialization(BoundVariableInitialization),
+    VariableDeclaration {
+        identifier: String,
+        data_type: DataType,
+    },
+    VariableInitialization {
+        identifier: String,
+        expression: Expression,
+    },
     VariableDeclarationAndInitialization(BoundVariableDeclarationAndInitialization),
+    IfStatement(BoundIfStatement),
 }
 
 #[derive(Debug)]
@@ -224,6 +231,21 @@ pub enum Op {
     Negate,
 }
 
+#[derive(Debug)]
+pub struct BoundIfStatement {
+    expression: Expression,
+    block: Box<Block>,
+}
+
+impl BoundIfStatement {
+    pub fn expression(&self) -> &Expression {
+        &self.expression
+    }
+    pub fn block(&self) -> &Block {
+        &self.block
+    }
+}
+
 impl Parser {
     pub fn parse(&self, lexer: &mut Lexer) -> Block {
         lexer.reset();
@@ -305,15 +327,53 @@ impl Parser {
                     }
                 } else if self.matches_token_kind(lexer, TokenKind::Semicolon) {
                     lexer.consume_token();
-                    return Some(Statement::VariableDeclaration(BoundVariableDeclaration {
+                    return Some(Statement::VariableDeclaration {
                         identifier,
                         data_type,
-                    }));
+                    });
                 } else {
                     panic!("Expected \";\"")
                 }
             } else {
                 panic!("Expected data type")
+            }
+        } else if self.matches_token_kind(lexer, TokenKind::Identifier) {
+            let identifier = lexer.token().unwrap().value.as_ref().unwrap().to_string();
+            lexer.consume_token();
+
+            if self.matches_token_kind(lexer, TokenKind::Equal) {
+                lexer.consume_token();
+                if let Some(expression) = self.expression(lexer) {
+                    if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
+                        panic!("Expected \";\"")
+                    }
+                    lexer.consume_token();
+
+                    return Some(Statement::VariableInitialization {
+                        identifier,
+                        expression,
+                    });
+                }
+            } else {
+                panic!("Expected \"=\"")
+            }
+        } else if self.matches_token_kind(lexer, TokenKind::IfKeyword) {
+            lexer.consume_token();
+            if !self.matches_token_kind(lexer, TokenKind::OpenParen) {
+                panic!("Expected \"(\"")
+            }
+            lexer.consume_token();
+            if let Some(expression) = self.expression(lexer) {
+                if !self.matches_token_kind(lexer, TokenKind::CloseParen) {
+                    panic!("Expected \")\"")
+                }
+                lexer.consume_token();
+                if let Some(block) = self.block(lexer) {
+                    return Some(Statement::IfStatement(BoundIfStatement {
+                        expression,
+                        block: Box::new(block),
+                    }));
+                }
             }
         }
 
