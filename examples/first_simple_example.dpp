@@ -8,7 +8,7 @@ FUNc test(aa: pp, bb: pp): pp {
     testasd = test + 4 * 2 - 1;
 
     if (123) {
-        let test: pp = 123;
+        let test: pp = true;
     }
 }
 
