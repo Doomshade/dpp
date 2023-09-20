@@ -29,10 +29,10 @@ pub struct BoundUnaryExpression {
 }
 
 impl BoundUnaryExpression {
-    pub const fn op(&self) -> &Op {
+    #[must_use] pub const fn op(&self) -> &Op {
         &self.op
     }
-    pub const fn operand(&self) -> &Box<Expression> {
+    #[must_use] pub const fn operand(&self) -> &Box<Expression> {
         &self.operand
     }
 }

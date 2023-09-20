@@ -58,8 +58,8 @@ impl Emitter {
             Expression::BoobaExpression(booba_expression) => {
                 self.booba_expression(booba_expression, writer)
             }
-            Expression::FiberExpression(fiber_expression) => Ok(()),
-            Expression::UnaryExpression(unary_expression) => Ok(()),
+            Expression::FiberExpression(_fiber_expression) => Ok(()),
+            Expression::UnaryExpression(_unary_expression) => Ok(()),
             Expression::BinaryExpression(binary_expression) => {
                 self.binary_expression(binary_expression, writer)
             }
