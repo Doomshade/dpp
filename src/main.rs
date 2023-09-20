@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut writer = BufWriter::new(&file);
     let translation_unit = parser.parse(&mut lexer);
     dbg!(&translation_unit);
-    emitter.emit(&translation_unit, &mut writer)?;
+    emitter.emit(translation_unit, &mut writer)?;
     // emitter.emit(program, &file)?;
 
     Ok(())

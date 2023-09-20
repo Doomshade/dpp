@@ -76,7 +76,7 @@ pub struct Token {
     pub value: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenKind {
     Identifier,
     Number,

@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::lexer::{Lexer, TokenKind};
 
 #[derive(Default)]
@@ -22,41 +24,44 @@ pub enum Statement {
         expression: Expression,
         block: Box<Block>,
     },
-}
-
-#[derive(Debug)]
-pub enum TranslationUnit {
-    TranslationUnit {
-        functions: Vec<Function>,
-        variables: Vec<Statement>,
+    ReturnStatement {
+        expression: Expression,
     },
 }
 
 #[derive(Debug)]
-pub enum Function {
-    Function {
-        identifier: String,
-        return_type: DataType,
-        parameters: Vec<Parameter>,
-        block: Block,
-    },
-}
-#[derive(Debug)]
-pub enum Parameters {
-    Parameters(Vec<Parameter>),
+pub struct TranslationUnit {
+    pub functions: Vec<Function>,
+    pub variables: Vec<Statement>,
 }
 
 #[derive(Debug)]
-pub enum Parameter {
-    Parameter {
-        identifier: String,
-        data_type: DataType,
-    },
+pub struct Function {
+    pub identifier: String,
+    pub return_type: DataType,
+    pub parameters: Vec<Parameter>,
+    pub block: Block,
+}
+#[derive(Debug)]
+pub struct Parameters {
+    pub parameters: Vec<Parameter>,
 }
 
 #[derive(Debug)]
-pub enum Block {
-    Statements(Vec<Statement>),
+pub struct Parameter {
+    pub identifier: String,
+    pub data_type: DataType,
+}
+
+#[derive(Debug, Clone)]
+pub struct Variable {
+    pub identifier: String,
+    pub data_type: DataType,
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug)]
@@ -149,13 +154,13 @@ impl Parser {
                 break;
             }
         }
-        TranslationUnit::TranslationUnit {
+        TranslationUnit {
             functions,
             variables,
         }
     }
 
-    fn variable_declaration_common(lexer: &mut Lexer) -> Option<(String, DataType)> {
+    fn variable_declaration_common(lexer: &mut Lexer) -> Option<Variable> {
         if !Self::matches_token_kind(lexer, TokenKind::LetKeyword) {
             return None;
         }
@@ -176,31 +181,40 @@ impl Parser {
 
         Self::data_type(lexer).map_or_else(
             || panic!("Expected data type"),
-            |data_type| Some((identifier, data_type)),
+            |data_type| {
+                Some(Variable {
+                    identifier,
+                    data_type,
+                })
+            },
         )
     }
 
     fn variable_declaration(
         lexer: &mut Lexer,
-        var_decl_common: Option<(String, DataType)>,
+        var_decl_common: Option<Variable>,
     ) -> Option<Statement> {
         var_decl_common.as_ref()?;
 
-        let x = var_decl_common.unwrap();
         if !Self::matches_token_kind(lexer, TokenKind::Semicolon) {
             return None;
         }
         lexer.consume_token();
 
-        Some(Statement::VariableDeclaration {
-            identifier: x.0,
-            data_type: x.1,
-        })
+        match var_decl_common.unwrap() {
+            Variable {
+                identifier,
+                data_type,
+            } => Some(Statement::VariableDeclaration {
+                identifier,
+                data_type,
+            }),
+        }
     }
 
     fn variable_declaration_and_assignment(
         lexer: &mut Lexer,
-        var_decl_common: Option<(String, DataType)>,
+        var_decl_common: Option<Variable>,
     ) -> Option<Statement> {
         var_decl_common.as_ref()?;
 
@@ -209,28 +223,26 @@ impl Parser {
         }
         lexer.consume_token();
 
-        let x = var_decl_common.unwrap();
-        if let Some(expression) = Self::expression(lexer) {
-            assert!(
-                Self::matches_token_kind(lexer, TokenKind::Semicolon),
-                "Expected \";\""
-            );
-            lexer.consume_token();
-            return Some(Statement::VariableDeclarationAndInitialization {
-                identifier: x.0,
-                data_type: x.1,
-                expression,
-            });
+        match var_decl_common.unwrap() {
+            Variable {
+                identifier,
+                data_type,
+            } => {
+                if let Some(expression) = Self::expression(lexer) {
+                    assert!(
+                        Self::matches_token_kind(lexer, TokenKind::Semicolon),
+                        "Expected \";\""
+                    );
+                    lexer.consume_token();
+                    return Some(Statement::VariableDeclarationAndInitialization {
+                        identifier,
+                        data_type,
+                        expression,
+                    });
+                }
+            }
         }
         None
-    }
-
-    fn functions(lexer: &mut Lexer) -> Vec<Function> {
-        let mut functions = Vec::<Function>::new();
-        while let Some(function) = Self::function(lexer) {
-            functions.push(function);
-        }
-        functions
     }
 
     fn function(lexer: &mut Lexer) -> Option<Function> {
@@ -265,19 +277,18 @@ impl Parser {
         lexer.consume_token();
 
         if let Some(return_type) = Self::data_type(lexer) {
-            if let Some(block) = Self::block(lexer) {
-                return Some(Function::Function {
+            if let Some(mut block) = Self::block(lexer) {
+                return Some(Function {
                     identifier,
                     return_type,
                     parameters,
                     block,
                 });
             }
+            panic!("Expected block")
         } else {
             panic!("Expected data type");
         }
-
-        panic!("Not implemented");
     }
 
     fn parameters(lexer: &mut Lexer) -> Vec<Parameter> {
@@ -310,7 +321,7 @@ impl Parser {
                 panic!("Expected data type");
             },
             |data_type| {
-                Some(Parameter::Parameter {
+                Some(Parameter {
                     identifier,
                     data_type,
                 })
@@ -335,7 +346,7 @@ impl Parser {
                 );
                 lexer.consume_token();
 
-                return Some(Block::Statements(statements));
+                return Some(Block { statements });
             }
         }
 
@@ -388,7 +399,7 @@ impl Parser {
                 panic!("Expected data type")
             }
         } else if Self::matches_token_kind(lexer, TokenKind::Identifier) {
-            let identifier = lexer.token().unwrap().value.as_ref().unwrap().to_string();
+            let identifier = lexer.token_value().unwrap();
             lexer.consume_token();
 
             if Self::matches_token_kind(lexer, TokenKind::Equal) {
@@ -428,6 +439,17 @@ impl Parser {
                     });
                 }
             }
+        } else if Self::matches_token_kind(lexer, TokenKind::ByeKeyword) {
+            lexer.consume_token();
+            if let Some(expression) = Self::expression(lexer) {
+                assert!(
+                    Self::matches_token_kind(lexer, TokenKind::Semicolon),
+                    "Expected \";\""
+                );
+                return Some(Statement::ReturnStatement { expression });
+            }
+
+            panic!("Expected expression");
         }
 
         None

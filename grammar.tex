@@ -26,7 +26,9 @@
             \ttt{var-decl}\\
             &\ttt{ | var-assign }\\
             &\ttt{ | var-decl-and-assign }\\
-            &\ttt{ | "if" "(" expression ")" block ("else" block)?}
+            &\ttt{ | "if" "(" expression ")" block ("else" block)?}\\
+            &\ttt{ | block }
+
         }
         \ebnfnodett{var-decl}{var-decl-common ";"}
         \ebnfnodett{var-decl-and-assign}{var-decl-common "=" expression ";"}

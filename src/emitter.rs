@@ -9,6 +9,7 @@ pub struct Emitter {
     /// The number of bytes remaining on the stack. Each function will have its stack var
     /// eventually.
     stack: u32,
+    label_count: usize,
 }
 
 impl Emitter {
@@ -41,7 +42,7 @@ impl Emitter {
 
     pub fn emit(
         &mut self,
-        _translation_unit: &TranslationUnit,
+        _translation_unit: TranslationUnit,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         Self::start(writer)?;
@@ -55,16 +56,16 @@ impl Emitter {
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         match translation_unit {
-            TranslationUnit::TranslationUnit {
+            TranslationUnit {
                 functions,
                 variables: _,
-            } => self.functions(&functions, writer),
+            } => self.functions(functions, writer),
         }
     }
 
     fn functions(
         &mut self,
-        functions: &Vec<Function>,
+        functions: Vec<Function>,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         for function in functions {
@@ -73,36 +74,28 @@ impl Emitter {
         Ok(())
     }
 
-    fn function(&mut self, function: &Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        match function {
-            Function::Function {
-                identifier: _,
-                return_type: _,
-                parameters: _,
-                block,
-            } => {
-                self.block(block, writer)?;
-            }
-        }
+    fn function(&mut self, function: Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        let label = function.identifier;
+        writer.write_all(format!("_{label}:").as_bytes())?;
+        self.block(function.block, writer)?;
         Ok(())
     }
 
-    fn block(&mut self, block: &Block, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn block(&mut self, block: Block, writer: &mut BufWriter<&File>) -> io::Result<()> {
         match block {
-            Block::Statements(statements) => {
+            Block { statements } => {
+                self.push("ebx", writer)?;
+                Self::mov("ebx", "esp", writer)?;
                 for statement in statements {
                     self.statement(statement, writer)?;
                 }
+                self.pop("ebx", writer)?;
             }
         }
         Ok(())
     }
 
-    fn statement(
-        &mut self,
-        statement: &Statement,
-        writer: &mut BufWriter<&File>,
-    ) -> io::Result<()> {
+    fn statement(&mut self, statement: Statement, writer: &mut BufWriter<&File>) -> io::Result<()> {
         match statement {
             Statement::VariableInitialization {
                 identifier: _,
@@ -118,12 +111,35 @@ impl Emitter {
                 data_type: _,
                 expression,
             } => self.expression(expression, writer)?,
-            Statement::IfStatement {
-                expression,
-                block: _,
-            } => self.expression(expression, writer)?,
+            Statement::IfStatement { expression, block } => {
+                self.if_statement(expression, *block, writer)?
+            }
+            Statement::ReturnStatement { expression } => {}
         };
         Ok(())
+    }
+
+    fn if_statement(
+        &mut self,
+        expression: Expression,
+        block: Block,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
+        self.expression(expression, writer)?;
+        self.pop("eax", writer)?;
+        let label = self.label();
+        writer.write_all(b"    test eax, eax\n")?;
+        writer.write_all(format!("    jz {label}\n").as_bytes())?;
+        self.block(block, writer)?;
+        writer.write_all(format!("{label}:\n").as_bytes())?;
+
+        Ok(())
+    }
+
+    fn label(&mut self) -> String {
+        let label = format!("label{}", self.label_count);
+        self.label_count += 1;
+        label
     }
 
     fn end(writer: &mut BufWriter<&File>) -> io::Result<()> {
@@ -137,19 +153,19 @@ impl Emitter {
 
     fn expression(
         &mut self,
-        expression: &Expression,
+        expression: Expression,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         match expression {
-            Expression::PpExpression(pp_expression) => self.pp_expression(*pp_expression, writer),
-            Expression::BoobaExpression(booba) => self.booba_expression(*booba, writer),
+            Expression::PpExpression(pp_expression) => self.pp_expression(pp_expression, writer),
+            Expression::BoobaExpression(booba) => self.booba_expression(booba, writer),
             Expression::FiberExpression(_fiber_expression) => Ok(()),
             Expression::UnaryExpression { op: _, operand: _ } => Ok(()),
             Expression::BinaryExpression { lhs, op, rhs } => {
-                self.binary_expression(lhs, *op, rhs, writer)
+                self.binary_expression(*lhs, op, *rhs, writer)
             }
             Expression::IdentifierExpression { identifier } => {
-                Self::mov("eax", identifier, writer)?;
+                Self::mov("eax", identifier.as_str(), writer)?;
                 self.push("eax", writer)
             }
         }
@@ -157,9 +173,9 @@ impl Emitter {
 
     fn binary_expression(
         &mut self,
-        lhs: &Expression,
+        lhs: Expression,
         op: BinaryOperator,
-        rhs: &Expression,
+        rhs: Expression,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         self.expression(lhs, writer)?;
