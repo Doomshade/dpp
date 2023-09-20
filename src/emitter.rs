@@ -2,9 +2,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufWriter, Write};
 
-use crate::parser::{
-    Block, BoundBoobaExpression, BoundPpExpression, Expression, Function, Op, Statement,
-};
+use crate::parser::{Block, BoundPpExpression, Expression, Function, Op, Statement};
 
 #[derive(Default)]
 pub struct Emitter {
@@ -41,10 +39,16 @@ impl Emitter {
         Ok(())
     }
 
-    pub fn emit(&mut self, function: &Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        Self::emit_binary_start(writer)?;
-        self.function(function, writer)?;
-        Self::emit_end(writer)?;
+    pub fn emit(
+        &mut self,
+        functions: &Vec<Function>,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
+        Self::start(writer)?;
+        for function in functions {
+            self.function(function, writer)?;
+        }
+        Self::end(writer)?;
         Ok(())
     }
 
@@ -101,7 +105,7 @@ impl Emitter {
         Ok(())
     }
 
-    fn emit_end(writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn end(writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"    push format\n")?;
         writer.write_all(b"    call _printf\n")?;
         writer.write_all(b"    add esp, 8\n")?;
@@ -117,9 +121,7 @@ impl Emitter {
     ) -> io::Result<()> {
         match expression {
             Expression::PpExpression(pp_expression) => self.pp_expression(pp_expression, writer),
-            Expression::BoobaExpression(booba_expression) => {
-                self.booba_expression(booba_expression, writer)
-            }
+            Expression::BoobaExpression(booba) => self.booba_expression(booba, writer),
             Expression::FiberExpression(_fiber_expression) => Ok(()),
             Expression::UnaryExpression(_unary_expression) => Ok(()),
             Expression::BinaryExpression { lhs, op, rhs } => {
@@ -163,12 +165,8 @@ impl Emitter {
         Ok(())
     }
 
-    fn booba_expression(
-        &mut self,
-        booba_expression: &BoundBoobaExpression,
-        writer: &mut BufWriter<&File>,
-    ) -> io::Result<()> {
-        self.mov("eax", booba_expression.booba().to_string().as_str(), writer)?;
+    fn booba_expression(&mut self, booba: &bool, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        self.mov("eax", booba.to_string().as_str(), writer)?;
         self.push("eax", writer)
     }
 
@@ -185,7 +183,7 @@ impl Emitter {
         writer.write_all(format!("    mov {op1}, {op2}\n").as_bytes())
     }
 
-    fn emit_binary_start(writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn start(writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"    global _main\n")?;
         writer.write_all(b"    extern  _printf\n")?;
         writer.write_all(b"format:\n")?;

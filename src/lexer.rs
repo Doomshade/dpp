@@ -191,7 +191,8 @@ impl Lexer {
         Some(&self.tokens[self.curr_token_index + ahead])
     }
 
-    #[must_use] pub fn token_value(&self) -> Option<String> {
+    #[must_use]
+    pub fn token_value(&self) -> Option<String> {
         if let Some(token) = self.token() {
             if let Some(value) = &token.value {
                 return Some(String::from(value));
@@ -222,7 +223,6 @@ impl Lexer {
         if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
             return self.parse_token();
         }
-        dbg!(&token);
         Ok(token)
     }
 

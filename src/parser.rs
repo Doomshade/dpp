@@ -1,6 +1,5 @@
 use crate::lexer::{Lexer, TokenKind};
 
-
 #[derive(Default)]
 pub struct Parser;
 
@@ -55,7 +54,7 @@ pub enum Block {
 #[derive(Debug)]
 pub enum Expression {
     PpExpression(BoundPpExpression),
-    BoobaExpression(BoundBoobaExpression),
+    BoobaExpression(bool),
     FiberExpression(BoundFiberExpression),
     UnaryExpression(BoundUnaryExpression),
     BinaryExpression {
@@ -203,10 +202,10 @@ impl BoundIfStatement {
 }
 
 impl Parser {
-    pub fn parse(&self, lexer: &mut Lexer) -> Function {
+    pub fn parse(&self, lexer: &mut Lexer) -> Vec<Function> {
         lexer.reset();
         lexer.lex().expect("LUL");
-        self.function(lexer).unwrap()
+        self.functions(lexer)
     }
 
     fn op(&self, lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> Op) -> Op {
@@ -222,23 +221,43 @@ impl Parser {
         println!("{program:#?}");
     }
 
+    fn functions(&self, lexer: &mut Lexer) -> Vec<Function> {
+        let mut functions = Vec::<Function>::new();
+        while let Some(function) = self.function(lexer) {
+            functions.push(function);
+        }
+        functions
+    }
+
     fn function(&self, lexer: &mut Lexer) -> Option<Function> {
         if !self.matches_token_kind(lexer, TokenKind::FUNcKeyword) {
             return None;
         }
         lexer.consume_token();
-        assert!(self.matches_token_kind(lexer, TokenKind::Identifier), "Expected identifier");
+        assert!(
+            self.matches_token_kind(lexer, TokenKind::Identifier),
+            "Expected identifier"
+        );
         let identifier = lexer.token_value().unwrap();
         lexer.consume_token();
 
-        assert!(self.matches_token_kind(lexer, TokenKind::OpenParen), "Expected \"(\"");
+        assert!(
+            self.matches_token_kind(lexer, TokenKind::OpenParen),
+            "Expected \"(\""
+        );
         lexer.consume_token();
 
         let parameters = self.parameters(lexer);
-        assert!(self.matches_token_kind(lexer, TokenKind::CloseParen), "Expected \")\"");
+        assert!(
+            self.matches_token_kind(lexer, TokenKind::CloseParen),
+            "Expected \")\""
+        );
         lexer.consume_token();
 
-        assert!(self.matches_token_kind(lexer, TokenKind::Colon), "Expected \":\"");
+        assert!(
+            self.matches_token_kind(lexer, TokenKind::Colon),
+            "Expected \":\""
+        );
         lexer.consume_token();
 
         if let Some(return_type) = self.data_type(lexer) {
@@ -276,7 +295,10 @@ impl Parser {
         let identifier = lexer.token_value().unwrap();
         lexer.consume_token();
 
-        assert!(self.matches_token_kind(lexer, TokenKind::Colon), "Expected \":\"");
+        assert!(
+            self.matches_token_kind(lexer, TokenKind::Colon),
+            "Expected \":\""
+        );
         lexer.consume_token();
 
         if let Some(data_type) = self.data_type(lexer) {
@@ -555,12 +577,12 @@ impl Parser {
             return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::False) {
-            let expression = Expression::BoobaExpression(BoundBoobaExpression { booba: false });
+            let expression = Expression::BoobaExpression(false);
             lexer.consume_token();
             return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::True) {
-            let expression = Expression::BoobaExpression(BoundBoobaExpression { booba: true });
+            let expression = Expression::BoobaExpression(true);
             lexer.consume_token();
             return Some(expression);
         }

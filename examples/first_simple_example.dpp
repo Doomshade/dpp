@@ -8,3 +8,14 @@ FUNc test(aa: pp, bb: pp): pp {
         let test: pp = 123;
     }
 }
+
+FUNc test(aa: pp, bb: pp): pp {
+    let test: pp = (1 + 2) * 3;
+    let testasd: pp;
+    testasd = 123;
+    testasd = test + 4 * 2 - 1;
+
+    if (123) {
+        let test: pp = 123;
+    }
+}
