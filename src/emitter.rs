@@ -79,12 +79,12 @@ impl Emitter {
                 identifier,
                 data_type,
             } => {}
-            Statement::VariableDeclarationAndInitialization(
-                variable_declaration_and_initialization,
-            ) => self.expression(variable_declaration_and_initialization.expression(), writer)?,
-            Statement::IfStatement(if_statement) => {
-                self.expression(if_statement.expression(), writer)?
-            }
+            Statement::VariableDeclarationAndInitialization {
+                identifier,
+                data_type,
+                expression,
+            } => self.expression(expression, writer)?,
+            Statement::IfStatement { expression, block } => self.expression(expression, writer)?,
         };
         Ok(())
     }

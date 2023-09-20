@@ -13,29 +13,21 @@ pub enum Statement {
         identifier: String,
         expression: Expression,
     },
-    VariableDeclarationAndInitialization(BoundVariableDeclarationAndInitialization),
-    IfStatement(BoundIfStatement),
+    VariableDeclarationAndInitialization {
+        identifier: String,
+        data_type: DataType,
+        expression: Expression,
+    },
+    IfStatement {
+        expression: Expression,
+        block: Box<Block>,
+    },
 }
 
 #[derive(Debug)]
 pub enum Block {
     Statement(Statement),
     Statements(Vec<Statement>),
-}
-
-#[derive(Debug)]
-pub struct BoundVariableInitialization {
-    identifier: String,
-    expression: Expression,
-}
-
-impl BoundVariableInitialization {
-    pub fn identifier(&self) -> &str {
-        &self.identifier
-    }
-    pub fn expression(&self) -> &Expression {
-        &self.expression
-    }
 }
 
 #[derive(Debug)]
@@ -317,13 +309,11 @@ impl Parser {
                         }
                         lexer.consume_token();
 
-                        return Some(Statement::VariableDeclarationAndInitialization(
-                            BoundVariableDeclarationAndInitialization {
-                                identifier,
-                                data_type,
-                                expression,
-                            },
-                        ));
+                        return Some(Statement::VariableDeclarationAndInitialization {
+                            identifier,
+                            data_type,
+                            expression,
+                        });
                     }
                 } else if self.matches_token_kind(lexer, TokenKind::Semicolon) {
                     lexer.consume_token();
@@ -369,10 +359,10 @@ impl Parser {
                 }
                 lexer.consume_token();
                 if let Some(block) = self.block(lexer) {
-                    return Some(Statement::IfStatement(BoundIfStatement {
+                    return Some(Statement::IfStatement {
                         expression,
                         block: Box::new(block),
-                    }));
+                    });
                 }
             }
         }
