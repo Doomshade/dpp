@@ -1,7 +1,31 @@
-use crate::lexer::{Lexer, TokenKind};
+use crate::lexer::{Lexer, Token, TokenKind};
 
 #[derive(Default)]
 pub struct Parser;
+
+#[derive(Debug)]
+pub enum Statement {
+    VariableDeclaration(BoundVariableDeclaration),
+}
+
+#[derive(Debug)]
+pub struct BoundVariableDeclaration {
+    identifier: String,
+    _type: DataType,
+    expression: Expression,
+}
+
+impl BoundVariableDeclaration {
+    pub fn identifier(&self) -> &str {
+        &self.identifier
+    }
+    pub fn _type(&self) -> &DataType {
+        &self._type
+    }
+    pub fn expression(&self) -> &Expression {
+        &self.expression
+    }
+}
 
 #[derive(Debug)]
 pub enum Expression {
@@ -11,6 +35,20 @@ pub enum Expression {
     UnaryExpression(BoundUnaryExpression),
     BinaryExpression(BoundBinaryExpression),
 }
+
+#[derive(Debug)]
+pub enum DataType {
+    Pp,
+    Struct(Struct),
+}
+
+#[derive(Debug)]
+pub struct BoundPpDataType {
+    pp: i32,
+}
+
+#[derive(Debug)]
+pub enum Struct {}
 
 #[derive(Debug)]
 pub struct Program {}
@@ -29,10 +67,12 @@ pub struct BoundUnaryExpression {
 }
 
 impl BoundUnaryExpression {
-    #[must_use] pub const fn op(&self) -> &Op {
+    #[must_use]
+    pub const fn op(&self) -> &Op {
         &self.op
     }
-    #[must_use] pub const fn operand(&self) -> &Box<Expression> {
+    #[must_use]
+    pub const fn operand(&self) -> &Box<Expression> {
         &self.operand
     }
 }
@@ -147,10 +187,10 @@ pub enum Op {
 }
 
 impl Parser {
-    pub fn parse(&self, lexer: &mut Lexer) -> Expression {
+    pub fn parse(&self, lexer: &mut Lexer) -> Statement {
         lexer.reset();
         lexer.lex().expect("LUL");
-        self.expression(lexer)
+        self.statement(lexer)
     }
 
     fn op(&self, lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> Op) -> Op {
@@ -166,11 +206,68 @@ impl Parser {
         println!("{program:#?}");
     }
 
+    fn statement(&self, lexer: &mut Lexer) -> Statement {
+        if self.matches_token_kind(lexer, TokenKind::LetKeyword) {
+            lexer.consume_token();
+            if !self.matches_token_kind(lexer, TokenKind::Identifier) {
+                panic!("Expected identifier")
+            }
+
+            if let None = lexer.token() {
+                panic!("Expected identifier")
+            }
+
+            let ident = lexer.token().unwrap();
+            let identifier = ident.value.as_ref().unwrap().to_string();
+            lexer.consume_token();
+
+            if !self.matches_token_kind(lexer, TokenKind::Colon) {
+                panic!("Expected \":\"")
+            }
+            lexer.consume_token();
+
+            let data_type = self.data_type(lexer);
+
+            if !self.matches_token_kind(lexer, TokenKind::Equal) {
+                panic!("Expected \"=\"")
+            }
+            lexer.consume_token();
+            let expression = self.expression(lexer);
+
+            if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
+                panic!("Expected \";\"")
+            }
+            lexer.consume_token();
+
+            return Statement::VariableDeclaration(BoundVariableDeclaration {
+                identifier: identifier,
+                _type: data_type,
+                expression,
+            });
+        }
+
+        panic!("Not a statement")
+    }
+
+    fn data_type(&self, lexer: &mut Lexer) -> DataType {
+        if let Some(token) = lexer.token() {
+            return match token.kind {
+                TokenKind::PpType => {
+                    lexer.consume_token();
+                    DataType::Pp
+                }
+                _ => self.struct_(lexer),
+            };
+        }
+        panic!("No token")
+    }
+
+    fn struct_(&self, lexer: &mut Lexer) -> DataType {
+        todo!()
+    }
+
     fn expression(&self, lexer: &mut Lexer) -> Expression {
-        let expression = self.equality(lexer);
-        println!("Expression!");
-        dbg!(&expression);
-        expression
+        self.equality(lexer)
     }
 
     fn equality(&self, lexer: &mut Lexer) -> Expression {
@@ -188,8 +285,6 @@ impl Parser {
                 }),
                 rhs: Box::new(self.comparison(lexer)),
             });
-            println!("Equality!");
-            dbg!(&expression);
         }
         expression
     }
@@ -213,8 +308,6 @@ impl Parser {
                 }),
                 rhs: Box::new(self.term(lexer)),
             });
-            println!("Comparison!");
-            dbg!(&expression);
         }
         expression
     }
@@ -234,8 +327,6 @@ impl Parser {
                 }),
                 rhs: Box::new(self.factor(lexer)),
             });
-            println!("Addition or subtraction!");
-            dbg!(&expression);
         }
 
         expression
@@ -256,8 +347,6 @@ impl Parser {
                 }),
                 rhs: Box::new(self.unary(lexer)),
             });
-            println!("Division or multiplication!");
-            dbg!(&expression);
         }
         expression
     }
@@ -266,7 +355,7 @@ impl Parser {
         if self.matches_token_kind(lexer, TokenKind::Bang)
             || self.matches_token_kind(lexer, TokenKind::Dash)
         {
-            let expression = Expression::UnaryExpression(BoundUnaryExpression {
+            return Expression::UnaryExpression(BoundUnaryExpression {
                 op: self.op(lexer, |kind| match kind {
                     TokenKind::Bang => Op::Not,
                     TokenKind::Dash => Op::Negate,
@@ -274,9 +363,6 @@ impl Parser {
                 }),
                 operand: Box::new(self.unary(lexer)),
             });
-            println!("Unary!");
-            dbg!(&expression);
-            return expression;
         }
 
         self.primary(lexer)
@@ -304,8 +390,6 @@ impl Parser {
                     .parse::<i32>()
                     .unwrap(),
             });
-            println!("Number!");
-            dbg!(&expression);
             lexer.consume_token();
             return expression;
         }
@@ -320,16 +404,12 @@ impl Parser {
                     .parse()
                     .unwrap(),
             });
-            println!("String!");
-            dbg!(&expression);
             lexer.consume_token();
             return expression;
         }
         if self.matches_token_kind(lexer, TokenKind::OpenParen) {
             lexer.consume_token();
-            println!("Parenthesis!");
             let expression = self.expression(lexer);
-            dbg!(&expression);
             if !self.matches_token_kind(lexer, TokenKind::CloseParen) {
                 panic!("Expected closing parenthesis");
             }

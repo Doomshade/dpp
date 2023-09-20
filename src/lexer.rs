@@ -70,44 +70,6 @@ pub enum DataType {
     P,
 }
 
-impl TryFrom<&str> for DataType {
-    type Error = UnknownDataTypeError;
-
-    fn try_from(value: &str) -> Result<Self, UnknownDataTypeError> {
-        match value {
-            "xxlpp" => Ok(Self::Xxlpp),
-            "pp" => Ok(Self::Pp),
-            "spp" => Ok(Self::Spp),
-            "xspp" => Ok(Self::Xspp),
-            "nopp" => Ok(Self::Nopp),
-            "thread" => Ok(Self::Thread),
-            "boob" => Ok(Self::Boob),
-            "p" => Ok(Self::P),
-            _ => Err(UnknownDataTypeError {
-                keyword: String::from(value),
-            }),
-        }
-    }
-}
-
-impl TryFrom<&str> for Keyword {
-    type Error = UnknownKeywordError;
-
-    fn try_from(value: &str) -> Result<Self, UnknownKeywordError> {
-        match value {
-            "let" => Ok(Self::Let),
-            "pprint" => Ok(Self::Pprint),
-            "ppanic" => Ok(Self::Ppanic),
-            "ppin" => Ok(Self::Ppin),
-            "bye" => Ok(Self::Bye),
-            "FUNc" => Ok(Self::Func),
-            _ => Err(UnknownKeywordError {
-                keyword: String::from(value),
-            }),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
@@ -121,7 +83,6 @@ pub enum TokenKind {
     String,
     Character,
     BangEqual,
-    Keyword,
     Comment,
     Whitespace,
     Eof,
@@ -154,6 +115,20 @@ pub enum TokenKind {
     Ampersand,
     Pipe,
     Comma,
+    LetKeyword,    // let
+    ByeKeyword,    // return
+    PprintKeyword, // print()
+    PpanicKeyword, // panic()
+    PpinKeyword,   // read()
+    XxlppType,     // u64
+    PpType,        // u32
+    FUNcKeyword,   // func
+    SppType,       // u16
+    XsppType,      // u8
+    NoppType,      // void
+    PType,         // char
+    BoobType,      // bool
+    ThreadType,    // String
 }
 
 #[derive(Debug, Default)]
@@ -331,7 +306,7 @@ impl Lexer {
             "+-" => TokenKind::PlusDash,
             "+=" => TokenKind::PlusEqual,
             "-=" => TokenKind::MinusEqual,
-            _ => panic!("Unknown operator: {buf}")
+            _ => panic!("Unknown operator: {buf}"),
         };
 
         Token {
@@ -353,7 +328,7 @@ impl Lexer {
             ',' => TokenKind::Comma,
             ':' => TokenKind::Colon,
             ';' => TokenKind::Semicolon,
-            _ => unreachable!("Unknown punctuation: {c}")
+            _ => unreachable!("Unknown punctuation: {c}"),
         };
         self.consume();
 
@@ -427,25 +402,6 @@ impl Lexer {
         }
     }
 
-    fn is_keyword(identifier: &str) -> bool {
-        matches!(
-            identifier,
-            "xxlpp"
-                | "pp"
-                | "spp"
-                | "xspp"
-                | "p"
-                | "nopp"
-                | "boob"
-                | "let"
-                | "bye"
-                | "pprint"
-                | "ppanic"
-                | "ppin"
-                | "FUNc"
-        )
-    }
-
     fn handle_identifier(&mut self) -> Token {
         let mut buf = String::with_capacity(256);
 
@@ -455,10 +411,21 @@ impl Lexer {
             self.consume();
             c = self.peek();
         }
-        let token_kind = if Self::is_keyword(buf.as_str()) {
-            TokenKind::Keyword
-        } else {
-            TokenKind::Identifier
+        let token_kind = match buf.as_str() {
+            "xxlpp" => TokenKind::XxlppType,
+            "pp" => TokenKind::PpType,
+            "spp" => TokenKind::SppType,
+            "xspp" => TokenKind::XsppType,
+            "p" => TokenKind::PType,
+            "nopp" => TokenKind::NoppType,
+            "boob" => TokenKind::BoobType,
+            "let" => TokenKind::LetKeyword,
+            "bye" => TokenKind::ByeKeyword,
+            "pprint" => TokenKind::PprintKeyword,
+            "ppanic" => TokenKind::PpanicKeyword,
+            "ppin" => TokenKind::PpinKeyword,
+            "FUNc" => TokenKind::FUNcKeyword,
+            _ => TokenKind::Identifier,
         };
 
         Token {

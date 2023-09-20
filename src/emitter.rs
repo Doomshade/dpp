@@ -1,5 +1,5 @@
 use crate::parser::{
-    BoundBinaryExpression, BoundBoobaExpression, BoundPpExpression, Expression, Op,
+    BoundBinaryExpression, BoundBoobaExpression, BoundPpExpression, Expression, Op, Statement,
 };
 use std::fs::File;
 use std::io;
@@ -36,17 +36,17 @@ impl Emitter {
     fn remove_stack_bytes(&mut self, by: u32, writer: &mut BufWriter<&File>) -> io::Result<()> {
         self.stack -= by;
         writer.write_all(format!("    add esp, {} ; {}\n", by, self.stack).as_bytes())?; // TODO:
-        // Hardcoded size
+                                                                                         // Hardcoded size
         Ok(())
     }
 
-    pub fn emit(
-        &mut self,
-        expression: &Expression,
-        writer: &mut BufWriter<&File>,
-    ) -> io::Result<()> {
+    pub fn emit(&mut self, statement: &Statement, writer: &mut BufWriter<&File>) -> io::Result<()> {
         Self::emit_binary_start(writer)?;
-        self.expression(expression, writer)?;
+        match statement {
+            Statement::VariableDeclaration(variable_declaration) => {
+                self.expression(variable_declaration.expression(), writer)?
+            }
+        }
         Self::emit_end(writer)
     }
 
@@ -127,7 +127,6 @@ impl Emitter {
     fn mov(&mut self, op1: &str, op2: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(format!("    mov {op1}, {op2}\n").as_bytes())
     }
-
 
     fn emit_binary_start(writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"    global _main\n")?;

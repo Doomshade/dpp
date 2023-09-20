@@ -13,6 +13,19 @@
 
 \begin{document}
     \begin{align*}
+        \ebnfnodett{statement}{"let" IDENTIFIER ":" data-type "=" expression ";" ;}
+        \ebnfnode{\ttt{data-type}}
+        {%
+            \ttt{"xxlpp"}\\
+            &\ttt{ | "pp"}\\
+            &\ttt{ | "p"}\\
+            &\ttt{ | "spp"}\\
+            &\ttt{ | "p"}\\
+            &\ttt{ | "nopp"}\\
+            &\ttt{ | "boob"}\\
+            &\ttt{ | struct}
+        }
+        \ebnfnodett{struct}{IDENTIFIER}
         \ebnfnodett{expression}{equality}
         \ebnfnodett{equality}{comparison ( ( "!=" | "==" ) comparison )* ;}
         \ebnfnodett{comparison}{term ( ( ">" | ">=" | "<" | "<=" ) term )* ;}
