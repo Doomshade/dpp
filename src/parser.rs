@@ -645,13 +645,6 @@ impl Parser {
         args
     }
 
-    fn matches_token_kind_ahead(lexer: &Lexer, token_kind: TokenKind, ahead: usize) -> bool {
-        if let Some(token) = lexer.token_lookahead(ahead) {
-            return token.kind == token_kind;
-        }
-        false
-    }
-
     fn matches_token_kind(lexer: &Lexer, token_kind: TokenKind) -> bool {
         if let Some(token) = lexer.token() {
             return token.kind == token_kind;
