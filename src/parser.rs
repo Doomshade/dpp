@@ -325,6 +325,17 @@ impl Parser {
             lexer.consume_token();
             return expression;
         }
+        if self.matches_token_kind(lexer, TokenKind::OpenParen) {
+            lexer.consume_token();
+            println!("Parenthesis!");
+            let expression = self.expression(lexer);
+            dbg!(&expression);
+            if !self.matches_token_kind(lexer, TokenKind::CloseParen) {
+                panic!("Expected closing parenthesis");
+            }
+            lexer.consume_token();
+            return expression;
+        }
 
         unreachable!("Not implemented: {:#?}", lexer.token());
     }

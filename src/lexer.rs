@@ -121,7 +121,6 @@ pub enum TokenKind {
     String,
     Character,
     BangEqual,
-    Punctuation,
     Keyword,
     Comment,
     Whitespace,
@@ -144,6 +143,17 @@ pub enum TokenKind {
     LessEqual,
     False,
     True,
+    OpenParen,
+    CloseParen,
+    OpenBrace,
+    CloseBrace,
+    OpenBracket,
+    CloseBracket,
+    Colon,
+    Semicolon,
+    Ampersand,
+    Pipe,
+    Comma,
 }
 
 #[derive(Debug, Default)]
@@ -332,10 +342,23 @@ impl Lexer {
 
     fn handle_punctuation(&mut self) -> Token {
         let c = self.peek();
+
+        let kind = match c {
+            '(' => TokenKind::OpenParen,
+            ')' => TokenKind::CloseParen,
+            '{' => TokenKind::OpenBrace,
+            '}' => TokenKind::CloseBrace,
+            '[' => TokenKind::OpenBracket,
+            ']' => TokenKind::CloseBracket,
+            ',' => TokenKind::Comma,
+            ':' => TokenKind::Colon,
+            ';' => TokenKind::Semicolon,
+            _ => unreachable!("Unknown punctuation: {c}")
+        };
         self.consume();
 
         Token {
-            kind: TokenKind::Punctuation,
+            kind,
             value: Some(String::from(c)),
         }
     }
