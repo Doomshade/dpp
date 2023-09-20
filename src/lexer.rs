@@ -191,6 +191,15 @@ impl Lexer {
         Some(&self.tokens[self.curr_token_index + ahead])
     }
 
+    pub fn token_value(&self) -> Option<String> {
+        if let Some(token) = self.token() {
+            if let Some(value) = &token.value {
+                return Some(String::from(value));
+            }
+        }
+        None
+    }
+
     fn parse_token(&mut self) -> Result<Token, SyntaxError> {
         let token = match self.peek() {
             '\0' => Ok(Token {

@@ -1,4 +1,5 @@
 use crate::lexer::{Lexer, TokenKind};
+use std::ffi::c_double;
 
 #[derive(Default)]
 pub struct Parser;
@@ -25,8 +26,29 @@ pub enum Statement {
 }
 
 #[derive(Debug)]
+pub enum Function {
+    Function {
+        identifier: String,
+        return_type: DataType,
+        parameters: Vec<Parameter>,
+        block: Block,
+    },
+}
+#[derive(Debug)]
+pub enum Parameters {
+    Parameters(Vec<Parameter>),
+}
+
+#[derive(Debug)]
+pub enum Parameter {
+    Parameter {
+        identifier: String,
+        data_type: DataType,
+    },
+}
+
+#[derive(Debug)]
 pub enum Block {
-    Statement(Statement),
     Statements(Vec<Statement>),
 }
 
@@ -36,7 +58,14 @@ pub enum Expression {
     BoobaExpression(BoundBoobaExpression),
     FiberExpression(BoundFiberExpression),
     UnaryExpression(BoundUnaryExpression),
-    BinaryExpression(BoundBinaryExpression),
+    BinaryExpression {
+        lhs: Box<Expression>,
+        op: Op,
+        rhs: Box<Expression>,
+    },
+    IdentifierExpression {
+        identifier: String,
+    },
 }
 
 #[derive(Debug)]
@@ -140,39 +169,6 @@ impl BoundBinaryExpression {
     }
 }
 
-// impl fmt::Debug for Program {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         return f
-//             .debug_struct("Program")
-//             .field("expression", &self.expression)
-//             .finish();
-//     }
-// }
-
-// impl fmt::Debug for Expression {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         let mut debug_struct = f.debug_struct("Expression");
-//         if let Some(num) = &self.num {
-//             debug_struct.field("num", num);
-//         }
-//         if let Some(binary_expression) = &self.binary_expression {
-//             debug_struct.field("binary_expression", binary_expression);
-//         }
-//         debug_struct.finish()
-//     }
-// }
-
-// impl fmt::Debug for BinaryExpression {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         return f
-//             .debug_struct("BinaryExpression")
-//             .field("lhs", &self.lhs)
-//             .field("op", &self.op)
-//             .field("rhs", &self.rhs)
-//             .finish();
-//     }
-// }
-
 #[derive(Copy, Clone, Debug)]
 pub enum Op {
     Add,
@@ -207,10 +203,10 @@ impl BoundIfStatement {
 }
 
 impl Parser {
-    pub fn parse(&self, lexer: &mut Lexer) -> Block {
+    pub fn parse(&self, lexer: &mut Lexer) -> Function {
         lexer.reset();
         lexer.lex().expect("LUL");
-        self.block(lexer).unwrap()
+        self.function(lexer).unwrap()
     }
 
     fn op(&self, lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> Op) -> Op {
@@ -224,6 +220,83 @@ impl Parser {
     pub fn print_parse_tree(&self, lexer: &mut Lexer) {
         let program = self.parse(lexer);
         println!("{program:#?}");
+    }
+
+    fn function(&self, lexer: &mut Lexer) -> Option<Function> {
+        if !self.matches_token_kind(lexer, TokenKind::FUNcKeyword) {
+            return None;
+        }
+        lexer.consume_token();
+        if !self.matches_token_kind(lexer, TokenKind::Identifier) {
+            panic!("Expected identifier");
+        }
+        let identifier = lexer.token_value().unwrap();
+        lexer.consume_token();
+
+        if !self.matches_token_kind(lexer, TokenKind::OpenParen) {
+            panic!("Expected \"(\"");
+        }
+        lexer.consume_token();
+
+        let parameters = self.parameters(lexer);
+        if !self.matches_token_kind(lexer, TokenKind::CloseParen) {
+            panic!("Expected \")\"");
+        }
+        lexer.consume_token();
+
+        if !self.matches_token_kind(lexer, TokenKind::Colon) {
+            panic!("Expected \":\"");
+        }
+        lexer.consume_token();
+
+        if let Some(return_type) = self.data_type(lexer) {
+            if let Some(block) = self.block(lexer) {
+                return Some(Function::Function {
+                    identifier,
+                    return_type,
+                    parameters,
+                    block,
+                });
+            }
+        } else {
+            panic!("Expected data type");
+        }
+
+        panic!("Not implemented");
+    }
+
+    fn parameters(&self, lexer: &mut Lexer) -> Vec<Parameter> {
+        let mut parameters = Vec::<Parameter>::new();
+        while let Some(parameter) = self.parameter(lexer) {
+            parameters.push(parameter);
+            if !self.matches_token_kind(lexer, TokenKind::Comma) {
+                break;
+            }
+            lexer.consume_token();
+        }
+        parameters
+    }
+
+    fn parameter(&self, lexer: &mut Lexer) -> Option<Parameter> {
+        if !self.matches_token_kind(lexer, TokenKind::Identifier) {
+            return None;
+        }
+        let identifier = lexer.token_value().unwrap();
+        lexer.consume_token();
+
+        if !self.matches_token_kind(lexer, TokenKind::Colon) {
+            panic!("Expected \":\"");
+        }
+        lexer.consume_token();
+
+        if let Some(data_type) = self.data_type(lexer) {
+            return Some(Parameter::Parameter {
+                identifier,
+                data_type,
+            });
+        } else {
+            panic!("Expected data type");
+        }
     }
 
     fn block(&self, lexer: &mut Lexer) -> Option<Block> {
@@ -243,11 +316,7 @@ impl Parser {
                 );
                 lexer.consume_token();
 
-                return if statements.len() == 1 {
-                    Some(Block::Statement(statements.pop().unwrap()))
-                } else {
-                    Some(Block::Statements(statements))
-                };
+                return Some(Block::Statements(statements));
             }
         }
 
@@ -379,11 +448,11 @@ impl Parser {
                     _ => unreachable!(),
                 });
                 if let Some(rhs) = self.comparison(lexer) {
-                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                    expression = Some(Expression::BinaryExpression {
                         lhs: Box::new(expression.unwrap()),
                         op,
                         rhs: Box::new(rhs),
-                    }));
+                    });
                 }
             }
         }
@@ -407,11 +476,11 @@ impl Parser {
                     _ => unreachable!(),
                 });
                 if let Some(rhs) = self.term(lexer) {
-                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                    expression = Some(Expression::BinaryExpression {
                         lhs: Box::new(expression.unwrap()),
                         op,
                         rhs: Box::new(rhs),
-                    }));
+                    });
                 }
             }
         }
@@ -431,11 +500,11 @@ impl Parser {
                     _ => unreachable!(),
                 });
                 if let Some(factor) = self.factor(lexer) {
-                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                    expression = Some(Expression::BinaryExpression {
                         lhs: Box::new(expression.unwrap()),
                         op,
                         rhs: Box::new(factor),
-                    }));
+                    });
                 }
             }
         }
@@ -456,11 +525,11 @@ impl Parser {
                     _ => unreachable!(),
                 });
                 if let Some(unary) = self.unary(lexer) {
-                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                    expression = Some(Expression::BinaryExpression {
                         lhs: Box::new(expression.unwrap()),
                         op,
                         rhs: Box::new(unary),
-                    }));
+                    });
                 }
             }
         }
@@ -488,6 +557,13 @@ impl Parser {
     }
 
     fn primary(&self, lexer: &mut Lexer) -> Option<Expression> {
+        if self.matches_token_kind(lexer, TokenKind::Identifier) {
+            let expression = Expression::IdentifierExpression {
+                identifier: String::from(lexer.token().unwrap().value.as_ref().unwrap()),
+            };
+            lexer.consume_token();
+            return Some(expression);
+        }
         if self.matches_token_kind(lexer, TokenKind::False) {
             let expression = Expression::BoobaExpression(BoundBoobaExpression { booba: false });
             lexer.consume_token();

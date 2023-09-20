@@ -13,7 +13,10 @@
 
 \begin{document}
     \begin{align*}
-        \ebnfnodett{block}{"\{" (statement | statement statements) "\}"}
+        \ebnfnodett{function}{"FUNc" IDENTIFIER "(" parameters? ")" ":" data-type block}
+        \ebnfnodett{parameters}{parameter ("," parameter)*}
+        \ebnfnodett{parameter}{IDENTIFIER ":" data-type}
+        \ebnfnodett{block}{"\{" statement* "\}"}
         \ebnfnode{\ttt{statement}}
         {%
             \ttt{"let" IDENTIFIER ":" data-type ("=" expression ";" | ";")}\\
@@ -39,9 +42,9 @@
         \ebnfnodett{factor}{unary ( ( "/" | "*" ) unary )*}
         \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
         \ebnfnode{\ttt{primary}}
-        {
-            \ttt{NUMBER | STRING | "true" | "false"}\\
-            &\ttt{ | "nil" | "(" expression ")"}
+        {%
+            \ttt{IDENTIFIER | NUMBER | STRING}\\
+            &\ttt{ | "true" | "false" | "(" expression ")"}
         }
     \end{align*}
 \end{document}

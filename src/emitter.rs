@@ -1,10 +1,10 @@
-use crate::parser::{
-    Block, BoundBinaryExpression, BoundBoobaExpression, BoundPpExpression, Expression, Op,
-    Statement,
-};
 use std::fs::File;
 use std::io;
 use std::io::{BufWriter, Write};
+
+use crate::parser::{
+    Block, BoundBoobaExpression, BoundPpExpression, Expression, Function, Op, Statement,
+};
 
 #[derive(Default)]
 pub struct Emitter {
@@ -41,30 +41,39 @@ impl Emitter {
         Ok(())
     }
 
-    pub fn emit(&mut self, statements: &Block, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    pub fn emit(&mut self, function: &Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
         Self::emit_binary_start(writer)?;
-        self.emit_statements(statements, writer)?;
+        self.function(function, writer)?;
         Self::emit_end(writer)?;
         Ok(())
     }
 
-    fn emit_statements(
-        &mut self,
-        statements: &Block,
-        writer: &mut BufWriter<&File>,
-    ) -> io::Result<()> {
-        match statements {
-            Block::Statement(statement) => self.emit_statement(statement, writer)?,
-            Block::Statements(statementss) => {
-                for statement in statementss {
-                    self.emit_statement(statement, writer)?;
+    fn function(&mut self, function: &Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        match function {
+            Function::Function {
+                identifier,
+                return_type,
+                parameters,
+                block,
+            } => {
+                self.block(block, writer)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn block(&mut self, block: &Block, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        match block {
+            Block::Statements(statements) => {
+                for statement in statements {
+                    self.statement(statement, writer)?;
                 }
             }
         }
         Ok(())
     }
 
-    fn emit_statement(
+    fn statement(
         &mut self,
         statement: &Statement,
         writer: &mut BufWriter<&File>,
@@ -84,7 +93,10 @@ impl Emitter {
                 data_type: _,
                 expression,
             } => self.expression(expression, writer)?,
-            Statement::IfStatement { expression, block: _ } => self.expression(expression, writer)?,
+            Statement::IfStatement {
+                expression,
+                block: _,
+            } => self.expression(expression, writer)?,
         };
         Ok(())
     }
@@ -110,23 +122,29 @@ impl Emitter {
             }
             Expression::FiberExpression(_fiber_expression) => Ok(()),
             Expression::UnaryExpression(_unary_expression) => Ok(()),
-            Expression::BinaryExpression(binary_expression) => {
-                self.binary_expression(binary_expression, writer)
+            Expression::BinaryExpression { lhs, op, rhs } => {
+                self.binary_expression(lhs, op, rhs, writer)
+            }
+            Expression::IdentifierExpression { identifier } => {
+                self.mov("eax", identifier, writer)?;
+                self.push("eax", writer)
             }
         }
     }
 
     fn binary_expression(
         &mut self,
-        binary_expression: &BoundBinaryExpression,
+        lhs: &Expression,
+        op: &Op,
+        rhs: &Expression,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        self.expression(binary_expression.lhs(), writer)?;
-        self.expression(binary_expression.rhs(), writer)?;
+        self.expression(lhs, writer)?;
+        self.expression(rhs, writer)?;
         self.pop("ecx", writer)?;
         self.pop("eax", writer)?;
 
-        match binary_expression.op() {
+        match op {
             Op::Add => writer.write_all(b"    add eax, ecx\n")?,
             Op::Subtract => writer.write_all(b"    sub eax, ecx\n")?,
             Op::Multiply => writer.write_all(b"    mul ecx\n")?,
