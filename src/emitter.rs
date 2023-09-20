@@ -41,7 +41,7 @@ impl Emitter {
 
     pub fn emit(
         &mut self,
-        translation_unit: &TranslationUnit,
+        _translation_unit: &TranslationUnit,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         Self::start(writer)?;
@@ -57,7 +57,7 @@ impl Emitter {
         match translation_unit {
             TranslationUnit::TranslationUnit {
                 functions,
-                variables,
+                variables: _,
             } => self.functions(&functions, writer),
         }
     }
