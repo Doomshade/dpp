@@ -11,11 +11,11 @@ pub enum Statement {
         identifier: String,
         data_type: DataType,
     },
-    VariableInitialization {
+    VariableAssignment {
         identifier: String,
         expression: Expression,
     },
-    VariableDeclarationAndInitialization {
+    VariableDeclarationAndAssignment {
         identifier: String,
         data_type: DataType,
         expression: Expression,
@@ -190,6 +190,37 @@ impl Parser {
         )
     }
 
+    fn variable_assignment(lexer: &mut Lexer) -> Option<Statement> {
+        if !Self::matches_token_kind(lexer, TokenKind::Identifier) {
+            return None;
+        }
+        let identifier = lexer.token_value().unwrap();
+        lexer.consume_token();
+
+        if !Self::matches_token_kind(lexer, TokenKind::Equal) {
+            return None;
+        }
+        lexer.consume_token();
+        let statement = Self::expression(lexer).map_or_else(
+            || {
+                panic!("Expression expected");
+            },
+            |expression| {
+                assert!(
+                    Self::matches_token_kind(lexer, TokenKind::Semicolon),
+                    "Expected \";\""
+                );
+                lexer.consume_token();
+
+                Statement::VariableAssignment {
+                    identifier,
+                    expression,
+                }
+            },
+        );
+        Some(statement)
+    }
+
     fn variable_declaration(
         lexer: &mut Lexer,
         var_decl_common: Option<Variable>,
@@ -201,15 +232,14 @@ impl Parser {
         }
         lexer.consume_token();
 
-        match var_decl_common.unwrap() {
-            Variable {
-                identifier,
-                data_type,
-            } => Some(Statement::VariableDeclaration {
-                identifier,
-                data_type,
-            }),
-        }
+        let Variable {
+            identifier,
+            data_type,
+        } = var_decl_common.unwrap();
+        Some(Statement::VariableDeclaration {
+            identifier,
+            data_type,
+        })
     }
 
     fn variable_declaration_and_assignment(
@@ -223,26 +253,23 @@ impl Parser {
         }
         lexer.consume_token();
 
-        match var_decl_common.unwrap() {
-            Variable {
+        let Variable {
+            identifier,
+            data_type,
+        } = var_decl_common.unwrap();
+        if let Some(expression) = Self::expression(lexer) {
+            assert!(
+                Self::matches_token_kind(lexer, TokenKind::Semicolon),
+                "Expected \";\""
+            );
+            lexer.consume_token();
+            return Some(Statement::VariableDeclarationAndAssignment {
                 identifier,
                 data_type,
-            } => {
-                if let Some(expression) = Self::expression(lexer) {
-                    assert!(
-                        Self::matches_token_kind(lexer, TokenKind::Semicolon),
-                        "Expected \";\""
-                    );
-                    lexer.consume_token();
-                    return Some(Statement::VariableDeclarationAndInitialization {
-                        identifier,
-                        data_type,
-                        expression,
-                    });
-                }
-            }
-        }
-        None
+                expression,
+            });
+        };
+        panic!("Expected expression")
     }
 
     fn function(lexer: &mut Lexer) -> Option<Function> {
@@ -277,7 +304,7 @@ impl Parser {
         lexer.consume_token();
 
         if let Some(return_type) = Self::data_type(lexer) {
-            if let Some(mut block) = Self::block(lexer) {
+            if let Some(block) = Self::block(lexer) {
                 return Some(Function {
                     identifier,
                     return_type,
@@ -354,71 +381,16 @@ impl Parser {
     }
 
     fn statement(lexer: &mut Lexer) -> Option<Statement> {
-        if Self::matches_token_kind(lexer, TokenKind::LetKeyword) {
-            lexer.consume_token();
-            assert!(
-                Self::matches_token_kind(lexer, TokenKind::Identifier),
-                "Expected identifier"
-            );
-
-            let identifier = lexer.token().unwrap().value.as_ref().unwrap().to_string();
-            lexer.consume_token();
-
-            assert!(
-                Self::matches_token_kind(lexer, TokenKind::Colon),
-                "Expected \":\""
-            );
-            lexer.consume_token();
-
-            if let Some(data_type) = Self::data_type(lexer) {
-                if Self::matches_token_kind(lexer, TokenKind::Equal) {
-                    lexer.consume_token();
-                    if let Some(expression) = Self::expression(lexer) {
-                        assert!(
-                            Self::matches_token_kind(lexer, TokenKind::Semicolon),
-                            "Expected \";\""
-                        );
-                        lexer.consume_token();
-
-                        return Some(Statement::VariableDeclarationAndInitialization {
-                            identifier,
-                            data_type,
-                            expression,
-                        });
-                    }
-                } else if Self::matches_token_kind(lexer, TokenKind::Semicolon) {
-                    lexer.consume_token();
-                    return Some(Statement::VariableDeclaration {
-                        identifier,
-                        data_type,
-                    });
-                } else {
-                    panic!("Expected \";\"")
-                }
-            } else {
-                panic!("Expected data type")
-            }
-        } else if Self::matches_token_kind(lexer, TokenKind::Identifier) {
-            let identifier = lexer.token_value().unwrap();
-            lexer.consume_token();
-
-            if Self::matches_token_kind(lexer, TokenKind::Equal) {
-                lexer.consume_token();
-                if let Some(expression) = Self::expression(lexer) {
-                    assert!(
-                        Self::matches_token_kind(lexer, TokenKind::Semicolon),
-                        "Expected \";\""
-                    );
-                    lexer.consume_token();
-
-                    return Some(Statement::VariableInitialization {
-                        identifier,
-                        expression,
-                    });
-                }
-            } else {
-                panic!("Expected \"=\"")
-            }
+        let common = Self::variable_declaration_common(lexer);
+        if let Some(variable_declaration) = Self::variable_declaration(lexer, common.clone()) {
+            return Some(variable_declaration);
+        }
+        if let Some(variable_decl_and_assign) =
+            Self::variable_declaration_and_assignment(lexer, common)
+        {
+            return Some(variable_decl_and_assign);
+        } else if let Some(variable_assignment) = Self::variable_assignment(lexer) {
+            return Some(variable_assignment);
         } else if Self::matches_token_kind(lexer, TokenKind::IfKeyword) {
             lexer.consume_token();
             assert!(

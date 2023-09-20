@@ -97,7 +97,7 @@ impl Emitter {
 
     fn statement(&mut self, statement: Statement, writer: &mut BufWriter<&File>) -> io::Result<()> {
         match statement {
-            Statement::VariableInitialization {
+            Statement::VariableAssignment {
                 identifier: _,
                 expression,
             } => self.expression(expression, writer)?,
@@ -106,7 +106,7 @@ impl Emitter {
                 identifier: _,
                 data_type: _,
             } => {}
-            Statement::VariableDeclarationAndInitialization {
+            Statement::VariableDeclarationAndAssignment {
                 identifier: _,
                 data_type: _,
                 expression,
