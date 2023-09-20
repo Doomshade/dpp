@@ -286,44 +286,46 @@ impl Parser {
             }
             lexer.consume_token();
 
-            let data_type = self.data_type(lexer);
+            if let Some(data_type) = self.data_type(lexer) {
+                if self.matches_token_kind(lexer, TokenKind::Equal) {
+                    lexer.consume_token();
+                    if let Some(expression) = self.expression(lexer) {
+                        if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
+                            panic!("Expected \";\"")
+                        }
+                        lexer.consume_token();
 
-            if self.matches_token_kind(lexer, TokenKind::Equal) {
-                lexer.consume_token();
-                let expression = self.expression(lexer);
-
-                if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
-                    panic!("Expected \";\"")
-                }
-                lexer.consume_token();
-
-                return Some(Statement::VariableDeclarationAndInitialization(
-                    BoundVariableDeclarationAndInitialization {
+                        return Some(Statement::VariableDeclarationAndInitialization(
+                            BoundVariableDeclarationAndInitialization {
+                                identifier,
+                                data_type,
+                                expression,
+                            },
+                        ));
+                    }
+                } else if self.matches_token_kind(lexer, TokenKind::Semicolon) {
+                    lexer.consume_token();
+                    return Some(Statement::VariableDeclaration(BoundVariableDeclaration {
                         identifier,
                         data_type,
-                        expression,
-                    },
-                ));
-            } else if self.matches_token_kind(lexer, TokenKind::Semicolon) {
-                lexer.consume_token();
-                return Some(Statement::VariableDeclaration(BoundVariableDeclaration {
-                    identifier,
-                    data_type,
-                }));
+                    }));
+                } else {
+                    panic!("Expected \";\"")
+                }
             } else {
-                panic!("Expected \";\"")
+                panic!("Expected data type")
             }
         }
 
         None
     }
 
-    fn data_type(&self, lexer: &mut Lexer) -> DataType {
+    fn data_type(&self, lexer: &mut Lexer) -> Option<DataType> {
         if let Some(token) = lexer.token() {
             return match token.kind {
                 TokenKind::PpType => {
                     lexer.consume_token();
-                    DataType::Pp
+                    Some(DataType::Pp)
                 }
                 _ => self.struct_(lexer),
             };
@@ -331,34 +333,39 @@ impl Parser {
         panic!("No token")
     }
 
-    fn struct_(&self, lexer: &mut Lexer) -> DataType {
+    fn struct_(&self, lexer: &mut Lexer) -> Option<DataType> {
         todo!()
     }
 
-    fn expression(&self, lexer: &mut Lexer) -> Expression {
+    fn expression(&self, lexer: &mut Lexer) -> Option<Expression> {
         self.equality(lexer)
     }
 
-    fn equality(&self, lexer: &mut Lexer) -> Expression {
+    fn equality(&self, lexer: &mut Lexer) -> Option<Expression> {
         let mut expression = self.comparison(lexer);
 
         while self.matches_token_kind(lexer, TokenKind::BangEqual)
             || self.matches_token_kind(lexer, TokenKind::EqualEqual)
         {
-            expression = Expression::BinaryExpression(BoundBinaryExpression {
-                lhs: Box::new(expression),
-                op: self.op(lexer, |kind| match kind {
+            if let Some(_) = expression {
+                let op = self.op(lexer, |kind| match kind {
                     TokenKind::BangEqual => Op::NotEqual,
                     TokenKind::EqualEqual => Op::Equal,
                     _ => unreachable!(),
-                }),
-                rhs: Box::new(self.comparison(lexer)),
-            });
+                });
+                if let Some(rhs) = self.comparison(lexer) {
+                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                        lhs: Box::new(expression.unwrap()),
+                        op,
+                        rhs: Box::new(rhs),
+                    }));
+                }
+            }
         }
         expression
     }
 
-    fn comparison(&self, lexer: &mut Lexer) -> Expression {
+    fn comparison(&self, lexer: &mut Lexer) -> Option<Expression> {
         let mut expression = self.term(lexer);
 
         while self.matches_token_kind(lexer, TokenKind::Greater)
@@ -366,87 +373,105 @@ impl Parser {
             || self.matches_token_kind(lexer, TokenKind::Less)
             || self.matches_token_kind(lexer, TokenKind::LessEqual)
         {
-            expression = Expression::BinaryExpression(BoundBinaryExpression {
-                lhs: Box::new(expression),
-                op: self.op(lexer, |kind| match kind {
+            if let Some(_) = expression {
+                let op = self.op(lexer, |kind| match kind {
                     TokenKind::Greater => Op::GreaterThan,
                     TokenKind::GreaterEqual => Op::GreaterThanOrEqual,
                     TokenKind::Less => Op::LessThan,
                     TokenKind::LessEqual => Op::LessThanOrEqual,
                     _ => unreachable!(),
-                }),
-                rhs: Box::new(self.term(lexer)),
-            });
+                });
+                if let Some(rhs) = self.term(lexer) {
+                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                        lhs: Box::new(expression.unwrap()),
+                        op,
+                        rhs: Box::new(rhs),
+                    }));
+                }
+            }
         }
         expression
     }
 
-    fn term(&self, lexer: &mut Lexer) -> Expression {
+    fn term(&self, lexer: &mut Lexer) -> Option<Expression> {
         let mut expression = self.factor(lexer);
 
         while self.matches_token_kind(lexer, TokenKind::Dash)
             || self.matches_token_kind(lexer, TokenKind::Plus)
         {
-            expression = Expression::BinaryExpression(BoundBinaryExpression {
-                lhs: Box::new(expression),
-                op: self.op(lexer, |kind| match kind {
+            if let Some(_) = expression {
+                let op = self.op(lexer, |kind| match kind {
                     TokenKind::Dash => Op::Subtract,
                     TokenKind::Plus => Op::Add,
                     _ => unreachable!(),
-                }),
-                rhs: Box::new(self.factor(lexer)),
-            });
+                });
+                if let Some(factor) = self.factor(lexer) {
+                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                        lhs: Box::new(expression.unwrap()),
+                        op,
+                        rhs: Box::new(factor),
+                    }));
+                }
+            }
         }
 
         expression
     }
 
-    fn factor(&self, lexer: &mut Lexer) -> Expression {
+    fn factor(&self, lexer: &mut Lexer) -> Option<Expression> {
         let mut expression = self.unary(lexer);
 
         while self.matches_token_kind(lexer, TokenKind::ForwardSlash)
             || self.matches_token_kind(lexer, TokenKind::Star)
         {
-            expression = Expression::BinaryExpression(BoundBinaryExpression {
-                lhs: Box::new(expression),
-                op: self.op(lexer, |kind| match kind {
+            if let Some(_) = expression {
+                let op = self.op(lexer, |kind| match kind {
                     TokenKind::ForwardSlash => Op::Divide,
                     TokenKind::Star => Op::Multiply,
                     _ => unreachable!(),
-                }),
-                rhs: Box::new(self.unary(lexer)),
-            });
+                });
+                if let Some(unary) = self.unary(lexer) {
+                    expression = Some(Expression::BinaryExpression(BoundBinaryExpression {
+                        lhs: Box::new(expression.unwrap()),
+                        op,
+                        rhs: Box::new(unary),
+                    }));
+                }
+            }
         }
         expression
     }
 
-    fn unary(&self, lexer: &mut Lexer) -> Expression {
+    fn unary(&self, lexer: &mut Lexer) -> Option<Expression> {
         if self.matches_token_kind(lexer, TokenKind::Bang)
             || self.matches_token_kind(lexer, TokenKind::Dash)
         {
-            return Expression::UnaryExpression(BoundUnaryExpression {
-                op: self.op(lexer, |kind| match kind {
-                    TokenKind::Bang => Op::Not,
-                    TokenKind::Dash => Op::Negate,
-                    _ => unreachable!(),
-                }),
-                operand: Box::new(self.unary(lexer)),
+            let op = self.op(lexer, |kind| match kind {
+                TokenKind::Bang => Op::Not,
+                TokenKind::Dash => Op::Negate,
+                _ => unreachable!(),
             });
+            if let Some(unary) = self.unary(lexer) {
+                return Some(Expression::UnaryExpression(BoundUnaryExpression {
+                    op,
+                    operand: Box::new(unary),
+                }));
+            }
         }
 
         self.primary(lexer)
     }
 
-    fn primary(&self, lexer: &mut Lexer) -> Expression {
+    fn primary(&self, lexer: &mut Lexer) -> Option<Expression> {
         if self.matches_token_kind(lexer, TokenKind::False) {
             let expression = Expression::BoobaExpression(BoundBoobaExpression { booba: false });
             lexer.consume_token();
-            return expression;
+            return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::True) {
             let expression = Expression::BoobaExpression(BoundBoobaExpression { booba: true });
             lexer.consume_token();
-            return expression;
+            return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::Number) {
             let expression = Expression::PpExpression(BoundPpExpression {
@@ -460,7 +485,7 @@ impl Parser {
                     .unwrap(),
             });
             lexer.consume_token();
-            return expression;
+            return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::String) {
             let expression = Expression::FiberExpression(BoundFiberExpression {
@@ -474,7 +499,7 @@ impl Parser {
                     .unwrap(),
             });
             lexer.consume_token();
-            return expression;
+            return Some(expression);
         }
         if self.matches_token_kind(lexer, TokenKind::OpenParen) {
             lexer.consume_token();
@@ -486,7 +511,7 @@ impl Parser {
             return expression;
         }
 
-        unreachable!("Not implemented: {:#?}", lexer.token());
+        None
     }
 
     fn matches_token_kind(&self, lexer: &Lexer, token_kind: TokenKind) -> bool {
