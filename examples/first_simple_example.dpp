@@ -1,1 +1,4 @@
-let test: pp = (1 + 2) * 3;
+{
+    let test: pp = (1 + 2) * 3;
+    let test: pp;
+}

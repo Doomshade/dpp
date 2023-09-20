@@ -13,7 +13,8 @@
 
 \begin{document}
     \begin{align*}
-        \ebnfnodett{statement}{"let" IDENTIFIER ":" data-type "=" expression ";" ;}
+        \ebnfnodett{block}{"\{" (statement | statement statements) "\}";}
+        \ebnfnodett{statement}{"let" IDENTIFIER ":" data-type ("=" expression ";" | ";") ;}
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\

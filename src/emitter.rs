@@ -1,5 +1,6 @@
 use crate::parser::{
-    BoundBinaryExpression, BoundBoobaExpression, BoundPpExpression, Expression, Op, Statement,
+    Block, BoundBinaryExpression, BoundBoobaExpression, BoundPpExpression, Expression, Op,
+    Statement,
 };
 use std::fs::File;
 use std::io;
@@ -40,14 +41,45 @@ impl Emitter {
         Ok(())
     }
 
-    pub fn emit(&mut self, statement: &Statement, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    pub fn emit(&mut self, statements: &Block, writer: &mut BufWriter<&File>) -> io::Result<()> {
         Self::emit_binary_start(writer)?;
-        match statement {
-            Statement::VariableDeclaration(variable_declaration) => {
-                self.expression(variable_declaration.expression(), writer)?
+        self.emit_statements(statements, writer)?;
+        Self::emit_end(writer)?;
+        Ok(())
+    }
+
+    fn emit_statements(
+        &mut self,
+        statements: &Block,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
+        match statements {
+            Block::Statement(statement) => self.emit_statement(statement, writer)?,
+            Block::Statements(statementss) => {
+                for statement in statementss {
+                    self.emit_statement(statement, writer)?;
+                }
             }
         }
-        Self::emit_end(writer)
+        Ok(())
+    }
+
+    fn emit_statement(
+        &mut self,
+        statement: &Statement,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
+        match statement {
+            Statement::VariableInitialization(variable_initialization) => {
+                self.expression(variable_initialization.expression(), writer)?
+            }
+
+            Statement::VariableDeclaration(_variable_declaration) => {}
+            Statement::VariableDeclarationAndInitialization(
+                variable_declaration_and_initialization,
+            ) => self.expression(variable_declaration_and_initialization.expression(), writer)?,
+        };
+        Ok(())
     }
 
     fn emit_end(writer: &mut BufWriter<&File>) -> io::Result<()> {

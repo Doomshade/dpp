@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token, TokenKind};
+use crate::lexer::{Lexer, TokenKind};
 
 #[derive(Default)]
 pub struct Parser;
@@ -6,13 +6,54 @@ pub struct Parser;
 #[derive(Debug)]
 pub enum Statement {
     VariableDeclaration(BoundVariableDeclaration),
+    VariableInitialization(BoundVariableInitialization),
+    VariableDeclarationAndInitialization(BoundVariableDeclarationAndInitialization),
+}
+
+#[derive(Debug)]
+pub enum Block {
+    Statement(Statement),
+    Statements(Vec<Statement>),
+}
+
+#[derive(Debug)]
+pub struct BoundVariableInitialization {
+    identifier: String,
+    expression: Expression,
+}
+
+impl BoundVariableInitialization {
+    pub fn identifier(&self) -> &str {
+        &self.identifier
+    }
+    pub fn expression(&self) -> &Expression {
+        &self.expression
+    }
+}
+
+#[derive(Debug)]
+pub struct BoundVariableDeclarationAndInitialization {
+    identifier: String,
+    data_type: DataType,
+    expression: Expression,
+}
+
+impl BoundVariableDeclarationAndInitialization {
+    pub fn identifier(&self) -> &str {
+        &self.identifier
+    }
+    pub fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+    pub fn expression(&self) -> &Expression {
+        &self.expression
+    }
 }
 
 #[derive(Debug)]
 pub struct BoundVariableDeclaration {
     identifier: String,
-    _type: DataType,
-    expression: Expression,
+    data_type: DataType,
 }
 
 impl BoundVariableDeclaration {
@@ -20,10 +61,7 @@ impl BoundVariableDeclaration {
         &self.identifier
     }
     pub fn _type(&self) -> &DataType {
-        &self._type
-    }
-    pub fn expression(&self) -> &Expression {
-        &self.expression
+        &self.data_type
     }
 }
 
@@ -187,10 +225,10 @@ pub enum Op {
 }
 
 impl Parser {
-    pub fn parse(&self, lexer: &mut Lexer) -> Statement {
+    pub fn parse(&self, lexer: &mut Lexer) -> Block {
         lexer.reset();
         lexer.lex().expect("LUL");
-        self.statement(lexer)
+        self.block(lexer).unwrap()
     }
 
     fn op(&self, lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> Op) -> Op {
@@ -206,19 +244,41 @@ impl Parser {
         println!("{program:#?}");
     }
 
-    fn statement(&self, lexer: &mut Lexer) -> Statement {
+    fn block(&self, lexer: &mut Lexer) -> Option<Block> {
+        if self.matches_token_kind(lexer, TokenKind::OpenBrace) {
+            lexer.consume_token();
+            if let Some(statement) = self.statement(lexer) {
+                let mut statements = Vec::<Statement>::new();
+                statements.push(statement);
+
+                while let Some(statement) = self.statement(lexer) {
+                    statements.push(statement);
+                }
+
+                if !self.matches_token_kind(lexer, TokenKind::CloseBrace) {
+                    panic!("Expected closing brace")
+                }
+                lexer.consume_token();
+
+                return if statements.len() == 1 {
+                    Some(Block::Statement(statements.pop().unwrap()))
+                } else {
+                    Some(Block::Statements(statements))
+                };
+            }
+        }
+
+        None
+    }
+
+    fn statement(&self, lexer: &mut Lexer) -> Option<Statement> {
         if self.matches_token_kind(lexer, TokenKind::LetKeyword) {
             lexer.consume_token();
             if !self.matches_token_kind(lexer, TokenKind::Identifier) {
                 panic!("Expected identifier")
             }
 
-            if let None = lexer.token() {
-                panic!("Expected identifier")
-            }
-
-            let ident = lexer.token().unwrap();
-            let identifier = ident.value.as_ref().unwrap().to_string();
+            let identifier = lexer.token().unwrap().value.as_ref().unwrap().to_string();
             lexer.consume_token();
 
             if !self.matches_token_kind(lexer, TokenKind::Colon) {
@@ -228,25 +288,34 @@ impl Parser {
 
             let data_type = self.data_type(lexer);
 
-            if !self.matches_token_kind(lexer, TokenKind::Equal) {
-                panic!("Expected \"=\"")
-            }
-            lexer.consume_token();
-            let expression = self.expression(lexer);
+            if self.matches_token_kind(lexer, TokenKind::Equal) {
+                lexer.consume_token();
+                let expression = self.expression(lexer);
 
-            if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
+                if !self.matches_token_kind(lexer, TokenKind::Semicolon) {
+                    panic!("Expected \";\"")
+                }
+                lexer.consume_token();
+
+                return Some(Statement::VariableDeclarationAndInitialization(
+                    BoundVariableDeclarationAndInitialization {
+                        identifier,
+                        data_type,
+                        expression,
+                    },
+                ));
+            } else if self.matches_token_kind(lexer, TokenKind::Semicolon) {
+                lexer.consume_token();
+                return Some(Statement::VariableDeclaration(BoundVariableDeclaration {
+                    identifier,
+                    data_type,
+                }));
+            } else {
                 panic!("Expected \";\"")
             }
-            lexer.consume_token();
-
-            return Statement::VariableDeclaration(BoundVariableDeclaration {
-                identifier: identifier,
-                _type: data_type,
-                expression,
-            });
         }
 
-        panic!("Not a statement")
+        None
     }
 
     fn data_type(&self, lexer: &mut Lexer) -> DataType {
