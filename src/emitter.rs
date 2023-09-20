@@ -147,6 +147,7 @@ impl Emitter {
                 self.push("eax", writer)
             }
             Expression::FunctionCall { .. } => panic!("Not implemeneted"),
+            Expression::AssignmentExpression { .. } => panic!("Not implemeneted"),
         }
     }
 

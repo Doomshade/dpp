@@ -24,7 +24,6 @@
         \ebnfnode{\ttt{statement}}
         {%
             \ttt{var-decl}\\
-            &\ttt{ | var-assign }\\
             &\ttt{ | var-decl-and-assign }\\
             &\ttt{ | "if" "(" expression ")" block ("else" block)?}\\
             &\ttt{ | block }\\
@@ -34,7 +33,6 @@
         \ebnfnodett{var-decl}{var-decl-common ";"}
         \ebnfnodett{var-decl-and-assign}{var-decl-common "=" expression ";"}
         \ebnfnodett{var-decl-common}{"let" IDENTIFIER ":" data-type)}
-        \ebnfnodett{var-assign}{IDENTIFIER "=" expression ";"}
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\
@@ -55,7 +53,7 @@
         \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
         \ebnfnode{\ttt{primary}}
         {%
-            \ttt{IDENTIFIER ("(" IDENTIFIER ("," IDENTIFIER)* ")")? | NUMBER | STRING}\\
+            \ttt{IDENTIFIER ("(" IDENTIFIER ("," IDENTIFIER)* ")" | "=" expression)? | NUMBER | STRING}\\
             &\ttt{ | "yem" | "nom" | "(" expression ")"}
         }
     \end{align*}

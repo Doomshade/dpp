@@ -30,7 +30,7 @@ pub enum Statement {
     BlockStatement {
         block: Box<Block>,
     },
-    Expression {
+    ExpressionStatement {
         expression: Expression,
     },
 }
@@ -89,6 +89,9 @@ pub enum Expression {
     },
     FunctionCall {
         arguments: Vec<Expression>,
+    },
+    AssignmentExpression {
+        expression: Box<Expression>,
     },
 }
 
@@ -197,37 +200,6 @@ impl Parser {
                 })
             },
         )
-    }
-
-    fn variable_assignment(lexer: &mut Lexer) -> Option<Statement> {
-        if !Self::matches_token_kind(lexer, TokenKind::Identifier) {
-            return None;
-        }
-        if !Self::matches_token_kind_ahead(lexer, TokenKind::Equal, 1) {
-            return None;
-        }
-        let identifier = lexer.token_value().unwrap();
-        lexer.consume_token();
-
-        lexer.consume_token();
-        let statement = Self::expression(lexer).map_or_else(
-            || {
-                panic!("Expression expected");
-            },
-            |expression| {
-                assert!(
-                    Self::matches_token_kind(lexer, TokenKind::Semicolon),
-                    "Expected \";\""
-                );
-                lexer.consume_token();
-
-                Statement::VariableAssignment {
-                    identifier,
-                    expression,
-                }
-            },
-        );
-        Some(statement)
     }
 
     fn variable_declaration(
@@ -417,8 +389,6 @@ impl Parser {
             Self::variable_declaration_and_assignment(lexer, common)
         {
             return Some(variable_decl_and_assign);
-        } else if let Some(variable_assignment) = Self::variable_assignment(lexer) {
-            return Some(variable_assignment);
         } else if Self::matches_token_kind(lexer, TokenKind::IfKeyword) {
             lexer.consume_token();
             assert!(
@@ -461,7 +431,7 @@ impl Parser {
                 "Expected \";\""
             );
             lexer.consume_token();
-            return Some(Statement::Expression { expression });
+            return Some(Statement::ExpressionStatement { expression });
         }
 
         None
@@ -622,6 +592,14 @@ impl Parser {
                 );
                 lexer.consume_token();
                 return Some(Expression::FunctionCall { arguments });
+            } else if Self::matches_token_kind(lexer, TokenKind::Equal) {
+                lexer.consume_token();
+                if let Some(expression) = Self::expression(lexer) {
+                    return Some(Expression::AssignmentExpression {
+                        expression: Box::new(expression),
+                    });
+                }
+                panic!("Expected expression");
             }
             let expression = Expression::IdentifierExpression { identifier };
             return Some(expression);

@@ -16,6 +16,7 @@ FUNc test(aa: pp, bb: pp): pp {
     if (123) {
         let test: pp = yem;
     }
+    bye test = 3;
 }
 
 FUNc hellyea(aa: pp, bb: pp): pp {
