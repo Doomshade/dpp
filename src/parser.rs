@@ -11,10 +11,6 @@ pub enum Statement {
         identifier: String,
         data_type: DataType,
     },
-    VariableAssignment {
-        identifier: String,
-        expression: Expression,
-    },
     VariableDeclarationAndAssignment {
         identifier: String,
         data_type: DataType,
@@ -23,6 +19,11 @@ pub enum Statement {
     IfStatement {
         expression: Expression,
         block: Box<Block>,
+    },
+    IfElseStatement {
+        expression: Expression,
+        block: Box<Block>,
+        else_block: Box<Block>,
     },
     ReturnStatement {
         expression: Expression,
@@ -151,17 +152,10 @@ impl Parser {
         let mut functions = Vec::<Function>::new();
         let mut variables = Vec::<Statement>::new();
         loop {
-            let variable_decl_common = Self::variable_declaration_common(lexer);
             if let Some(function) = Self::function(lexer) {
                 functions.push(function);
-            } else if let Some(variable_declaration) =
-                Self::variable_declaration(lexer, variable_decl_common.clone())
-            {
+            } else if let Some(variable_declaration) = Self::variable_declaration(lexer) {
                 variables.push(variable_declaration);
-            } else if let Some(variable_declaration_and_assignment) =
-                Self::variable_declaration_and_assignment(lexer, variable_decl_common)
-            {
-                variables.push(variable_declaration_and_assignment);
             } else {
                 break;
             }
@@ -202,25 +196,54 @@ impl Parser {
         )
     }
 
-    fn variable_declaration(
-        lexer: &mut Lexer,
-        var_decl_common: Option<Variable>,
-    ) -> Option<Statement> {
-        var_decl_common.as_ref()?;
-
-        if !Self::matches_token_kind(lexer, TokenKind::Semicolon) {
+    fn variable_declaration(lexer: &mut Lexer) -> Option<Statement> {
+        if !Self::matches_token_kind(lexer, TokenKind::LetKeyword) {
             return None;
         }
         lexer.consume_token();
 
-        let Variable {
-            identifier,
-            data_type,
-        } = var_decl_common.unwrap();
-        Some(Statement::VariableDeclaration {
-            identifier,
-            data_type,
-        })
+        assert!(
+            Self::matches_token_kind(lexer, TokenKind::Identifier),
+            "Expected identifier"
+        );
+        let identifier = lexer.token_value().unwrap();
+        lexer.consume_token();
+
+        assert!(
+            Self::matches_token_kind(lexer, TokenKind::Colon),
+            "Expected \":\""
+        );
+        lexer.consume_token();
+
+        if let Some(data_type) = Self::data_type(lexer) {
+            let statement: Statement;
+            if Self::matches_token_kind(lexer, TokenKind::Equal) {
+                lexer.consume_token();
+                if let Some(expression) = Self::expression(lexer) {
+                    statement = Statement::VariableDeclarationAndAssignment {
+                        identifier,
+                        data_type,
+                        expression,
+                    };
+                } else {
+                    panic!("Expected expression");
+                }
+            } else {
+                statement = Statement::VariableDeclaration {
+                    identifier,
+                    data_type,
+                }
+            }
+            assert!(
+                Self::matches_token_kind(lexer, TokenKind::Semicolon),
+                "Expected \";\""
+            );
+            lexer.consume_token();
+
+            return Some(statement);
+        } else {
+            panic!("Expected data type")
+        }
     }
 
     fn variable_declaration_and_assignment(
@@ -382,13 +405,8 @@ impl Parser {
     }
 
     fn statement(lexer: &mut Lexer) -> Option<Statement> {
-        let common = Self::variable_declaration_common(lexer);
-        if let Some(variable_declaration) = Self::variable_declaration(lexer, common.clone()) {
+        if let Some(variable_declaration) = Self::variable_declaration(lexer) {
             return Some(variable_declaration);
-        } else if let Some(variable_decl_and_assign) =
-            Self::variable_declaration_and_assignment(lexer, common)
-        {
-            return Some(variable_decl_and_assign);
         } else if Self::matches_token_kind(lexer, TokenKind::IfKeyword) {
             lexer.consume_token();
             assert!(
@@ -403,6 +421,16 @@ impl Parser {
                 );
                 lexer.consume_token();
                 if let Some(block) = Self::block(lexer) {
+                    if Self::matches_token_kind(lexer, TokenKind::ElseKeyword) {
+                        lexer.consume_token();
+                        if let Some(else_block) = Self::block(lexer) {
+                            return Some(Statement::IfElseStatement {
+                                expression,
+                                block: Box::new(block),
+                                else_block: Box::new(else_block),
+                            });
+                        }
+                    }
                     return Some(Statement::IfStatement {
                         expression,
                         block: Box::new(block),
@@ -650,5 +678,17 @@ impl Parser {
             return token.kind == token_kind;
         }
         false
+    }
+
+    fn match_token(lexer: &mut Lexer, token_kind: TokenKind) -> Option<String> {
+        if let Some(token) = lexer.token() {
+            if token.kind == token_kind {
+                let token_value = token.value();
+                lexer.consume_token();
+                return token_value;
+            }
+        }
+
+        None
     }
 }

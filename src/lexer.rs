@@ -76,6 +76,15 @@ pub struct Token {
     pub value: Option<String>,
 }
 
+impl Token {
+    pub fn value(&self) -> Option<String> {
+        if let Some(val) = &self.value {
+            return Some(String::from(val));
+        }
+        None
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenKind {
     Identifier,

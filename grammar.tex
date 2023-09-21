@@ -13,10 +13,9 @@
 
 \begin{document}
     \begin{align*}
-        \ebnfnodett{translation-unit}{(function | var-decl | var-decl-and-assign)*}
+        \ebnfnodett{translation-unit}{( function | var-decl )*}
 %        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}
 %        \ebnfnodett{struct-field}{var-decl ";"}
-        \ebnfnodett{functions}{function*}
         \ebnfnodett{function}{"FUNc" IDENTIFIER "(" parameters? ")" ":" data-type block}
         \ebnfnodett{parameters}{parameter ("," parameter)*}
         \ebnfnodett{parameter}{IDENTIFIER ":" data-type}
@@ -24,15 +23,12 @@
         \ebnfnode{\ttt{statement}}
         {%
             \ttt{var-decl}\\
-            &\ttt{ | var-decl-and-assign }\\
             &\ttt{ | "if" "(" expression ")" block ("else" block)?}\\
             &\ttt{ | block }\\
             &\ttt{ | "bye" expression ";" }\\
             &\ttt{ | expression ";" }
         }
-        \ebnfnodett{var-decl}{var-decl-common ";"}
-        \ebnfnodett{var-decl-and-assign}{var-decl-common "=" expression ";"}
-        \ebnfnodett{var-decl-common}{"let" IDENTIFIER ":" data-type)}
+        \ebnfnodett{var-decl}{"let" IDENTIFIER ":" data-type ( "=" expression )? ";"}
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\
@@ -53,7 +49,8 @@
         \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
         \ebnfnode{\ttt{primary}}
         {%
-            \ttt{IDENTIFIER ("(" IDENTIFIER ("," IDENTIFIER)* ")" | "=" expression)? | NUMBER | STRING}\\
+            \ttt{IDENTIFIER ( "(" IDENTIFIER ( "," IDENTIFIER )* ")"}\\
+            &\ttt{ | "=" expression )? | NUMBER | STRING}\\
             &\ttt{ | "yem" | "nom" | "(" expression ")"}
         }
     \end{align*}
