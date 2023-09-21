@@ -91,8 +91,12 @@ impl Emitter {
     }
 
     fn statement(&mut self, statement: Statement, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        if let Statement::IfStatement { expression, block } = statement {
-            self.if_statement(expression, *block, writer)?;
+        if let Statement::IfStatement {
+            expression,
+            statement,
+        } = statement
+        {
+            self.if_statement(expression, *statement, writer)?;
         };
         Ok(())
     }
@@ -100,7 +104,7 @@ impl Emitter {
     fn if_statement(
         &mut self,
         expression: Expression,
-        block: Block,
+        statement: Statement,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         self.expression(expression, writer)?;
@@ -108,7 +112,7 @@ impl Emitter {
         let label = self.label();
         writer.write_all(b"    test eax, eax\n")?;
         writer.write_all(format!("    jz {label}\n").as_bytes())?;
-        self.block(block, writer)?;
+        // self.block(block, writer)?;
         writer.write_all(format!("{label}:\n").as_bytes())?;
 
         Ok(())

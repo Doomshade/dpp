@@ -13,7 +13,7 @@
 
 \begin{document}
     \begin{align*}
-        \ebnfnodett{translation-unit}{( function | var-decl )*}
+        \ebnfnodett{transl-unit}{( function | var-decl )*}
 %        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}
 %        \ebnfnodett{struct-field}{var-decl ";"}
         \ebnfnodett{function}{"FUNc" IDENTIFIER "(" parameters? ")" ":" data-type block}
@@ -23,12 +23,11 @@
         \ebnfnode{\ttt{statement}}
         {%
             \ttt{var-decl}\\
-            &\ttt{ | if-expression ("else" statement )?}\\
+            &\ttt{ | "if" "(" expression ")" statement ( "else" statement )?}\\
             &\ttt{ | block }\\
             &\ttt{ | "bye" expression ";" }\\
             &\ttt{ | expression ";" }
         }
-        \ebnfnodett{if-expression}{"if" "(" expression ")" block}
         \ebnfnodett{var-decl}{"let" IDENTIFIER ":" data-type ( "=" expression )? ";"}
         \ebnfnode{\ttt{data-type}}
         {%

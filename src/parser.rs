@@ -18,11 +18,11 @@ pub enum Statement {
     },
     IfStatement {
         expression: Expression,
-        block: Box<Block>,
+        statement: Box<Statement>,
     },
     IfElseStatement {
         expression: Expression,
-        block: Box<Block>,
+        statement: Box<Statement>,
         else_statement: Box<Statement>,
     },
     ReturnStatement {
@@ -251,35 +251,34 @@ impl Parser {
             let expression = Self::match_something(lexer, Self::expression, "Expected expression");
             Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
 
-            let block = Self::match_something(lexer, Self::block, "Expected block");
+            let statement = Self::match_something(lexer, Self::statement, "Expected statement");
             return if Self::match_token_maybe(lexer, TokenKind::ElseKeyword).is_some() {
-                let else_statement = Self::match_something(lexer, Self::statement, "Expected statement");
+                let else_statement =
+                    Self::match_something(lexer, Self::statement, "Expected statement");
                 Some(Statement::IfElseStatement {
                     expression,
-                    block: Box::new(block),
+                    statement: Box::new(statement),
                     else_statement: Box::new(else_statement),
                 })
             } else {
                 Some(Statement::IfStatement {
                     expression,
-                    block: Box::new(block),
+                    statement: Box::new(statement),
                 })
             };
         } else if let Some(block) = Self::block(lexer) {
-            return Some(Statement::BlockStatement { block: Box::new(block) });
+            return Some(Statement::BlockStatement {
+                block: Box::new(block),
+            });
         } else if Self::match_token_maybe(lexer, TokenKind::ByeKeyword).is_some() {
             let expression = Self::match_something(lexer, Self::expression, "Expected expression");
             Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
 
-            return Some(Statement::ReturnStatement {
-                expression
-            });
+            return Some(Statement::ReturnStatement { expression });
         } else if let Some(expression) = Self::expression(lexer) {
             Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
 
-            return Some(Statement::ExpressionStatement {
-                expression
-            });
+            return Some(Statement::ExpressionStatement { expression });
         }
 
         None
@@ -434,14 +433,13 @@ impl Parser {
 
                 Some(Expression::FunctionCall { arguments })
             } else if Self::match_token_maybe(lexer, TokenKind::Equal).is_some() {
-                let expression = Self::match_something(lexer, Self::expression, "Expected expression");
+                let expression =
+                    Self::match_something(lexer, Self::expression, "Expected expression");
                 Some(Expression::AssignmentExpression {
                     expression: Box::new(expression),
                 })
             } else {
-                Some(Expression::IdentifierExpression {
-                    identifier
-                })
+                Some(Expression::IdentifierExpression { identifier })
             };
         } else if Self::match_token_maybe(lexer, TokenKind::NomKeyword).is_some() {
             return Some(Expression::BoobaExpression(false));
@@ -506,7 +504,11 @@ impl Parser {
         panic!("{}", error_message)
     }
 
-    fn match_something<T>(lexer: &mut Lexer, grammar_func: fn(&mut Lexer) -> Option<T>, error_message: &str) -> T {
+    fn match_something<T>(
+        lexer: &mut Lexer,
+        grammar_func: fn(&mut Lexer) -> Option<T>,
+        error_message: &str,
+    ) -> T {
         if let Some(ret_from_something) = grammar_func(lexer) {
             return ret_from_something;
         }
