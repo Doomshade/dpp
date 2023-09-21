@@ -77,7 +77,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn value(&self) -> Option<String> {
+    #[must_use] pub fn value(&self) -> Option<String> {
         if let Some(val) = &self.value {
             return Some(String::from(val));
         }

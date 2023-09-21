@@ -240,7 +240,7 @@ impl Parser {
             );
             lexer.consume_token();
 
-            return Some(statement);
+            Some(statement)
         } else {
             panic!("Expected data type")
         }
