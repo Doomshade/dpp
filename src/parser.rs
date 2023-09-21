@@ -427,53 +427,34 @@ impl Parser {
     }
 
     fn primary(lexer: &mut Lexer) -> Option<Expression> {
-        if Self::matches_token_kind(lexer, TokenKind::Identifier) {
-            let identifier = lexer.token_value().unwrap();
-            lexer.consume_token();
-            if Self::matches_token_kind(lexer, TokenKind::OpenParen) {
-                lexer.consume_token();
+        if let Some(identifier) = Self::match_token_maybe(lexer, TokenKind::Identifier) {
+            return if Self::match_token_maybe(lexer, TokenKind::OpenParen).is_some() {
                 let arguments = Self::arguments(lexer);
-                assert!(
-                    Self::matches_token_kind(lexer, TokenKind::CloseParen),
-                    "Expected \")\""
-                );
-                lexer.consume_token();
-                return Some(Expression::FunctionCall { arguments });
-            } else if Self::matches_token_kind(lexer, TokenKind::Equal) {
-                lexer.consume_token();
-                if let Some(expression) = Self::expression(lexer) {
-                    return Some(Expression::AssignmentExpression {
-                        expression: Box::new(expression),
-                    });
-                }
-                panic!("Expected expression");
-            }
-            let expression = Expression::IdentifierExpression { identifier };
-            return Some(expression);
-        } else if Self::matches_token_kind(lexer, TokenKind::NomKeyword) {
-            lexer.consume_token();
+                Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
+
+                Some(Expression::FunctionCall { arguments })
+            } else if Self::match_token_maybe(lexer, TokenKind::Equal).is_some() {
+                let expression = Self::match_something(lexer, Self::expression, "Expected expression");
+                Some(Expression::AssignmentExpression {
+                    expression: Box::new(expression),
+                })
+            } else {
+                Some(Expression::IdentifierExpression {
+                    identifier
+                })
+            };
+        } else if Self::match_token_maybe(lexer, TokenKind::NomKeyword).is_some() {
             return Some(Expression::BoobaExpression(false));
-        } else if Self::matches_token_kind(lexer, TokenKind::YemKeyword) {
-            lexer.consume_token();
+        } else if Self::match_token_maybe(lexer, TokenKind::YemKeyword).is_some() {
             return Some(Expression::BoobaExpression(true));
-        } else if Self::matches_token_kind(lexer, TokenKind::Number) {
-            let expression =
-                Expression::PpExpression(lexer.token_value().unwrap().parse::<i32>().unwrap());
-            lexer.consume_token();
+        } else if let Some(number) = Self::match_token_maybe(lexer, TokenKind::Number) {
+            return Some(Expression::PpExpression(number.parse::<i32>().unwrap()));
+        } else if let Some(fiber) = Self::match_token_maybe(lexer, TokenKind::Fiber) {
+            return Some(Expression::FiberExpression(fiber));
+        } else if Self::match_token_maybe(lexer, TokenKind::OpenParen).is_some() {
+            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
+            Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
             return Some(expression);
-        } else if Self::matches_token_kind(lexer, TokenKind::String) {
-            let expression = Expression::FiberExpression(lexer.token_value().unwrap());
-            lexer.consume_token();
-            return Some(expression);
-        } else if Self::matches_token_kind(lexer, TokenKind::OpenParen) {
-            lexer.consume_token();
-            let expression = Self::expression(lexer);
-            assert!(
-                Self::matches_token_kind(lexer, TokenKind::CloseParen),
-                "Expected \")\""
-            );
-            lexer.consume_token();
-            return expression;
         }
 
         None

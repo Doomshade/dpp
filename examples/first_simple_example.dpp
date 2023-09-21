@@ -5,6 +5,7 @@ FUNc test(aa: pp, bb: pp): pp {
     let test: pp = (1 + 2) * 3 + 4 * 5;
     let test: pp = a >= a;
     let testasd: pp;
+    let aa: pp = (a + (a(abc))) + c;
     abcd(123 > 2, test(yem) < 1);
     {
         {

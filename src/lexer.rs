@@ -89,7 +89,7 @@ impl Token {
 pub enum TokenKind {
     Identifier,
     Number,
-    String,
+    Fiber,
     Character,
     BangEqual,
     Comment,
@@ -401,7 +401,7 @@ impl Lexer {
         self.consume();
 
         Ok(Token {
-            kind: TokenKind::String,
+            kind: TokenKind::Fiber,
             value: Some(buf),
         })
     }
