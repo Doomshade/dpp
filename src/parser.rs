@@ -233,26 +233,14 @@ impl Parser {
     }
 
     fn block(lexer: &mut Lexer) -> Option<Block> {
-        if Self::matches_token_kind(lexer, TokenKind::OpenBrace) {
-            lexer.consume_token();
-            let mut statements = Vec::<Statement>::new();
-            if let Some(statement) = Self::statement(lexer) {
-                statements.push(statement);
-
-                while let Some(statement) = Self::statement(lexer) {
-                    statements.push(statement);
-                }
-            }
-            assert!(
-                Self::matches_token_kind(lexer, TokenKind::CloseBrace),
-                "Expected \"}}\""
-            );
-            lexer.consume_token();
-
-            return Some(Block { statements });
+        Self::match_token_maybe(lexer, TokenKind::OpenBrace)?;
+        let mut statements = Vec::<Statement>::new();
+        while let Some(statement) = Self::statement(lexer) {
+            statements.push(statement);
         }
+        Self::match_token(lexer, TokenKind::CloseBrace, "Expected \"}}\"");
 
-        None
+        Some(Block { statements })
     }
 
     fn statement(lexer: &mut Lexer) -> Option<Statement> {
