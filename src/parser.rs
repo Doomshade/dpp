@@ -246,59 +246,38 @@ impl Parser {
     fn statement(lexer: &mut Lexer) -> Option<Statement> {
         if let Some(variable_declaration) = Self::variable_declaration(lexer) {
             return Some(variable_declaration);
-        } else if Self::matches_token_kind(lexer, TokenKind::IfKeyword) {
-            lexer.consume_token();
-            assert!(
-                Self::matches_token_kind(lexer, TokenKind::OpenParen),
-                "Expected \"(\""
-            );
-            lexer.consume_token();
-            if let Some(expression) = Self::expression(lexer) {
-                assert!(
-                    Self::matches_token_kind(lexer, TokenKind::CloseParen),
-                    "Expected \")\""
-                );
-                lexer.consume_token();
-                if let Some(block) = Self::block(lexer) {
-                    if Self::matches_token_kind(lexer, TokenKind::ElseKeyword) {
-                        lexer.consume_token();
-                        if let Some(else_block) = Self::block(lexer) {
-                            return Some(Statement::IfElseStatement {
-                                expression,
-                                block: Box::new(block),
-                                else_block: Box::new(else_block),
-                            });
-                        }
-                    }
-                    return Some(Statement::IfStatement {
-                        expression,
-                        block: Box::new(block),
-                    });
-                }
-            }
-        } else if let Some(block) = Self::block(lexer) {
-            return Some(Statement::BlockStatement {
-                block: Box::new(block),
-            });
-        } else if Self::matches_token_kind(lexer, TokenKind::ByeKeyword) {
-            lexer.consume_token();
-            if let Some(expression) = Self::expression(lexer) {
-                assert!(
-                    Self::matches_token_kind(lexer, TokenKind::Semicolon),
-                    "Expected \";\""
-                );
-                lexer.consume_token();
-                return Some(Statement::ReturnStatement { expression });
+        } else if Self::match_token_maybe(lexer, TokenKind::IfKeyword).is_some() {
+            Self::match_token(lexer, TokenKind::OpenParen, "Expected \"(\"");
+
+            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
+            Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
+            let block = Self::match_something(lexer, Self::block, "Expected block");
+            if Self::match_token_maybe(lexer, TokenKind::ElseKeyword).is_some() {
+                let else_block = Self::match_something(lexer, Self::block, "Expected block");
+                return Some(Statement::IfElseStatement {
+                    expression,
+                    block: Box::new(block),
+                    else_block: Box::new(else_block),
+                });
             }
 
-            panic!("Expected expression");
+            return Some(Statement::IfStatement {
+                expression,
+                block: Box::new(block),
+            });
+        } else if let Some(block) = Self::block(lexer) {
+            return Some(Statement::BlockStatement { block: Box::new(block) });
+        } else if Self::match_token_maybe(lexer, TokenKind::ByeKeyword).is_some() {
+            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
+            Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+            return Some(Statement::ReturnStatement {
+                expression
+            });
         } else if let Some(expression) = Self::expression(lexer) {
-            assert!(
-                Self::matches_token_kind(lexer, TokenKind::Semicolon),
-                "Expected \";\""
-            );
-            lexer.consume_token();
-            return Some(Statement::ExpressionStatement { expression });
+            Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+            return Some(Statement::ExpressionStatement {
+                expression
+            });
         }
 
         None
