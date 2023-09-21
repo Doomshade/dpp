@@ -248,9 +248,9 @@ impl Parser {
             return Some(variable_declaration);
         } else if Self::match_token_maybe(lexer, TokenKind::IfKeyword).is_some() {
             Self::match_token(lexer, TokenKind::OpenParen, "Expected \"(\"");
-
             let expression = Self::match_something(lexer, Self::expression, "Expected expression");
             Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
+
             let block = Self::match_something(lexer, Self::block, "Expected block");
             if Self::match_token_maybe(lexer, TokenKind::ElseKeyword).is_some() {
                 let else_block = Self::match_something(lexer, Self::block, "Expected block");
@@ -270,11 +270,13 @@ impl Parser {
         } else if Self::match_token_maybe(lexer, TokenKind::ByeKeyword).is_some() {
             let expression = Self::match_something(lexer, Self::expression, "Expected expression");
             Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+
             return Some(Statement::ReturnStatement {
                 expression
             });
         } else if let Some(expression) = Self::expression(lexer) {
             Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+
             return Some(Statement::ExpressionStatement {
                 expression
             });
@@ -293,7 +295,7 @@ impl Parser {
                 _ => Self::struct_(lexer),
             };
         }
-        panic!("No token")
+        None
     }
 
     fn struct_(_lexer: &mut Lexer) -> Option<DataType> {
@@ -344,13 +346,12 @@ impl Parser {
                     TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
                     _ => unreachable!(),
                 });
-                if let Some(rhs) = Self::term(lexer) {
-                    expression = Some(Expression::BinaryExpression {
-                        lhs: Box::new(expression.unwrap()),
-                        op,
-                        rhs: Box::new(rhs),
-                    });
-                }
+                let rhs = Self::match_something(lexer, Self::term, "Expected expression");
+                expression = Some(Expression::BinaryExpression {
+                    lhs: Box::new(expression.unwrap()),
+                    op,
+                    rhs: Box::new(rhs),
+                });
             }
         }
         expression
