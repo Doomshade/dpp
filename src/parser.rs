@@ -194,9 +194,6 @@ impl Parser {
     fn function(lexer: &mut Lexer) -> Option<Function> {
         Self::match_token_maybe(lexer, TokenKind::FUNcKeyword)?;
 
-        // I don't know how to style this better besides the bunch
-        // of "if-else" stmts :(
-        // Maybe create a function that panics?
         let identifier = Self::match_token(lexer, TokenKind::Identifier, "Expected identifier");
         Self::match_token(lexer, TokenKind::OpenParen, "Expected \"(\"");
         let parameters = Self::parameters(lexer);
@@ -213,27 +210,6 @@ impl Parser {
         })
     }
 
-    fn identifiers(lexer: &mut Lexer) -> Vec<String> {
-        let mut identifiers = Vec::<String>::new();
-        while let Some(identifier) = Self::identifier(lexer) {
-            identifiers.push(identifier);
-            if !Self::matches_token_kind(lexer, TokenKind::Comma) {
-                break;
-            }
-            lexer.consume_token();
-        }
-        identifiers
-    }
-
-    fn identifier(lexer: &mut Lexer) -> Option<String> {
-        if Self::matches_token_kind(lexer, TokenKind::Identifier) {
-            let option = lexer.token_value();
-            lexer.consume_token();
-            return option;
-        }
-        None
-    }
-
     fn parameters(lexer: &mut Lexer) -> Vec<Parameter> {
         let mut parameters = Vec::<Parameter>::new();
         while let Some(parameter) = Self::parameter(lexer) {
@@ -247,29 +223,13 @@ impl Parser {
     }
 
     fn parameter(lexer: &mut Lexer) -> Option<Parameter> {
-        if !Self::matches_token_kind(lexer, TokenKind::Identifier) {
-            return None;
-        }
-        let identifier = lexer.token_value().unwrap();
-        lexer.consume_token();
-
-        assert!(
-            Self::matches_token_kind(lexer, TokenKind::Colon),
-            "Expected \":\""
-        );
-        lexer.consume_token();
-
-        Self::data_type(lexer).map_or_else(
-            || {
-                panic!("Expected data type");
-            },
-            |data_type| {
-                Some(Parameter {
-                    identifier,
-                    data_type,
-                })
-            },
-        )
+        let identifier = Self::match_token_maybe(lexer, TokenKind::Identifier)?;
+        Self::match_token(lexer, TokenKind::Colon, "Expected \":\"");
+        let data_type = Self::match_something(lexer, Self::data_type, "Expected data type");
+        Some(Parameter {
+            identifier,
+            data_type,
+        })
     }
 
     fn block(lexer: &mut Lexer) -> Option<Block> {
