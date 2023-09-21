@@ -49,6 +49,7 @@ pub struct Function {
     pub parameters: Vec<Parameter>,
     pub block: Block,
 }
+
 #[derive(Debug)]
 pub struct Parameters {
     pub parameters: Vec<Parameter>,
@@ -166,77 +167,32 @@ impl Parser {
         }
     }
 
-    fn variable_declaration_common(lexer: &mut Lexer) -> Option<Variable> {
-        if Self::match_token_maybe(lexer, TokenKind::LetKeyword).is_none() {
-            return None;
-        }
-
-        if let Some(identifier) = Self::match_token_maybe(lexer, TokenKind::Identifier) {
-            if Self::match_token_maybe(lexer, TokenKind::Colon).is_some() {
-                return Self::data_type(lexer).map_or_else(
-                    || panic!("Expected data type"),
-                    |data_type| {
-                        Some(Variable {
-                            identifier,
-                            data_type,
-                        })
-                    },
-                );
-            } else {
-                panic!("Expected colon")
-            }
-        } else {
-            panic!("Expected identifier")
-        }
-    }
-
     fn variable_declaration(lexer: &mut Lexer) -> Option<Statement> {
-        if Self::match_token_maybe(lexer, TokenKind::LetKeyword).is_none() {
-            return None;
-        }
+        Self::match_token_maybe(lexer, TokenKind::LetKeyword)?;
 
-        if let Some(identifier) = Self::match_token_maybe(lexer, TokenKind::Identifier) {
-            if let Some(_) = Self::match_token_maybe(lexer, TokenKind::Colon) {
-                if let Some(data_type) = Self::data_type(lexer) {
-                    let statement: Statement;
-                    if Self::matches_token_kind(lexer, TokenKind::Equal) {
-                        lexer.consume_token();
-                        if let Some(expression) = Self::expression(lexer) {
-                            statement = Statement::VariableDeclarationAndAssignment {
-                                identifier,
-                                data_type,
-                                expression,
-                            };
-                        } else {
-                            panic!("Expected expression");
-                        }
-                    } else {
-                        statement = Statement::VariableDeclaration {
-                            identifier,
-                            data_type,
-                        }
-                    }
-
-                    if let Some(_) = Self::match_token_maybe(lexer, TokenKind::Semicolon) {
-                        return Some(statement);
-                    } else {
-                        panic!("Expected \";\"")
-                    }
-                } else {
-                    panic!("Expected data type")
-                }
-            } else {
-                panic!("Expected \":\"")
+        let identifier = Self::match_token(lexer, TokenKind::Identifier, "Expected identifier");
+        Self::match_token(lexer, TokenKind::Colon, "Expected \":\"");
+        let data_type = Self::data_type(lexer)?;
+        let statement = if Self::match_token_maybe(lexer, TokenKind::Equal).is_some() {
+            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
+            Statement::VariableDeclarationAndAssignment {
+                identifier,
+                data_type,
+                expression,
             }
         } else {
-            panic!("Expected identifier")
-        }
+            Statement::VariableDeclaration {
+                identifier,
+                data_type,
+            }
+        };
+
+        Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+        Some(statement)
     }
 
     fn function(lexer: &mut Lexer) -> Option<Function> {
-        if let None = Self::match_token_maybe(lexer, TokenKind::FUNcKeyword) {
-            return None;
-        }
+        Self::match_token_maybe(lexer, TokenKind::FUNcKeyword)?;
 
         // I don't know how to style this better besides the bunch
         // of "if-else" stmts :(
@@ -653,8 +609,15 @@ impl Parser {
                 if let Some(token_value) = token_value {
                     return token_value;
                 }
-                panic!("{}", error_message)
+                return String::new();
             }
+        }
+        panic!("{}", error_message)
+    }
+
+    fn match_something<T>(lexer: &mut Lexer, grammar_func: fn(&mut Lexer) -> Option<T>, error_message: &str) -> T {
+        if let Some(ret_from_something) = grammar_func(lexer) {
+            return ret_from_something;
         }
         panic!("{}", error_message)
     }
