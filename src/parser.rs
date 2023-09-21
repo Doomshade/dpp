@@ -197,38 +197,20 @@ impl Parser {
         // I don't know how to style this better besides the bunch
         // of "if-else" stmts :(
         // Maybe create a function that panics?
-        if let Some(identifier) = Self::match_token_maybe(lexer, TokenKind::Identifier) {
-            if let Some(_) = Self::match_token_maybe(lexer, TokenKind::OpenParen) {
-                let parameters = Self::parameters(lexer);
+        let identifier = Self::match_token(lexer, TokenKind::Identifier, "Expected identifier");
+        Self::match_token(lexer, TokenKind::OpenParen, "Expected \"(\"");
+        let parameters = Self::parameters(lexer);
+        Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
+        Self::match_token(lexer, TokenKind::Colon, "Expected \":\"");
+        let return_type = Self::match_something(lexer, Self::data_type, "Expected data type");
+        let block = Self::match_something(lexer, Self::block, "Expected block");
 
-                if let Some(_) = Self::match_token_maybe(lexer, TokenKind::CloseParen) {
-                    if let Some(_) = Self::match_token_maybe(lexer, TokenKind::Colon) {
-                        if let Some(return_type) = Self::data_type(lexer) {
-                            if let Some(block) = Self::block(lexer) {
-                                return Some(Function {
-                                    identifier,
-                                    return_type,
-                                    parameters,
-                                    block,
-                                });
-                            } else {
-                                panic!("Expected block")
-                            }
-                        } else {
-                            panic!("Expected data type");
-                        }
-                    } else {
-                        panic!("Expected \":\"")
-                    }
-                } else {
-                    panic!("Expected \")\"")
-                }
-            } else {
-                panic!("Expected \"(\"")
-            }
-        } else {
-            panic!("Expected identifier")
-        }
+        Some(Function {
+            identifier,
+            return_type,
+            parameters,
+            block,
+        })
     }
 
     fn identifiers(lexer: &mut Lexer) -> Vec<String> {
