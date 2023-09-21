@@ -23,11 +23,12 @@
         \ebnfnode{\ttt{statement}}
         {%
             \ttt{var-decl}\\
-            &\ttt{ | "if" "(" expression ")" block ("else" block)?}\\
+            &\ttt{ | if-expression ("else" statement )?}\\
             &\ttt{ | block }\\
             &\ttt{ | "bye" expression ";" }\\
             &\ttt{ | expression ";" }
         }
+        \ebnfnodett{if-expression}{"if" "(" expression ")" block}
         \ebnfnodett{var-decl}{"let" IDENTIFIER ":" data-type ( "=" expression )? ";"}
         \ebnfnode{\ttt{data-type}}
         {%

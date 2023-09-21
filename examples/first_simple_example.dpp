@@ -28,8 +28,13 @@ FUNc hellyea(aa: pp, bb: pp): pp {
     nop = yup + 4 * 2 - 123;
 
     if (123) {
-        let test: pp = 123;
+        let abc: pp = 123;
+    } else if (456) {
+        let def: pp = 1234;
+    } else if (798) {
+        let ghi: pp = 456;
     } else {
-        let test: pp = 1234;
+        let jkl: pp = 789;
     }
+
 }

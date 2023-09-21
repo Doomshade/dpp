@@ -23,7 +23,7 @@ pub enum Statement {
     IfElseStatement {
         expression: Expression,
         block: Box<Block>,
-        else_block: Box<Block>,
+        else_statement: Box<Statement>,
     },
     ReturnStatement {
         expression: Expression,
@@ -252,19 +252,19 @@ impl Parser {
             Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
 
             let block = Self::match_something(lexer, Self::block, "Expected block");
-            if Self::match_token_maybe(lexer, TokenKind::ElseKeyword).is_some() {
-                let else_block = Self::match_something(lexer, Self::block, "Expected block");
-                return Some(Statement::IfElseStatement {
+            return if Self::match_token_maybe(lexer, TokenKind::ElseKeyword).is_some() {
+                let else_statement = Self::match_something(lexer, Self::statement, "Expected statement");
+                Some(Statement::IfElseStatement {
                     expression,
                     block: Box::new(block),
-                    else_block: Box::new(else_block),
-                });
-            }
-
-            return Some(Statement::IfStatement {
-                expression,
-                block: Box::new(block),
-            });
+                    else_statement: Box::new(else_statement),
+                })
+            } else {
+                Some(Statement::IfStatement {
+                    expression,
+                    block: Box::new(block),
+                })
+            };
         } else if let Some(block) = Self::block(lexer) {
             return Some(Statement::BlockStatement { block: Box::new(block) });
         } else if Self::match_token_maybe(lexer, TokenKind::ByeKeyword).is_some() {
