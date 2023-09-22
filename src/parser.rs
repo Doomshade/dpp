@@ -503,7 +503,7 @@ impl Parser {
         args
     }
 
-    fn matches_token_kind(&self, token_kind: TokenKind) -> bool {
+    fn matches_token_kind(&mut self, token_kind: TokenKind) -> bool {
         if let Some(token) = self.token() {
             return token.kind() == token_kind;
         }

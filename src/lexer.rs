@@ -281,12 +281,7 @@ impl Lexer {
 
     fn parse_token(&mut self) -> Token {
         let token = match self.peek() {
-            '\0' => Token {
-                kind: TokenKind::Eof,
-                row: self.row,
-                col: self.col,
-                value: None,
-            },
+            '\0' => self.new_token(TokenKind::Eof),
             'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
             '0'..='9' => self.handle_number(),
             '"' => self.handle_fiber(),
@@ -335,24 +330,14 @@ impl Lexer {
 
         // Consume closing quote.
         self.consume();
-        Token {
-            kind: TokenKind::PType,
-            row: self.row,
-            col: self.col,
-            value: Some(String::from(c)),
-        }
+        self.new_token_with_value(TokenKind::PType, String::from(c))
     }
 
     fn handle_unknown(&mut self) -> Token {
         let c = self.peek();
         self.consume();
 
-        Token {
-            kind: TokenKind::Unknown,
-            row: self.row,
-            col: self.col,
-            value: Some(String::from(c)),
-        }
+        self.new_token_with_value(TokenKind::Unknown, String::from(c))
     }
 
     fn handle_comment(&mut self) -> Token {
@@ -365,12 +350,7 @@ impl Lexer {
             c = self.peek();
         }
 
-        Token {
-            kind: TokenKind::Comment,
-            row: self.row,
-            col: self.col,
-            value: None,
-        }
+        self.new_token(TokenKind::Comment)
     }
 
     fn handle_operator(&mut self) -> Token {
@@ -406,12 +386,7 @@ impl Lexer {
             _ => panic!("Unknown operator: {buf}"),
         };
 
-        Token {
-            kind,
-            row: self.row,
-            col: self.col,
-            value: Some(buf),
-        }
+        self.new_token_with_value(kind, buf)
     }
 
     fn handle_punctuation(&mut self) -> Token {
@@ -431,12 +406,7 @@ impl Lexer {
         };
         self.consume();
 
-        Token {
-            kind,
-            row: self.row,
-            col: self.col,
-            value: Some(String::from(c)),
-        }
+        self.new_token_with_value(kind, String::from(c))
     }
 
     fn handle_whitespace(&mut self) -> Token {
@@ -450,12 +420,7 @@ impl Lexer {
             c = self.peek();
         }
 
-        Token {
-            kind: TokenKind::Whitespace,
-            row: self.row,
-            col: self.col,
-            value: None,
-        }
+        self.new_token(TokenKind::Whitespace)
     }
 
     fn handle_fiber(&mut self) -> Token {
@@ -481,12 +446,7 @@ impl Lexer {
             self.consume();
         }
 
-        let token = Token {
-            kind: TokenKind::FiberType,
-            row: self.row,
-            col: self.col,
-            value: Some(buf),
-        };
+        let token = self.new_token_with_value(TokenKind::FiberType, buf);
         if c != '"' {
             self.error_diag
                 .borrow_mut()
@@ -506,12 +466,7 @@ impl Lexer {
             c = self.peek();
         }
 
-        Token {
-            kind: TokenKind::Number,
-            row: self.row,
-            col: self.col,
-            value: Some(buf),
-        }
+        self.new_token_with_value(TokenKind::Number, buf)
     }
 
     fn handle_identifier(&mut self) -> Token {
@@ -523,7 +478,7 @@ impl Lexer {
             self.consume();
             c = self.peek();
         }
-        let token_kind = match buf.as_str() {
+        let kind = match buf.as_str() {
             "xxlpp" => TokenKind::XxlppType,
             "pp" => TokenKind::PpType,
             "spp" => TokenKind::SppType,
@@ -544,11 +499,6 @@ impl Lexer {
             _ => TokenKind::Identifier,
         };
 
-        Token {
-            kind: token_kind,
-            row: self.row,
-            col: self.col,
-            value: Some(buf),
-        }
+        self.new_token_with_value(kind, buf)
     }
 }
