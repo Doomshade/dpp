@@ -87,7 +87,7 @@ impl Display for Token {
         if let Some(value) = &self.value {
             write!(f, "{} ({})", value, self.kind)
         } else {
-            write!(f, "{}", self.kind)
+            write!(f, "\"{}\"", self.kind)
         }
     }
 }
@@ -175,39 +175,39 @@ impl Display for TokenKind {
             TokenKind::Identifier => "identifier",
             TokenKind::Number => "number",
             TokenKind::FiberType => "fiber",
-            TokenKind::BangEqual => "\"!=\"",
+            TokenKind::BangEqual => "!=",
             TokenKind::Comment => "",
             TokenKind::Whitespace => "",
             TokenKind::Eof => "",
             TokenKind::Unknown => "",
-            TokenKind::EqualEqual => "\"==\"",
-            TokenKind::Equal => "\"=\"",
-            TokenKind::Bang => "\"!\"",
-            TokenKind::Star => "\"*\"",
-            TokenKind::ForwardSlash => "\"/\"",
-            TokenKind::BackSlash => "\"\\\"",
-            TokenKind::Plus => "\"+\"",
-            TokenKind::MinusEqual => "\"-=\"",
-            TokenKind::PlusEqual => "\"+=\"",
-            TokenKind::PlusDash => "\"+-\"",
-            TokenKind::Dash => "\"-\"",
-            TokenKind::Greater => "\">\"",
-            TokenKind::GreaterEqual => "\">=\"",
-            TokenKind::Less => "\"<\"",
-            TokenKind::LessEqual => "\"<=\"",
+            TokenKind::EqualEqual => "==",
+            TokenKind::Equal => "=",
+            TokenKind::Bang => "!",
+            TokenKind::Star => "*",
+            TokenKind::ForwardSlash => "/",
+            TokenKind::BackSlash => "\\",
+            TokenKind::Plus => "+",
+            TokenKind::MinusEqual => "-=",
+            TokenKind::PlusEqual => "+=",
+            TokenKind::PlusDash => "+-",
+            TokenKind::Dash => "-",
+            TokenKind::Greater => ">",
+            TokenKind::GreaterEqual => ">=",
+            TokenKind::Less => "<",
+            TokenKind::LessEqual => "<=",
             TokenKind::NomKeyword => "nom",
             TokenKind::YemKeyword => "yem",
-            TokenKind::OpenParen => "\"(\"",
-            TokenKind::CloseParen => "\")\"",
-            TokenKind::OpenBrace => "\"{\"",
-            TokenKind::CloseBrace => "\"}\"",
-            TokenKind::OpenBracket => "\"[\"",
-            TokenKind::CloseBracket => "\"]\"",
-            TokenKind::Colon => "\":\"",
-            TokenKind::Semicolon => "\";\"",
-            TokenKind::Ampersand => "\"&\"",
-            TokenKind::Pipe => "\"|\"",
-            TokenKind::Comma => "\",\"",
+            TokenKind::OpenParen => "(",
+            TokenKind::CloseParen => ")",
+            TokenKind::OpenBrace => "{",
+            TokenKind::CloseBrace => "}",
+            TokenKind::OpenBracket => "[",
+            TokenKind::CloseBracket => "]",
+            TokenKind::Colon => ":",
+            TokenKind::Semicolon => ";",
+            TokenKind::Ampersand => "&",
+            TokenKind::Pipe => "|",
+            TokenKind::Comma => ",",
             TokenKind::IfKeyword => "if",
             TokenKind::LetKeyword => "let",
             TokenKind::ByeKeyword => "bye",
@@ -275,7 +275,7 @@ impl Lexer {
             kind,
             row: self.row,
             col: self.col,
-            value: Some(String::from("")),
+            value: None,
         }
     }
 
@@ -386,7 +386,7 @@ impl Lexer {
             _ => panic!("Unknown operator: {buf}"),
         };
 
-        self.new_token_with_value(kind, buf)
+        self.new_token(kind)
     }
 
     fn handle_punctuation(&mut self) -> Token {
@@ -406,7 +406,7 @@ impl Lexer {
         };
         self.consume();
 
-        self.new_token_with_value(kind, String::from(c))
+        self.new_token(kind)
     }
 
     fn handle_whitespace(&mut self) -> Token {
@@ -499,6 +499,10 @@ impl Lexer {
             _ => TokenKind::Identifier,
         };
 
-        self.new_token_with_value(kind, buf)
+        if kind == TokenKind::Identifier {
+            self.new_token_with_value(kind, buf)
+        } else {
+            self.new_token(kind)
+        }
     }
 }

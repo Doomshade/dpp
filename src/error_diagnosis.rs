@@ -53,7 +53,7 @@ impl ErrorDiagnosis {
         let message = ErrorMessage {
             row: token.row(),
             col: token.col(),
-            message: format!("Unexpected token: {}", token),
+            message: format!("Unexpected token: {}.", token),
         };
         self.error_messages.push(message);
     }
@@ -75,7 +75,7 @@ impl ErrorDiagnosis {
         let message = ErrorMessage {
             row: token.row(),
             col: token.col(),
-            message: format!("Expected {}.", expected_token_kind),
+            message: format!("Expected \"{}\".", expected_token_kind),
         };
         self.error_messages.push(message);
     }
