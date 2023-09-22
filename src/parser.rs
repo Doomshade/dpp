@@ -10,142 +10,177 @@ pub struct Parser {
     tokens: Rc<Vec<Token>>,
     error_diag: Rc<RefCell<ErrorDiagnosis>>,
     curr_token_index: usize,
+    position: (u32, u32),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum Statement {
     VariableDeclaration {
+        position: (u32, u32),
         identifier: String,
         data_type: DataType,
     },
     VariableDeclarationAndAssignment {
+        position: (u32, u32),
         identifier: String,
         data_type: DataType,
         expression: Expression,
     },
     IfStatement {
+        position: (u32, u32),
         expression: Expression,
         statement: Box<Statement>,
     },
     IfElseStatement {
+        position: (u32, u32),
         expression: Expression,
         statement: Box<Statement>,
         else_statement: Box<Statement>,
     },
     ReturnStatement {
+        position: (u32, u32),
         expression: Expression,
     },
     BlockStatement {
+        position: (u32, u32),
         block: Box<Block>,
     },
     ExpressionStatement {
+        position: (u32, u32),
         expression: Expression,
     },
-    EmptyStatement,
+    EmptyStatement {
+        position: (u32, u32),
+    },
+    #[default]
     InvalidStatement,
 }
 
-impl Default for Statement {
-    fn default() -> Self {
-        Self::InvalidStatement
-    }
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum TranslationUnit {
+    TranslationUnit {
+        functions: Vec<Function>,
+        variables: Vec<Statement>,
+    },
+    #[default]
+    InvalidTranslationUnit,
 }
 
-#[derive(Debug)]
-pub struct TranslationUnit {
-    pub functions: Vec<Function>,
-    pub variables: Vec<Statement>,
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum Function {
+    Function {
+        position: (u32, u32),
+        identifier: String,
+        return_type: DataType,
+        parameters: Vec<Parameter>,
+        block: Block,
+    },
+    #[default]
+    InvalidFunction,
 }
 
-#[derive(Debug)]
-pub struct Function {
-    pub identifier: String,
-    pub return_type: DataType,
-    pub parameters: Vec<Parameter>,
-    pub block: Block,
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum Parameters {
+    Parameters {
+        position: (u32, u32),
+        parameters: Vec<Parameter>,
+    },
+    #[default]
+    InvalidParameters,
 }
 
-#[derive(Debug)]
-pub struct Parameters {
-    pub parameters: Vec<Parameter>,
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum Parameter {
+    Parameter {
+        position: (u32, u32),
+        identifier: String,
+        data_type: DataType,
+    },
+    #[default]
+    InvalidParameter,
 }
 
-#[derive(Debug)]
-pub struct Parameter {
-    pub identifier: String,
-    pub data_type: DataType,
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum Variable {
+    Variable {
+        position: (u32, u32),
+        identifier: String,
+        data_type: DataType,
+    },
+    #[default]
+    InvalidVariable,
 }
 
-#[derive(Debug)]
-pub struct Variable {
-    pub identifier: String,
-    pub data_type: DataType,
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum Block {
+    Block {
+        position: (u32, u32),
+        statements: Vec<Statement>,
+    },
+    #[default]
+    InvalidBlock,
 }
 
-#[derive(Debug, Default)]
-pub struct Block {
-    pub statements: Vec<Statement>,
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Default, Eq)]
 pub enum Expression {
-    PpExpression(i32),
-    BoobaExpression(bool),
-    FiberExpression(String),
+    PpExpression {
+        position: (u32, u32),
+        pp: i32,
+    },
+    BoobaExpression {
+        position: (u32, u32),
+        booba: bool,
+    },
+    FiberExpression {
+        position: (u32, u32),
+        fiber: String,
+    },
     UnaryExpression {
+        position: (u32, u32),
         op: UnaryOperator,
         operand: Box<Expression>,
     },
     BinaryExpression {
+        position: (u32, u32),
         lhs: Box<Expression>,
         op: BinaryOperator,
         rhs: Box<Expression>,
     },
     IdentifierExpression {
+        position: (u32, u32),
         identifier: String,
     },
     FunctionCall {
+        position: (u32, u32),
         identifier: String,
         arguments: Vec<Expression>,
     },
     AssignmentExpression {
+        position: (u32, u32),
         identifier: String,
         expression: Box<Expression>,
     },
-    EmptyExpression,
+    #[default]
+    InvalidExpression,
 }
 
-impl Default for Expression {
-    fn default() -> Self {
-        Self::EmptyExpression
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum DataType {
     Pp,
+    Fiber,
+    Booba,
     Struct(Struct),
-    EmptyDataType,
+    #[default]
+    InvalidDataType,
 }
 
-impl Default for DataType {
-    fn default() -> Self {
-        Self::EmptyDataType
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum Struct {
-    EmptyStruct,
+    #[default]
+    InvalidStruct,
 }
 
-impl Default for Struct {
-    fn default() -> Self {
-        Self::EmptyStruct
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -157,31 +192,22 @@ pub enum BinaryOperator {
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
-    EmptyOperator,
+    #[default]
+    InvalidBinaryOperator,
 }
 
-impl Default for BinaryOperator {
-    fn default() -> Self {
-        Self::EmptyOperator
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub enum UnaryOperator {
     Not,
     Negate,
-    EmptyOperator,
-}
-
-impl Default for UnaryOperator {
-    fn default() -> Self {
-        Self::EmptyOperator
-    }
+    #[default]
+    InvalidUnaryOperator,
 }
 
 impl Parser {
     pub fn new(tokens: Rc<Vec<Token>>, error_diag: Rc<RefCell<ErrorDiagnosis>>) -> Self {
         Self {
+            position: (1, 1),
             tokens,
             curr_token_index: 0,
             error_diag,
@@ -190,6 +216,9 @@ impl Parser {
 
     fn consume_token(&mut self) {
         self.curr_token_index += 1;
+        if let Some(token) = self.token() {
+            self.position = token.position();
+        }
     }
 
     #[must_use]
@@ -207,16 +236,19 @@ impl Parser {
         Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
     }
     pub fn parse(&mut self) -> TranslationUnit {
-        self.translation_unit()
+        match self.translation_unit() {
+            Some(tn) => tn,
+            None => panic!(),
+        }
     }
 
-    fn translation_unit(&mut self) -> TranslationUnit {
+    fn translation_unit(&mut self) -> Option<TranslationUnit> {
         let mut functions = Vec::<Function>::new();
         let mut variables = Vec::<Statement>::new();
         loop {
-            if let Some(function) = self.function() {
+            if let Some(function) = self.is_word(Self::function) {
                 functions.push(function);
-            } else if let Some(variable_declaration) = self.variable_declaration() {
+            } else if let Some(variable_declaration) = self.is_word(Self::variable_declaration) {
                 variables.push(variable_declaration);
             } else if self.curr_token_index == self.tokens.len() {
                 break;
@@ -227,13 +259,14 @@ impl Parser {
                 panic!("Something unexpected happened :( (compiler error)")
             }
         }
-        TranslationUnit {
+        Some(TranslationUnit::TranslationUnit {
             functions,
             variables,
-        }
+        })
     }
 
     fn function(&mut self) -> Option<Function> {
+        let position = self.position;
         self.match_token_maybe(TokenKind::FUNcKeyword)?;
 
         let identifier = self.match_token(TokenKind::Identifier);
@@ -241,10 +274,11 @@ impl Parser {
         let parameters = self.parameters();
         self.match_token(TokenKind::CloseParen);
         self.match_token(TokenKind::Colon);
-        let return_type = self.match_something(Self::data_type, "data type");
-        let block = self.match_something(Self::block, "block");
+        let return_type = self.match_(Self::data_type, "data type");
+        let block = self.match_(Self::block, "block");
 
-        Some(Function {
+        Some(Function::Function {
+            position,
             identifier,
             return_type,
             parameters,
@@ -253,20 +287,23 @@ impl Parser {
     }
 
     fn variable_declaration(&mut self) -> Option<Statement> {
+        let position = self.position;
         self.match_token_maybe(TokenKind::LetKeyword)?;
 
         let identifier = self.match_token(TokenKind::Identifier);
         self.match_token(TokenKind::Colon);
-        let data_type = self.data_type()?;
+        let data_type = self.match_(Self::data_type, "data type");
         let statement = if self.match_token_maybe(TokenKind::Equal).is_some() {
-            let expression = self.match_something(Self::expression, "expression");
+            let expression = self.match_(Self::expression, "expression");
             Statement::VariableDeclarationAndAssignment {
+                position,
                 identifier,
                 data_type,
                 expression,
             }
         } else {
             Statement::VariableDeclaration {
+                position,
                 identifier,
                 data_type,
             }
@@ -304,16 +341,19 @@ impl Parser {
     }
 
     fn parameter(&mut self) -> Option<Parameter> {
+        let position = self.position;
         let identifier = self.match_token_maybe(TokenKind::Identifier)?;
         self.match_token(TokenKind::Colon);
-        let data_type = self.match_something(Self::data_type, "data type");
-        Some(Parameter {
+        let data_type = self.match_(Self::data_type, "data type");
+        Some(Parameter::Parameter {
+            position,
             identifier,
             data_type,
         })
     }
 
     fn block(&mut self) -> Option<Block> {
+        let position = self.position;
         self.match_token_maybe(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement>::new();
         while let Some(statement) = self.statement() {
@@ -321,46 +361,59 @@ impl Parser {
         }
         self.match_token(TokenKind::CloseBrace);
 
-        Some(Block { statements })
+        Some(Block::Block {
+            position,
+            statements,
+        })
     }
 
     fn statement(&mut self) -> Option<Statement> {
+        let position = self.position;
         if let Some(variable_declaration) = self.variable_declaration() {
             return Some(variable_declaration);
         } else if self.match_token_maybe(TokenKind::IfKeyword).is_some() {
             self.match_token(TokenKind::OpenParen);
-            let expression = self.match_something(Self::expression, "expression");
+            let expression = self.match_(Self::expression, "expression");
             self.match_token(TokenKind::CloseParen);
 
-            let statement = self.match_something(Self::statement, "statement");
+            let statement = self.match_(Self::statement, "statement");
             return if self.match_token_maybe(TokenKind::ElseKeyword).is_some() {
-                let else_statement = self.match_something(Self::statement, "statement");
+                let else_statement = self.match_(Self::statement, "statement");
                 Some(Statement::IfElseStatement {
+                    position,
                     expression,
                     statement: Box::new(statement),
                     else_statement: Box::new(else_statement),
                 })
             } else {
                 Some(Statement::IfStatement {
+                    position,
                     expression,
                     statement: Box::new(statement),
                 })
             };
         } else if let Some(block) = self.block() {
             return Some(Statement::BlockStatement {
+                position,
                 block: Box::new(block),
             });
         } else if self.match_token_maybe(TokenKind::ByeKeyword).is_some() {
-            let expression = self.match_something(Self::expression, "expression");
+            let expression = self.match_(Self::expression, "expression");
             self.match_token(TokenKind::Semicolon);
 
-            return Some(Statement::ReturnStatement { expression });
+            return Some(Statement::ReturnStatement {
+                position,
+                expression,
+            });
         } else if let Some(expression) = self.expression() {
             self.match_token(TokenKind::Semicolon);
 
-            return Some(Statement::ExpressionStatement { expression });
+            return Some(Statement::ExpressionStatement {
+                position,
+                expression,
+            });
         } else if self.match_token_maybe(TokenKind::Semicolon).is_some() {
-            return Some(Statement::EmptyStatement);
+            return Some(Statement::EmptyStatement { position });
         }
 
         None
@@ -373,13 +426,22 @@ impl Parser {
                     self.consume_token();
                     Some(DataType::Pp)
                 }
+                TokenKind::FiberType => {
+                    self.consume_token();
+                    Some(DataType::Fiber)
+                }
+                TokenKind::BoobaType => {
+                    self.consume_token();
+                    Some(DataType::Booba)
+                }
+                TokenKind::Identifier => Some(DataType::Struct(Struct::InvalidStruct)),
                 _ => None,
             };
         }
         None
     }
 
-    fn _struct_(&mut self) -> Option<DataType> {
+    fn _struct_(&mut self) -> DataType {
         todo!()
     }
 
@@ -388,6 +450,7 @@ impl Parser {
     }
 
     fn equality(&mut self) -> Option<Expression> {
+        let position = self.position;
         let mut comparison = self.comparison();
 
         while self.matches_token_kind(TokenKind::BangEqual)
@@ -399,19 +462,23 @@ impl Parser {
                 _ => unreachable!(),
             });
 
+            let rhs = self.match_(Self::comparison, "expression");
+            comparison.as_ref()?;
             if let Some(expression) = comparison {
-                let rhs = self.match_something(Self::comparison, "expression");
                 comparison = Some(Expression::BinaryExpression {
+                    position,
                     lhs: Box::new(expression),
                     op,
                     rhs: Box::new(rhs),
                 });
             }
         }
+
         comparison
     }
 
     fn comparison(&mut self) -> Option<Expression> {
+        let position = self.position;
         let mut term = self.term();
 
         while self.matches_token_kind(TokenKind::Greater)
@@ -426,19 +493,23 @@ impl Parser {
                 TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
                 _ => unreachable!(),
             });
+            let rhs = self.match_(Self::term, "expression");
+            term.as_ref()?;
             if let Some(expression) = term {
-                let rhs = self.match_something(Self::term, "expression");
                 term = Some(Expression::BinaryExpression {
+                    position,
                     lhs: Box::new(expression),
                     op,
                     rhs: Box::new(rhs),
                 });
             }
         }
+
         term
     }
 
     fn term(&mut self) -> Option<Expression> {
+        let position = self.position;
         let mut factor = self.factor();
 
         while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
@@ -447,9 +518,12 @@ impl Parser {
                 TokenKind::Plus => BinaryOperator::Add,
                 _ => unreachable!(),
             });
+            let rhs = self.match_(Self::factor, "expression");
+            factor.as_ref()?;
+
             if let Some(expression) = factor {
-                let rhs = self.match_something(Self::factor, "expression");
                 factor = Some(Expression::BinaryExpression {
+                    position,
                     lhs: Box::new(expression),
                     op,
                     rhs: Box::new(rhs),
@@ -461,6 +535,7 @@ impl Parser {
     }
 
     fn factor(&mut self) -> Option<Expression> {
+        let position = self.position;
         let mut unary = self.unary();
 
         while self.matches_token_kind(TokenKind::ForwardSlash)
@@ -471,9 +546,11 @@ impl Parser {
                 TokenKind::Star => BinaryOperator::Multiply,
                 _ => unreachable!(),
             });
+            unary.as_ref()?;
             if let Some(expression) = unary {
-                let rhs = self.match_something(Self::unary, "expression");
+                let rhs = self.match_(Self::unary, "expression");
                 unary = Some(Expression::BinaryExpression {
+                    position,
                     lhs: Box::new(expression),
                     op,
                     rhs: Box::new(rhs),
@@ -484,14 +561,16 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Option<Expression> {
+        let position = self.position;
         if self.matches_token_kind(TokenKind::Bang) || self.matches_token_kind(TokenKind::Dash) {
             let op = self.unop(|kind| match kind {
                 TokenKind::Bang => UnaryOperator::Not,
                 TokenKind::Dash => UnaryOperator::Negate,
                 _ => unreachable!(),
             });
-            let operand = self.match_something(Self::unary, "expression");
+            let operand = self.match_(Self::unary, "expression");
             return Some(Expression::UnaryExpression {
+                position,
                 op,
                 operand: Box::new(operand),
             });
@@ -501,34 +580,49 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Option<Expression> {
+        let position = self.position;
         if let Some(identifier) = self.match_token_maybe(TokenKind::Identifier) {
             return if self.match_token_maybe(TokenKind::OpenParen).is_some() {
                 let arguments = self.arguments();
                 self.match_token(TokenKind::CloseParen);
 
                 Some(Expression::FunctionCall {
+                    position,
                     identifier,
                     arguments,
                 })
             } else if self.match_token_maybe(TokenKind::Equal).is_some() {
-                let expression = self.match_something(Self::expression, "expression");
+                let expression = self.match_(Self::expression, "expression");
                 Some(Expression::AssignmentExpression {
+                    position,
                     identifier,
                     expression: Box::new(expression),
                 })
             } else {
-                Some(Expression::IdentifierExpression { identifier })
+                Some(Expression::IdentifierExpression {
+                    position,
+                    identifier,
+                })
             };
         } else if self.match_token_maybe(TokenKind::NomKeyword).is_some() {
-            return Some(Expression::BoobaExpression(false));
+            return Some(Expression::BoobaExpression {
+                position,
+                booba: false,
+            });
         } else if self.match_token_maybe(TokenKind::YemKeyword).is_some() {
-            return Some(Expression::BoobaExpression(true));
+            return Some(Expression::BoobaExpression {
+                position,
+                booba: true,
+            });
         } else if let Some(number) = self.match_token_maybe(TokenKind::Number) {
-            return Some(Expression::PpExpression(number.parse::<i32>().unwrap()));
+            return Some(Expression::PpExpression {
+                position,
+                pp: number.parse::<i32>().unwrap(),
+            });
         } else if let Some(fiber) = self.match_token_maybe(TokenKind::FiberType) {
-            return Some(Expression::FiberExpression(fiber));
+            return Some(Expression::FiberExpression { position, fiber });
         } else if self.match_token_maybe(TokenKind::OpenParen).is_some() {
-            let expression = self.match_something(Self::expression, "expression");
+            let expression = self.match_(Self::expression, "expression");
             self.match_token(TokenKind::CloseParen);
             return Some(expression);
         }
@@ -538,10 +632,18 @@ impl Parser {
 
     fn arguments(&mut self) -> Vec<Expression> {
         let mut args = Vec::<Expression>::new();
-        while let Some(expression) = self.expression() {
-            args.push(expression);
-            if self.match_token_maybe(TokenKind::Comma).is_none() {
-                break;
+        // No expressions provided, just return an empty vec. Don't consume the close
+        // parenthesis as the caller does that for us.
+        if self.matches_token_kind(TokenKind::CloseParen) {
+            return args;
+        }
+
+        loop {
+            if let Some(expression) = self.is_word(Self::expression) {
+                args.push(expression);
+                if self.match_token_maybe(TokenKind::Comma).is_none() {
+                    break;
+                }
             }
         }
 
@@ -553,6 +655,24 @@ impl Parser {
             return token.kind() == token_kind;
         }
         false
+    }
+
+    fn match_token_with_result_maybe<T: Default>(
+        &mut self,
+        token_kind: TokenKind,
+    ) -> Result<String, T> {
+        if let Some(token) = self.token() {
+            if token.kind() == token_kind {
+                let optional_token_value = token.value();
+                self.consume_token();
+                if let Some(token_value) = optional_token_value {
+                    return Ok(token_value);
+                }
+                return Ok(String::new());
+            }
+        }
+
+        Err(T::default())
     }
 
     fn match_token_maybe(&mut self, token_kind: TokenKind) -> Option<String> {
@@ -589,7 +709,15 @@ impl Parser {
         String::new()
     }
 
-    fn match_something<T: Default>(
+    fn is_word<T: Default + Eq>(&mut self, grammar_func: fn(&mut Self) -> Option<T>) -> Option<T> {
+        if let Some(ret_from_something) = grammar_func(self) {
+            return Some(ret_from_something);
+        }
+
+        None
+    }
+
+    fn match_<T: Default>(
         &mut self,
         grammar_func: fn(&mut Self) -> Option<T>,
         error_message: &str,
@@ -597,6 +725,22 @@ impl Parser {
         if let Some(ret_from_something) = grammar_func(self) {
             return ret_from_something;
         }
+
+        self.error_diag
+            .borrow_mut()
+            .expected_something_error(error_message, self.token_offset(-1));
+        T::default()
+    }
+
+    fn match_or_default<T: Default>(
+        &mut self,
+        grammar_func: fn(&mut Self) -> Option<T>,
+        error_message: &str,
+    ) -> T {
+        if let Some(ret_from_something) = grammar_func(self) {
+            return ret_from_something;
+        }
+
         self.error_diag
             .borrow_mut()
             .expected_something_error(error_message, self.token_offset(-1));

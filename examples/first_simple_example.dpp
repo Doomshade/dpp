@@ -1,33 +1,34 @@
 let x: pp;
-let y: pp = 5;
+let y: pp = 123;
 
 FUNc test(aa: pp, bb: pp): pp {
-    let test: pp = (1 + 2) * 3 + 4 * 5;
-    let test: pp = a >= a;
+    let a: pp = 5;
+    let testt: pp = (1 + 2) * 3 + 4 * 5;
     let testasd: pp;
-    let asd: pp = "aaaaaaaaaaa";
-    let asd: pp = aa == bb;
+    let asd: pp = 123;
+    let c: pp;
+    let bb: pp;
     let aa: pp = (a + (a(abc))) + c;
-    abcd(a > 2, test(yem) < 5);
+    abcd(a > 1);
     {
         {
             let a: pp;
         }
     }
     testasd = 123;
-    testasd = test + 4 * 2 - 1 + 2;
+    testasddd = test + 4 * 2 - 1 + 2;
 
-    if (a) {
+    if (a > 2) {
         let test: pp = yem;
     }
     bye test = 3;
 }
 
 FUNc hellyea(aa: pp, bb: pp): pp {
-    let yup: pp = (1 + 2) * 3;
+    let yup: pp = (1 + 3) * 3;
     let nop: pp;
     yup = 123;
-    nop = yup + 4 * 2 - 123;
+    nop = yup *(1)+ 4 * 2 - 123;
 
     if (123) {
         let abc: pp = 123;

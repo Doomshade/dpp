@@ -1,4 +1,6 @@
 use crate::lexer::{Token, TokenKind};
+use crate::parser::Variable;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -34,7 +36,8 @@ struct ErrorMessage {
 #[derive(Debug)]
 pub struct ErrorDiagnosis {
     file_name: String,
-    error_messages: Vec<ErrorMessage>,
+    /// Using hash map to remove duplicate messages
+    error_messages: HashMap<String, ErrorMessage>,
 }
 
 impl ErrorDiagnosis {
@@ -42,7 +45,7 @@ impl ErrorDiagnosis {
     pub fn new(file_name: &str) -> Self {
         Self {
             file_name: String::from(file_name),
-            error_messages: Vec::new(),
+            error_messages: HashMap::new(),
         }
     }
 
@@ -51,21 +54,15 @@ impl ErrorDiagnosis {
     }
 
     pub fn invalid_token_error(&mut self, token: &Token) {
-        let message = ErrorMessage {
-            row: token.row(),
-            col: token.col(),
-            message: format!("Unexpected token: {token}."),
-        };
-        self.error_messages.push(message);
+        self.insert_error_message(token.row(), token.col(), format!("Unexpected \"{token}\"."));
     }
 
     pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token>) {
-        let message = ErrorMessage {
-            row: optional_token.map_or(0, Token::row),
-            col: optional_token.map_or(0, Token::col),
-            message: format!("Expected {error}."),
-        };
-        self.error_messages.push(message);
+        self.insert_error_message(
+            optional_token.map_or(0, Token::row),
+            optional_token.map_or(0, Token::col),
+            format!("Expected {error}."),
+        );
     }
 
     pub fn expected_different_token_error(
@@ -73,21 +70,40 @@ impl ErrorDiagnosis {
         token: &Token,
         expected_token_kind: TokenKind,
     ) {
-        let message = ErrorMessage {
-            row: token.row(),
-            col: token.col(),
-            message: format!("Expected \"{expected_token_kind}\"."),
-        };
-        self.error_messages.push(message);
+        self.insert_error_message(
+            token.row(),
+            token.col(),
+            format!("Expected \"{expected_token_kind}\"."),
+        );
     }
 
     pub fn handle_error_at(&mut self, row: u32, col: u32, error: &str) {
-        let message = ErrorMessage {
+        self.insert_error_message(row, col, String::from(error));
+    }
+
+    pub fn variable_already_exists(&mut self, row: u32, col: u32, var_name: &str) {
+        self.insert_error_message(row, col, format!("Variable \"{var_name}\" already exists."));
+    }
+
+    pub fn invalid_type(&mut self, row: u32, col: u32, var_name: &str) {
+        self.insert_error_message(
             row,
             col,
-            message: String::from(error),
+            format!("Invalid type for variable \"{var_name}\"."),
+        );
+    }
+
+    fn insert_error_message(&mut self, row: u32, col: u32, error: String) {
+        let error_message = format!("{}:{}:{}: {}", self.file_name, row, col, error);
+        if self.error_messages.contains_key(&error_message) {
+            return;
+        }
+        let message_struct = ErrorMessage {
+            row,
+            col,
+            message: error_message.clone(),
         };
-        self.error_messages.push(message);
+        self.error_messages.insert(error_message, message_struct);
     }
 
     pub fn check_errors(&self) -> Result<(), SyntaxError> {
@@ -97,11 +113,8 @@ impl ErrorDiagnosis {
         }
         let mut errors = Vec::new();
 
-        for error_message in error_messages {
-            errors.push(format!(
-                "{}:{}:{}: {}",
-                self.file_name, error_message.row, error_message.col, error_message.message
-            ));
+        for (error_message, _) in error_messages {
+            errors.push(String::from(error_message));
         }
         Err(SyntaxError {
             error_messages: errors,

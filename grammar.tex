@@ -50,7 +50,7 @@
         \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
         \ebnfnode{\ttt{primary}}
         {%
-            \ttt{IDENT ( "(" expr ( "," expr )* ")" | "=" expr )?}\\
+            \ttt{IDENT ( "(" (expr ( "," expr )*)? ")" )?}\\
             &\ttt{ | NUMBER | STRING}\\
             &\ttt{ | "yem" | "nom" | "(" expr ")"}
         }

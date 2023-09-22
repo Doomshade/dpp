@@ -77,8 +77,8 @@ pub enum DataType {
 #[derive(Debug)]
 pub struct Token {
     kind: TokenKind,
-    row: u32,
-    col: u32,
+    /// Row, Column
+    position: (u32, u32),
     value: Option<String>,
 }
 
@@ -101,14 +101,22 @@ impl Token {
         None
     }
 
-    #[must_use] pub fn row(&self) -> u32 {
-        self.row
+    #[must_use]
+    pub const fn row(&self) -> u32 {
+        self.position.0
     }
-    #[must_use] pub fn col(&self) -> u32 {
-        self.col
+    #[must_use]
+    pub const fn col(&self) -> u32 {
+        self.position.1
     }
 
-    #[must_use] pub fn kind(&self) -> TokenKind {
+    #[must_use]
+    pub const fn position(&self) -> (u32, u32) {
+        self.position
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> TokenKind {
         self.kind
     }
 }
@@ -264,8 +272,7 @@ impl Lexer {
     fn new_token_with_value(&self, kind: TokenKind, value: String) -> Token {
         Token {
             kind,
-            row: self.row,
-            col: self.col,
+            position: (self.row, self.col),
             value: Some(value),
         }
     }
@@ -273,8 +280,7 @@ impl Lexer {
     fn new_token(&self, kind: TokenKind) -> Token {
         Token {
             kind,
-            row: self.row,
-            col: self.col,
+            position: (self.row, self.col),
             value: None,
         }
     }
@@ -355,13 +361,16 @@ impl Lexer {
 
     fn handle_operator(&mut self) -> Token {
         let mut buf = String::with_capacity(2);
-        buf.push(self.peek());
+        let operator = self.peek();
+        buf.push(operator);
         self.consume();
 
-        match self.peek() {
-            '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
-                buf.push(self.peek());
-                self.consume();
+        match operator {
+            '>' | '<' | '!' | '=' | '+' | '-' | '*' | '/' | '%' => {
+                if self.peek() == '=' {
+                    buf.push(self.peek());
+                    self.consume();
+                }
             }
             _ => {}
         }

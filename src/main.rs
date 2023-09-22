@@ -5,11 +5,8 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::fs;
-use std::fs::File;
-use std::io::BufWriter;
 use std::rc::Rc;
 
-use crate::emitter::Emitter;
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -31,15 +28,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let translation_unit = Parser::new(Rc::new(lexer.lex()), error_diag.clone()).parse();
     error_diag.borrow().check_errors()?;
-    let analyzer = SemanticAnalyzer::new(translation_unit);
-    error_diag.borrow().check_errors()?;
-    let mut emitter = Emitter::new(analyzer);
+    dbg!(&translation_unit);
+    let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
+    analyzer.analyze(translation_unit);
     error_diag.borrow().check_errors()?;
 
-    let file_name = String::from("out/dpp/first_simple_example.asm");
-    let file = File::create(file_name)?;
-    let mut writer = BufWriter::new(&file);
-    emitter.emit(&mut writer)?;
+    // let file_name = String::from("out/dpp/first_simple_example.asm");
+    // let file = File::create(file_name)?;
+    // let mut writer = BufWriter::new(&file);
     // emitter.emit(program, &file)?;
 
     Ok(())
