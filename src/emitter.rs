@@ -14,7 +14,7 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    pub fn new(semantic_analyzer: SemanticAnalyzer) -> Self {
+    #[must_use] pub fn new(semantic_analyzer: SemanticAnalyzer) -> Self {
         Self {
             _stack: 0,
             _label_count: 0,

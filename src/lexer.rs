@@ -101,14 +101,14 @@ impl Token {
         None
     }
 
-    pub fn row(&self) -> u32 {
+    #[must_use] pub fn row(&self) -> u32 {
         self.row
     }
-    pub fn col(&self) -> u32 {
+    #[must_use] pub fn col(&self) -> u32 {
         self.col
     }
 
-    pub fn kind(&self) -> TokenKind {
+    #[must_use] pub fn kind(&self) -> TokenKind {
         self.kind
     }
 }
@@ -172,60 +172,60 @@ pub enum TokenKind {
 impl Display for TokenKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let text_representation = match self {
-            TokenKind::Identifier => "identifier",
-            TokenKind::Number => "number",
-            TokenKind::FiberType => "fiber",
-            TokenKind::BangEqual => "!=",
-            TokenKind::Comment => "",
-            TokenKind::Whitespace => "",
-            TokenKind::Eof => "",
-            TokenKind::Unknown => "",
-            TokenKind::EqualEqual => "==",
-            TokenKind::Equal => "=",
-            TokenKind::Bang => "!",
-            TokenKind::Star => "*",
-            TokenKind::ForwardSlash => "/",
-            TokenKind::BackSlash => "\\",
-            TokenKind::Plus => "+",
-            TokenKind::MinusEqual => "-=",
-            TokenKind::PlusEqual => "+=",
-            TokenKind::PlusDash => "+-",
-            TokenKind::Dash => "-",
-            TokenKind::Greater => ">",
-            TokenKind::GreaterEqual => ">=",
-            TokenKind::Less => "<",
-            TokenKind::LessEqual => "<=",
-            TokenKind::NomKeyword => "nom",
-            TokenKind::YemKeyword => "yem",
-            TokenKind::OpenParen => "(",
-            TokenKind::CloseParen => ")",
-            TokenKind::OpenBrace => "{",
-            TokenKind::CloseBrace => "}",
-            TokenKind::OpenBracket => "[",
-            TokenKind::CloseBracket => "]",
-            TokenKind::Colon => ":",
-            TokenKind::Semicolon => ";",
-            TokenKind::Ampersand => "&",
-            TokenKind::Pipe => "|",
-            TokenKind::Comma => ",",
-            TokenKind::IfKeyword => "if",
-            TokenKind::LetKeyword => "let",
-            TokenKind::ByeKeyword => "bye",
-            TokenKind::PprintKeyword => "pprint",
-            TokenKind::PpanicKeyword => "ppanic",
-            TokenKind::PpinKeyword => "ppin",
-            TokenKind::FUNcKeyword => "FUNc",
-            TokenKind::ElseKeyword => "else",
-            TokenKind::XxlppType => "data type \"xxlpp\"",
-            TokenKind::PpType => "data type \"pp\"",
-            TokenKind::SppType => "data type \"spp\"",
-            TokenKind::XsppType => "data type \"xspp\"",
-            TokenKind::PType => "data type \"p\"",
-            TokenKind::BoobaType => "data type \"booba\"",
-            TokenKind::NoppType => "void data type \"nopp\"",
-            TokenKind::DoubleQuote => "\"\"\"",
+            Self::Identifier => "identifier",
+            Self::Number => "number",
+            Self::FiberType => "fiber",
+            Self::BangEqual => "!=",
+            Self::Comment => "",
+            Self::Whitespace => "",
+            Self::Eof => "",
+            Self::Unknown => "",
+            Self::EqualEqual => "==",
+            Self::Equal => "=",
+            Self::Bang => "!",
+            Self::Star => "*",
+            Self::ForwardSlash => "/",
+            Self::BackSlash => "\\",
+            Self::Plus => "+",
+            Self::MinusEqual => "-=",
+            Self::PlusEqual => "+=",
+            Self::PlusDash => "+-",
+            Self::Dash => "-",
+            Self::Greater => ">",
+            Self::GreaterEqual => ">=",
+            Self::Less => "<",
+            Self::LessEqual => "<=",
+            Self::NomKeyword => "nom",
+            Self::YemKeyword => "yem",
+            Self::OpenParen => "(",
+            Self::CloseParen => ")",
+            Self::OpenBrace => "{",
+            Self::CloseBrace => "}",
+            Self::OpenBracket => "[",
+            Self::CloseBracket => "]",
+            Self::Colon => ":",
+            Self::Semicolon => ";",
+            Self::Ampersand => "&",
+            Self::Pipe => "|",
+            Self::Comma => ",",
+            Self::IfKeyword => "if",
+            Self::LetKeyword => "let",
+            Self::ByeKeyword => "bye",
+            Self::PprintKeyword => "pprint",
+            Self::PpanicKeyword => "ppanic",
+            Self::PpinKeyword => "ppin",
+            Self::FUNcKeyword => "FUNc",
+            Self::ElseKeyword => "else",
+            Self::XxlppType => "data type \"xxlpp\"",
+            Self::PpType => "data type \"pp\"",
+            Self::SppType => "data type \"spp\"",
+            Self::XsppType => "data type \"xspp\"",
+            Self::PType => "data type \"p\"",
+            Self::BoobaType => "data type \"booba\"",
+            Self::NoppType => "void data type \"nopp\"",
+            Self::DoubleQuote => "\"\"\"",
         };
-        write!(f, "{}", text_representation)
+        write!(f, "{text_representation}")
     }
 }
 

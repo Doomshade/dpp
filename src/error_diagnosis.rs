@@ -1,4 +1,4 @@
-use crate::lexer;
+
 use crate::lexer::{Token, TokenKind};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -11,7 +11,7 @@ impl Debug for SyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Syntax error")?;
         for error_message in &self.error_messages {
-            writeln!(f, "{}", error_message)?;
+            writeln!(f, "{error_message}")?;
         }
         Ok(())
     }
@@ -39,7 +39,7 @@ pub struct ErrorDiagnosis {
 }
 
 impl ErrorDiagnosis {
-    pub fn new(file_name: &str) -> Self {
+    #[must_use] pub fn new(file_name: &str) -> Self {
         Self {
             file_name: String::from(file_name),
             error_messages: Vec::new(),
@@ -54,7 +54,7 @@ impl ErrorDiagnosis {
         let message = ErrorMessage {
             row: token.row(),
             col: token.col(),
-            message: format!("Unexpected token: {}.", token),
+            message: format!("Unexpected token: {token}."),
         };
         self.error_messages.push(message);
     }
@@ -63,7 +63,7 @@ impl ErrorDiagnosis {
         let message = ErrorMessage {
             row: optional_token.map_or(0, Token::row),
             col: optional_token.map_or(0, Token::col),
-            message: format!("Expected {}.", error),
+            message: format!("Expected {error}."),
         };
         self.error_messages.push(message);
     }
@@ -76,7 +76,7 @@ impl ErrorDiagnosis {
         let message = ErrorMessage {
             row: token.row(),
             col: token.col(),
-            message: format!("Expected \"{}\".", expected_token_kind),
+            message: format!("Expected \"{expected_token_kind}\"."),
         };
         self.error_messages.push(message);
     }

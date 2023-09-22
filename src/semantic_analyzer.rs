@@ -5,7 +5,7 @@ pub struct SemanticAnalyzer {
 }
 
 impl SemanticAnalyzer {
-    pub fn new(translation_unit: TranslationUnit) -> Self {
+    #[must_use] pub fn new(translation_unit: TranslationUnit) -> Self {
         Self { translation_unit }
     }
 

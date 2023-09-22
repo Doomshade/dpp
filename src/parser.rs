@@ -82,17 +82,9 @@ pub struct Variable {
     pub data_type: DataType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Block {
     pub statements: Vec<Statement>,
-}
-
-impl Default for Block {
-    fn default() -> Self {
-        Block {
-            statements: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -123,7 +115,7 @@ pub enum Expression {
 
 impl Default for Expression {
     fn default() -> Self {
-        Expression::EmptyExpression
+        Self::EmptyExpression
     }
 }
 
@@ -136,7 +128,7 @@ pub enum DataType {
 
 impl Default for DataType {
     fn default() -> Self {
-        DataType::EmptyDataType
+        Self::EmptyDataType
     }
 }
 
@@ -147,7 +139,7 @@ pub enum Struct {
 
 impl Default for Struct {
     fn default() -> Self {
-        Struct::EmptyStruct
+        Self::EmptyStruct
     }
 }
 
@@ -168,7 +160,7 @@ pub enum BinaryOperator {
 
 impl Default for BinaryOperator {
     fn default() -> Self {
-        BinaryOperator::EmptyOperator
+        Self::EmptyOperator
     }
 }
 
@@ -181,7 +173,7 @@ pub enum UnaryOperator {
 
 impl Default for UnaryOperator {
     fn default() -> Self {
-        UnaryOperator::EmptyOperator
+        Self::EmptyOperator
     }
 }
 
@@ -394,37 +386,37 @@ impl Parser {
     }
 
     fn equality(&mut self) -> Option<Expression> {
-        let mut expression = self.comparison();
+        let mut comparison = self.comparison();
 
         while self.matches_token_kind(TokenKind::BangEqual)
             || self.matches_token_kind(TokenKind::EqualEqual)
         {
-            if expression.is_some() {
+            if let Some(expression) = comparison {
                 let op = self.binop(|kind| match kind {
                     TokenKind::BangEqual => BinaryOperator::NotEqual,
                     TokenKind::EqualEqual => BinaryOperator::Equal,
                     _ => unreachable!(),
                 });
                 let rhs = self.match_something(Self::comparison, "expression");
-                expression = Some(Expression::BinaryExpression {
-                    lhs: Box::new(expression.unwrap()),
+                comparison = Some(Expression::BinaryExpression {
+                    lhs: Box::new(expression),
                     op,
                     rhs: Box::new(rhs),
                 });
             }
         }
-        expression
+        comparison
     }
 
     fn comparison(&mut self) -> Option<Expression> {
-        let mut expression = self.term();
+        let mut term = self.term();
 
         while self.matches_token_kind(TokenKind::Greater)
             || self.matches_token_kind(TokenKind::GreaterEqual)
             || self.matches_token_kind(TokenKind::Less)
             || self.matches_token_kind(TokenKind::LessEqual)
         {
-            if expression.is_some() {
+            if let Some(expression) = term {
                 let op = self.binop(|kind| match kind {
                     TokenKind::Greater => BinaryOperator::GreaterThan,
                     TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
@@ -433,37 +425,36 @@ impl Parser {
                     _ => unreachable!(),
                 });
                 let rhs = self.match_something(Self::term, "expression");
-                expression = Some(Expression::BinaryExpression {
-                    lhs: Box::new(expression.unwrap()),
+                term = Some(Expression::BinaryExpression {
+                    lhs: Box::new(expression),
                     op,
                     rhs: Box::new(rhs),
                 });
             }
         }
-        expression
+        term
     }
 
     fn term(&mut self) -> Option<Expression> {
-        let mut expression = self.factor();
+        let mut factor = self.factor();
 
         while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
-            if expression.is_some() {
+            if let Some(expression) = factor {
                 let op = self.binop(|kind| match kind {
                     TokenKind::Dash => BinaryOperator::Subtract,
                     TokenKind::Plus => BinaryOperator::Add,
                     _ => unreachable!(),
                 });
-                if let Some(factor) = self.factor() {
-                    expression = Some(Expression::BinaryExpression {
-                        lhs: Box::new(expression.unwrap()),
-                        op,
-                        rhs: Box::new(factor),
-                    });
-                }
+                let rhs = self.match_something(Self::factor, "expression");
+                factor = Some(Expression::BinaryExpression {
+                    lhs: Box::new(expression),
+                    op,
+                    rhs: Box::new(rhs),
+                });
             }
         }
 
-        expression
+        factor
     }
 
     fn factor(&mut self) -> Option<Expression> {
@@ -478,13 +469,12 @@ impl Parser {
                     TokenKind::Star => BinaryOperator::Multiply,
                     _ => unreachable!(),
                 });
-                if let Some(unary) = self.unary() {
-                    expression = Some(Expression::BinaryExpression {
-                        lhs: Box::new(expression.unwrap()),
-                        op,
-                        rhs: Box::new(unary),
-                    });
-                }
+                let rhs = self.match_something(Self::unary, "expression");
+                expression = Some(Expression::BinaryExpression {
+                    lhs: Box::new(expression.unwrap()),
+                    op,
+                    rhs: Box::new(rhs),
+                });
             }
         }
         expression
@@ -497,12 +487,11 @@ impl Parser {
                 TokenKind::Dash => UnaryOperator::Negate,
                 _ => unreachable!(),
             });
-            if let Some(unary) = self.unary() {
-                return Some(Expression::UnaryExpression {
-                    op,
-                    operand: Box::new(unary),
-                });
-            }
+            let operand = self.match_something(Self::unary, "expression");
+            return Some(Expression::UnaryExpression {
+                op,
+                operand: Box::new(operand),
+            });
         }
 
         self.primary()
@@ -590,12 +579,12 @@ impl Parser {
                 self.error_diag.borrow_mut().handle("No token found");
             }
         }
-        return String::new();
+        String::new()
     }
 
     fn match_something<T: Default>(
         &mut self,
-        grammar_func: fn(&mut Parser) -> Option<T>,
+        grammar_func: fn(&mut Self) -> Option<T>,
         error_message: &str,
     ) -> T {
         if let Some(ret_from_something) = grammar_func(self) {
