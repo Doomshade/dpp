@@ -49,7 +49,7 @@ impl ErrorDiagnosis {
         self.handle_error_at(0, 0, error)
     }
 
-    pub fn handle_invalid_token(&mut self, token: &Token) {
+    pub fn invalid_token_error(&mut self, token: &Token) {
         let message = ErrorMessage {
             row: token.row(),
             col: token.col(),
@@ -58,7 +58,20 @@ impl ErrorDiagnosis {
         self.error_messages.push(message);
     }
 
-    pub fn handle_unexpected_token(&mut self, token: &Token, expected_token_kind: TokenKind) {
+    pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token>) {
+        let message = ErrorMessage {
+            row: optional_token.map_or(0, |token| token.row()),
+            col: optional_token.map_or(0, |token| token.col()),
+            message: format!("Expected {}.", error),
+        };
+        self.error_messages.push(message);
+    }
+
+    pub fn expected_different_token_error(
+        &mut self,
+        token: &Token,
+        expected_token_kind: TokenKind,
+    ) {
         let message = ErrorMessage {
             row: token.row(),
             col: token.col(),

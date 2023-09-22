@@ -6,8 +6,9 @@ FUNc test(aa: pp, bb: pp): pp {
     let test: pp = a >= a;
     let testasd: pp;
     let asd: pp = "aaaaaaaaaaa";
+    let asd: pp = aa == bb;
     let aa: pp = (a + (a(abc))) + c;
-    abcd(123 > 2, test(yem) < 1);
+    abcd(123 > 2, test(yem) < 5);
     {
         {
             let a: pp;
@@ -16,7 +17,7 @@ FUNc test(aa: pp, bb: pp): pp {
     testasd = 123;
     testasd = test + 4 * 2 - 1 + 2;
 
-    if (123) {
+    if (a) {
         let test: pp = yem;
     }
     bye test = 3;

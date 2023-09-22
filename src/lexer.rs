@@ -450,7 +450,7 @@ impl Lexer {
         if c != '"' {
             self.error_diag
                 .borrow_mut()
-                .handle_unexpected_token(&token, TokenKind::DoubleQuote);
+                .expected_different_token_error(&token, TokenKind::DoubleQuote);
         }
 
         token

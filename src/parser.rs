@@ -177,7 +177,7 @@ impl Parser {
             } else if self.curr_token_index == self.tokens.len() {
                 break;
             } else if let Some(token) = self.token() {
-                self.error_diag.borrow_mut().handle_invalid_token(token);
+                self.error_diag.borrow_mut().invalid_token_error(token);
                 self.consume_token();
             } else {
                 panic!("Something unexpected happened :( (compiler error)")
@@ -197,8 +197,8 @@ impl Parser {
         let parameters = self.parameters();
         self.match_token(TokenKind::CloseParen);
         self.match_token(TokenKind::Colon);
-        let return_type = self.match_something(Self::data_type, "Expected data type");
-        let block = self.match_something(Self::block, "Expected block");
+        let return_type = self.match_something(Self::data_type, "data type")?;
+        let block = self.match_something(Self::block, "block")?;
 
         Some(Function {
             identifier,
@@ -215,7 +215,7 @@ impl Parser {
         self.match_token(TokenKind::Colon);
         let data_type = self.data_type()?;
         let statement = if self.match_token_maybe(TokenKind::Equal).is_some() {
-            let expression = self.match_something(Self::expression, "Expected expression");
+            let expression = self.match_something(Self::expression, "expression")?;
             Statement::VariableDeclarationAndAssignment {
                 identifier,
                 data_type,
@@ -262,7 +262,7 @@ impl Parser {
     fn parameter(&mut self) -> Option<Parameter> {
         let identifier = self.match_token_maybe(TokenKind::Identifier)?;
         self.match_token(TokenKind::Colon);
-        let data_type = self.match_something(Self::data_type, "Expected data type");
+        let data_type = self.match_something(Self::data_type, "data type")?;
         Some(Parameter {
             identifier,
             data_type,
@@ -285,12 +285,12 @@ impl Parser {
             return Some(variable_declaration);
         } else if self.match_token_maybe(TokenKind::IfKeyword).is_some() {
             self.match_token(TokenKind::OpenParen);
-            let expression = self.match_something(Self::expression, "Expected expression");
+            let expression = self.match_something(Self::expression, "expression")?;
             self.match_token(TokenKind::CloseParen);
 
-            let statement = self.match_something(Self::statement, "Expected statement");
+            let statement = self.match_something(Self::statement, "statement")?;
             return if self.match_token_maybe(TokenKind::ElseKeyword).is_some() {
-                let else_statement = self.match_something(Self::statement, "Expected statement");
+                let else_statement = self.match_something(Self::statement, "statement")?;
                 Some(Statement::IfElseStatement {
                     expression,
                     statement: Box::new(statement),
@@ -307,7 +307,7 @@ impl Parser {
                 block: Box::new(block),
             });
         } else if self.match_token_maybe(TokenKind::ByeKeyword).is_some() {
-            let expression = self.match_something(Self::expression, "Expected expression");
+            let expression = self.match_something(Self::expression, "expression")?;
             self.match_token(TokenKind::Semicolon);
 
             return Some(Statement::ReturnStatement { expression });
@@ -335,7 +335,7 @@ impl Parser {
         None
     }
 
-    fn struct_(&mut self) -> Option<DataType> {
+    fn _struct_(&mut self) -> Option<DataType> {
         todo!()
     }
 
@@ -355,13 +355,12 @@ impl Parser {
                     TokenKind::EqualEqual => BinaryOperator::Equal,
                     _ => unreachable!(),
                 });
-                if let Some(rhs) = self.comparison() {
-                    expression = Some(Expression::BinaryExpression {
-                        lhs: Box::new(expression.unwrap()),
-                        op,
-                        rhs: Box::new(rhs),
-                    });
-                }
+                let rhs = self.match_something(Self::comparison, "expression")?;
+                expression = Some(Expression::BinaryExpression {
+                    lhs: Box::new(expression.unwrap()),
+                    op,
+                    rhs: Box::new(rhs),
+                });
             }
         }
         expression
@@ -383,7 +382,7 @@ impl Parser {
                     TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
                     _ => unreachable!(),
                 });
-                let rhs = self.match_something(Self::term, "Expected expression");
+                let rhs = self.match_something(Self::term, "expression")?;
                 expression = Some(Expression::BinaryExpression {
                     lhs: Box::new(expression.unwrap()),
                     op,
@@ -467,7 +466,7 @@ impl Parser {
 
                 Some(Expression::FunctionCall { arguments })
             } else if self.match_token_maybe(TokenKind::Equal).is_some() {
-                let expression = self.match_something(Self::expression, "Expected expression");
+                let expression = self.match_something(Self::expression, "expression")?;
                 Some(Expression::AssignmentExpression {
                     expression: Box::new(expression),
                 })
@@ -483,7 +482,7 @@ impl Parser {
         } else if let Some(fiber) = self.match_token_maybe(TokenKind::FiberType) {
             return Some(Expression::FiberExpression(fiber));
         } else if self.match_token_maybe(TokenKind::OpenParen).is_some() {
-            let expression = self.match_something(Self::expression, "Expected expression");
+            let expression = self.match_something(Self::expression, "expression")?;
             self.match_token(TokenKind::CloseParen);
             return Some(expression);
         }
@@ -536,7 +535,7 @@ impl Parser {
             } else if let Some(prev_token) = self.token_offset(-1) {
                 self.error_diag
                     .borrow_mut()
-                    .handle_unexpected_token(prev_token, token_kind);
+                    .expected_different_token_error(prev_token, token_kind);
             } else {
                 self.error_diag.borrow_mut().handle("No token found");
             }
@@ -548,10 +547,13 @@ impl Parser {
         &mut self,
         grammar_func: fn(&mut Parser) -> Option<T>,
         error_message: &str,
-    ) -> T {
+    ) -> Option<T> {
         if let Some(ret_from_something) = grammar_func(self) {
-            return ret_from_something;
+            return Some(ret_from_something);
         }
-        panic!("{}", error_message)
+        self.error_diag
+            .borrow_mut()
+            .expected_something_error(error_message, self.token_offset(-1));
+        None
     }
 }
