@@ -8,17 +8,17 @@ use crate::semantic_analyzer::SemanticAnalyzer;
 pub struct Emitter {
     /// The number of bytes remaining on the stack. Each function will have its stack var
     /// eventually.
-    stack: u32,
-    label_count: usize,
-    semantic_analyzer: SemanticAnalyzer,
+    _stack: u32,
+    _label_count: usize,
+    _semantic_analyzer: SemanticAnalyzer,
 }
 
 impl Emitter {
     pub fn new(semantic_analyzer: SemanticAnalyzer) -> Self {
         Self {
-            stack: 0,
-            label_count: 0,
-            semantic_analyzer,
+            _stack: 0,
+            _label_count: 0,
+            _semantic_analyzer: semantic_analyzer,
         }
     }
 
@@ -32,91 +32,95 @@ impl Emitter {
     //     Ok(())
     // }
     //
-    fn push(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.stack += 4; // TODO: Hardcoded size
-        writer.write_all(format!("    push {register} ; {}\n", self.stack).as_bytes())
+    fn _push(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        self._stack += 4; // TODO: Hardcoded size
+        writer.write_all(format!("    push {register} ; {}\n", self._stack).as_bytes())
     }
 
-    fn pop(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.stack -= 4; // TODO: Hardcoded size
-        writer.write_all(format!("    pop {register} ; {}\n", self.stack).as_bytes())
+    fn _pop(&mut self, register: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        self._stack -= 4; // TODO: Hardcoded size
+        writer.write_all(format!("    pop {register} ; {}\n", self._stack).as_bytes())
     }
 
-    fn remove_stack_bytes(&mut self, by: u32, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        self.stack -= by;
-        writer.write_all(format!("    add esp, {} ; {}\n", by, self.stack).as_bytes())?; // TODO:
-                                                                                         // Hardcoded size
+    fn _remove_stack_bytes(&mut self, by: u32, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        self._stack -= by;
+        writer.write_all(format!("    add esp, {} ; {}\n", by, self._stack).as_bytes())?; // TODO:
+                                                                                          // Hardcoded size
         Ok(())
     }
 
     pub fn emit(&mut self, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        let translation_unit = self.semantic_analyzer.analyze();
+        let translation_unit = self._semantic_analyzer.analyze();
         dbg!(&translation_unit);
-        Self::start(writer)?;
-        Self::end(writer)?;
+        Self::_start(writer)?;
+        Self::_end(writer)?;
         Ok(())
     }
 
-    fn translation_unit(
+    fn _translation_unit(
         &mut self,
         translation_unit: TranslationUnit,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        self.functions(translation_unit.functions, writer)
+        self._functions(translation_unit.functions, writer)
     }
 
-    fn functions(
+    fn _functions(
         &mut self,
         functions: Vec<Function>,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         for function in functions {
-            self.function(function, writer)?;
+            self._function(function, writer)?;
         }
         Ok(())
     }
 
-    fn function(&mut self, function: Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn _function(&mut self, function: Function, writer: &mut BufWriter<&File>) -> io::Result<()> {
         let label = function.identifier;
         writer.write_all(format!("_{label}:").as_bytes())?;
-        self.block(function.block, writer)?;
+        self._block(function.block, writer)?;
         Ok(())
     }
 
-    fn block(&mut self, block: Block, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn _block(&mut self, block: Block, writer: &mut BufWriter<&File>) -> io::Result<()> {
         match block {
             Block { statements } => {
-                self.push("ebx", writer)?;
-                Self::mov("ebx", "esp", writer)?;
+                self._push("ebx", writer)?;
+                Self::_mov("ebx", "esp", writer)?;
                 for statement in statements {
-                    self.statement(statement, writer)?;
+                    self._statement(statement, writer)?;
                 }
-                self.pop("ebx", writer)?;
+                self._pop("ebx", writer)?;
             }
         }
         Ok(())
     }
 
-    fn statement(&mut self, statement: Statement, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn _statement(
+        &mut self,
+        statement: Statement,
+        writer: &mut BufWriter<&File>,
+    ) -> io::Result<()> {
         if let Statement::IfStatement {
             expression,
             statement,
         } = statement
         {
-            self.if_statement(expression, *statement, writer)?;
+            self._if_statement(expression, *statement, writer)?;
         };
         Ok(())
     }
 
-    fn if_statement(
+    fn _if_statement(
         &mut self,
         expression: Expression,
-        statement: Statement,
+        _statement: Statement,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        self.expression(expression, writer)?;
-        self.pop("eax", writer)?;
-        let label = self.label();
+        self._expression(expression, writer)?;
+        self._pop("eax", writer)?;
+        let label = self._label();
         writer.write_all(b"    test eax, eax\n")?;
         writer.write_all(format!("    jz {label}\n").as_bytes())?;
         // self.block(block, writer)?;
@@ -125,13 +129,13 @@ impl Emitter {
         Ok(())
     }
 
-    fn label(&mut self) -> String {
-        let label = format!("label{}", self.label_count);
-        self.label_count += 1;
+    fn _label(&mut self) -> String {
+        let label = format!("label{}", self._label_count);
+        self._label_count += 1;
         label
     }
 
-    fn end(writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn _end(writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"    push format\n")?;
         writer.write_all(b"    call _printf\n")?;
         writer.write_all(b"    add esp, 8\n")?;
@@ -140,39 +144,39 @@ impl Emitter {
         Ok(())
     }
 
-    fn expression(
+    fn _expression(
         &mut self,
         expression: Expression,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
         match expression {
-            Expression::PpExpression(pp_expression) => self.pp_expression(pp_expression, writer),
-            Expression::BoobaExpression(booba) => self.booba_expression(booba, writer),
+            Expression::PpExpression(pp_expression) => self._pp_expression(pp_expression, writer),
+            Expression::BoobaExpression(booba) => self._booba_expression(booba, writer),
             Expression::FiberExpression(_fiber_expression) => Ok(()),
             Expression::UnaryExpression { op: _, operand: _ } => Ok(()),
             Expression::BinaryExpression { lhs, op, rhs } => {
-                self.binary_expression(*lhs, op, *rhs, writer)
+                self._binary_expression(*lhs, op, *rhs, writer)
             }
             Expression::IdentifierExpression { identifier } => {
-                Self::mov("eax", identifier.as_str(), writer)?;
-                self.push("eax", writer)
+                Self::_mov("eax", identifier.as_str(), writer)?;
+                self._push("eax", writer)
             }
             Expression::FunctionCall { .. } => panic!("Not implemeneted"),
             Expression::AssignmentExpression { .. } => panic!("Not implemeneted"),
         }
     }
 
-    fn binary_expression(
+    fn _binary_expression(
         &mut self,
         lhs: Expression,
         op: BinaryOperator,
         rhs: Expression,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        self.expression(lhs, writer)?;
-        self.expression(rhs, writer)?;
-        self.pop("ecx", writer)?;
-        self.pop("eax", writer)?;
+        self._expression(lhs, writer)?;
+        self._expression(rhs, writer)?;
+        self._pop("ecx", writer)?;
+        self._pop("eax", writer)?;
 
         match op {
             BinaryOperator::Add => writer.write_all(b"    add eax, ecx\n")?,
@@ -185,32 +189,31 @@ impl Emitter {
             BinaryOperator::GreaterThanOrEqual => todo!("Not implemented"),
             BinaryOperator::LessThan => todo!("Not implemented"),
             BinaryOperator::LessThanOrEqual => todo!("Not implemented"),
-            _ => unreachable!(),
         };
-        self.push("eax", writer)?;
+        self._push("eax", writer)?;
 
         Ok(())
     }
 
-    fn booba_expression(&mut self, booba: bool, writer: &mut BufWriter<&File>) -> io::Result<()> {
-        Self::mov("eax", booba.to_string().as_str(), writer)?;
-        self.push("eax", writer)
+    fn _booba_expression(&mut self, booba: bool, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        Self::_mov("eax", booba.to_string().as_str(), writer)?;
+        self._push("eax", writer)
     }
 
-    fn pp_expression(
+    fn _pp_expression(
         &mut self,
         pp_expression: i32,
         writer: &mut BufWriter<&File>,
     ) -> io::Result<()> {
-        Self::mov("eax", pp_expression.to_string().as_str(), writer)?;
-        self.push("eax", writer)
+        Self::_mov("eax", pp_expression.to_string().as_str(), writer)?;
+        self._push("eax", writer)
     }
 
-    fn mov(op1: &str, op2: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn _mov(op1: &str, op2: &str, writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(format!("    mov {op1}, {op2}\n").as_bytes())
     }
 
-    fn start(writer: &mut BufWriter<&File>) -> io::Result<()> {
+    fn _start(writer: &mut BufWriter<&File>) -> io::Result<()> {
         writer.write_all(b"    global _main\n")?;
         writer.write_all(b"    extern  _printf\n")?;
         writer.write_all(b"format:\n")?;

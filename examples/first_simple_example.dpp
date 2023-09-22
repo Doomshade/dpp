@@ -12,7 +12,7 @@ FUNc test(aa: pp, bb: pp): pp {
             let a: pp;
         }
     }
-    testasd = 123
+    testasd = 123;
     testasd = test + 4 * 2 - 1 + 2;
 
     if (123) {
@@ -23,11 +23,11 @@ FUNc test(aa: pp, bb: pp): pp {
 
 FUNc hellyea(aa: pp, bb: pp): pp {
     let yup: pp = (1 + 2) * 3;
-    let nop: pp;
+    let nop: pp
     yup = 123;
-    nop = yup + 4 * 2 - 123;
+    nop = yup + 4 * 2 - 123
 
-    if (123) {
+    if 123 {
         let abc: pp = 123;
     } else if (456) {
         let def: pp = 1234;

@@ -1,19 +1,15 @@
 use crate::parser::{Parser, TranslationUnit};
 
 pub struct SemanticAnalyzer {
-    parser: Parser,
+    translation_unit: TranslationUnit,
 }
 
 impl SemanticAnalyzer {
-    pub fn new(parser: Parser) -> Self {
-        Self { parser }
+    pub fn new(translation_unit: TranslationUnit) -> Self {
+        Self { translation_unit }
     }
 
-    pub fn analyze(&mut self) -> TranslationUnit {
-        self.parser.parse()
-    }
-
-    pub fn parser(&self) -> &Parser {
-        &self.parser
+    pub fn analyze(&mut self) -> &TranslationUnit {
+        &self.translation_unit
     }
 }

@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 
@@ -74,7 +76,7 @@ pub enum DataType {
 
 #[derive(Debug)]
 pub struct Token {
-    pub kind: TokenKind,
+    kind: TokenKind,
     row: u32,
     col: u32,
     value: Option<String>,
@@ -94,6 +96,10 @@ impl Token {
     }
     pub fn col(&self) -> u32 {
         self.col
+    }
+
+    pub fn kind(&self) -> TokenKind {
+        self.kind
     }
 }
 
@@ -158,64 +164,32 @@ pub enum TokenKind {
 pub struct Lexer {
     chars: Vec<char>,
     position: usize,
-    tokens: Vec<Token>,
-    curr_token_index: usize,
     row: u32,
     col: u32,
-    error_diag: ErrorDiagnosis,
+    error_diag: Rc<RefCell<ErrorDiagnosis>>,
 }
 
 impl Lexer {
     #[must_use]
-    pub fn new(input: &str, error_diag: ErrorDiagnosis) -> Self {
+    pub fn new(input: &str, error_diag: Rc<RefCell<ErrorDiagnosis>>) -> Self {
         let chars = input.chars().collect();
         Self {
             chars,
             position: 0,
-            tokens: Vec::new(),
-            curr_token_index: 0,
             row: 0,
             col: 0,
             error_diag,
         }
     }
 
-    pub fn lex(&mut self) -> &Vec<Token> {
+    pub fn lex(&mut self) -> Vec<Token> {
+        let mut tokens = Vec::new();
         let mut token = self.parse_token();
-        while token.kind != TokenKind::Eof {
-            self.tokens.push(token);
+        while token.kind() != TokenKind::Eof {
+            tokens.push(token);
             token = self.parse_token();
         }
-        &self.tokens
-    }
-
-    pub fn consume_token(&mut self) {
-        self.curr_token_index += 1;
-    }
-
-    #[must_use]
-    pub fn token(&self) -> Option<&Token> {
-        return self.token_lookahead(0);
-    }
-
-    #[must_use]
-    pub fn token_lookahead(&self, offset: i32) -> Option<&Token> {
-        if self.curr_token_index as i32 + offset >= self.tokens.len() as i32
-            || self.curr_token_index as i32 + offset < 0
-        {
-            return None;
-        }
-        Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
-    }
-
-    #[must_use]
-    pub fn token_value(&self) -> Option<String> {
-        if let Some(token) = self.token() {
-            if let Some(value) = &token.value {
-                return Some(String::from(value));
-            }
-        }
-        None
+        tokens
     }
 
     fn parse_token(&mut self) -> Token {
@@ -416,7 +390,7 @@ impl Lexer {
         }
 
         if c == char::default() {
-            self.error_diag().handle("Missing end of string");
+            self.error_diag.borrow_mut().handle("Unterminated string.");
             return Token {
                 kind: TokenKind::Fiber,
                 row: self.row,
@@ -489,8 +463,5 @@ impl Lexer {
             col: self.col,
             value: Some(buf),
         }
-    }
-    pub fn error_diag(&mut self) -> &mut ErrorDiagnosis {
-        &mut self.error_diag
     }
 }

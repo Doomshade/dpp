@@ -1,4 +1,27 @@
-use std::fmt::Error;
+use std::error::Error;
+use std::fmt::{format, Debug, Display, Formatter};
+
+pub struct SyntaxError {
+    error_messages: Vec<String>,
+}
+
+impl Debug for SyntaxError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Syntax error")?;
+        for error_message in &self.error_messages {
+            writeln!(f, "{}", error_message)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for SyntaxError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Syntax error")
+    }
+}
+
+impl Error for SyntaxError {}
 
 #[derive(Debug)]
 struct ErrorMessage {
@@ -26,24 +49,29 @@ impl ErrorDiagnosis {
     }
 
     pub fn handle_error_at(&mut self, row: u32, col: u32, error: &str) {
-        self.error_messages.push(ErrorMessage {
+        let message = ErrorMessage {
             row,
             col,
             message: String::from(error),
-        });
+        };
+        self.error_messages.push(message);
     }
 
-    pub fn check_errors(&self) -> Result<(), Error> {
-        if self.error_messages.is_empty() {
+    pub fn check_errors(&self) -> Result<(), SyntaxError> {
+        let error_messages = &self.error_messages;
+        if error_messages.is_empty() {
             return Ok(());
         }
+        let mut errors = Vec::new();
 
-        for error_message in &self.error_messages {
-            println!(
-                "{}:{}:{}: error: {}",
+        for error_message in error_messages {
+            errors.push(format!(
+                "{}:{}:{}: {}",
                 self.file_name, error_message.row, error_message.col, error_message.message
-            );
+            ));
         }
-        Err(Error)
+        Err(SyntaxError {
+            error_messages: errors,
+        })
     }
 }

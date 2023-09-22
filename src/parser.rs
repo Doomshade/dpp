@@ -1,10 +1,15 @@
+use crate::error_diagnosis::ErrorDiagnosis;
+use std::cell::RefCell;
 use std::fmt::Debug;
+use std::rc::Rc;
 
-use crate::lexer::{Lexer, TokenKind};
+use crate::lexer::{Token, TokenKind};
 
 #[derive(Debug)]
 pub struct Parser {
-    lexer: Lexer,
+    tokens: Rc<Vec<Token>>,
+    error_diag: Rc<RefCell<ErrorDiagnosis>>,
+    curr_token_index: usize,
 }
 
 #[derive(Debug)]
@@ -129,12 +134,33 @@ pub enum UnaryOperator {
 }
 
 impl Parser {
-    pub fn new(lexer: Lexer) -> Self {
-        Self { lexer }
+    pub fn new(tokens: Rc<Vec<Token>>, error_diag: Rc<RefCell<ErrorDiagnosis>>) -> Self {
+        Self {
+            tokens,
+            curr_token_index: 0,
+            error_diag,
+        }
     }
 
+    fn consume_token(&mut self) {
+        self.curr_token_index += 1;
+    }
+
+    #[must_use]
+    fn token(&self) -> Option<&Token> {
+        return self.token_offset(0);
+    }
+
+    #[must_use]
+    fn token_offset(&self, offset: i32) -> Option<&Token> {
+        if self.curr_token_index as i32 + offset >= self.tokens.len() as i32
+            || self.curr_token_index as i32 + offset < 0
+        {
+            return None;
+        }
+        Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
+    }
     pub fn parse(&mut self) -> TranslationUnit {
-        self.lexer.lex();
         self.translation_unit()
     }
 
@@ -200,20 +226,18 @@ impl Parser {
     }
 
     fn binop(&mut self, op_matcher: fn(&TokenKind) -> BinaryOperator) -> BinaryOperator {
-        let lexer = &mut self.lexer;
-        let operator = lexer.token().expect("Failed to get token");
-        let kind = &operator.kind;
+        let operator = self.token().expect("Failed to get token");
+        let kind = &operator.kind();
         let op = op_matcher(kind);
-        lexer.consume_token();
+        self.consume_token();
         op
     }
 
     fn unop(&mut self, op_matcher: fn(&TokenKind) -> UnaryOperator) -> UnaryOperator {
-        let lexer = &mut self.lexer;
-        let operator = lexer.token().expect("Failed to get token");
-        let kind = &operator.kind;
+        let operator = self.token().expect("Failed to get token");
+        let kind = &operator.kind();
         let op = op_matcher(kind);
-        lexer.consume_token();
+        self.consume_token();
         op
     }
 
@@ -294,20 +318,19 @@ impl Parser {
     }
 
     fn data_type(&mut self) -> Option<DataType> {
-        let lexer = &mut self.lexer;
-        if let Some(token) = lexer.token() {
-            return match token.kind {
+        if let Some(token) = self.token() {
+            return match token.kind() {
                 TokenKind::PpType => {
-                    lexer.consume_token();
+                    self.consume_token();
                     Some(DataType::Pp)
                 }
-                _ => Self::struct_(lexer),
+                _ => self.struct_(),
             };
         }
         None
     }
 
-    fn struct_(_lexer: &mut Lexer) -> Option<DataType> {
+    fn struct_(&mut self) -> Option<DataType> {
         todo!()
     }
 
@@ -476,19 +499,17 @@ impl Parser {
     }
 
     fn matches_token_kind(&self, token_kind: TokenKind) -> bool {
-        let lexer = &self.lexer;
-        if let Some(token) = lexer.token() {
-            return token.kind == token_kind;
+        if let Some(token) = self.token() {
+            return token.kind() == token_kind;
         }
         false
     }
 
     fn match_token_maybe(&mut self, token_kind: TokenKind) -> Option<String> {
-        let lexer = &mut self.lexer;
-        if let Some(token) = lexer.token() {
-            if token.kind == token_kind {
+        if let Some(token) = self.token() {
+            if token.kind() == token_kind {
                 let token_value = token.value();
-                lexer.consume_token();
+                self.consume_token();
                 return token_value;
             }
         }
@@ -497,23 +518,22 @@ impl Parser {
     }
 
     fn match_token(&mut self, token_kind: TokenKind, error_message: &str) -> String {
-        let lexer = &mut self.lexer;
-        if let Some(token) = lexer.token() {
-            if token.kind == token_kind {
+        if let Some(token) = self.token() {
+            if token.kind() == token_kind {
                 let token_value = token.value();
-                lexer.consume_token();
+                self.consume_token();
                 if let Some(token_value) = token_value {
                     return token_value;
                 }
             }
-            if let Some(prev_token) = lexer.token_lookahead(-1) {
-                let row = prev_token.row();
+            if let Some(prev_token) = self.token_offset(-1) {
+                let row = prev_token.row() + 1;
                 let col = prev_token.col() + 1;
-                self.lexer
-                    .error_diag()
+                self.error_diag
+                    .borrow_mut()
                     .handle_error_at(row, col, error_message);
             } else {
-                self.lexer.error_diag().handle("No token found");
+                self.error_diag.borrow_mut().handle("No token found");
             }
         }
         return String::new();
@@ -528,8 +548,5 @@ impl Parser {
             return ret_from_something;
         }
         panic!("{}", error_message)
-    }
-    pub fn lexer(&self) -> &Lexer {
-        &self.lexer
     }
 }
