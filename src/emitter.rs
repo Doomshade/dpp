@@ -163,6 +163,7 @@ impl Emitter {
             }
             Expression::FunctionCall { .. } => panic!("Not implemeneted"),
             Expression::AssignmentExpression { .. } => panic!("Not implemeneted"),
+            Expression::EmptyExpression => panic!("Not implemeneted"),
         }
     }
 
@@ -189,6 +190,7 @@ impl Emitter {
             BinaryOperator::GreaterThanOrEqual => todo!("Not implemented"),
             BinaryOperator::LessThan => todo!("Not implemented"),
             BinaryOperator::LessThanOrEqual => todo!("Not implemented"),
+            BinaryOperator::EmptyOperator => todo!("Not implemented"),
         };
         self._push("eax", writer)?;
 

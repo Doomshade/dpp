@@ -45,6 +45,12 @@ pub enum Statement {
     EmptyStatement,
 }
 
+impl Default for Statement {
+    fn default() -> Self {
+        EmptyStatement
+    }
+}
+
 #[derive(Debug)]
 pub struct TranslationUnit {
     pub functions: Vec<Function>,
@@ -70,7 +76,7 @@ pub struct Parameter {
     pub data_type: DataType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Variable {
     pub identifier: String,
     pub data_type: DataType,
@@ -79,6 +85,14 @@ pub struct Variable {
 #[derive(Debug)]
 pub struct Block {
     pub statements: Vec<Statement>,
+}
+
+impl Default for Block {
+    fn default() -> Self {
+        Block {
+            statements: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -104,18 +118,40 @@ pub enum Expression {
     AssignmentExpression {
         expression: Box<Expression>,
     },
+    EmptyExpression,
 }
 
-#[derive(Debug, Copy, Clone)]
+impl Default for Expression {
+    fn default() -> Self {
+        Expression::EmptyExpression
+    }
+}
+
+#[derive(Debug)]
 pub enum DataType {
     Pp,
     Struct(Struct),
+    EmptyDataType,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Struct {}
+impl Default for DataType {
+    fn default() -> Self {
+        DataType::EmptyDataType
+    }
+}
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
+pub enum Struct {
+    EmptyStruct,
+}
+
+impl Default for Struct {
+    fn default() -> Self {
+        Struct::EmptyStruct
+    }
+}
+
+#[derive(Debug)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -127,12 +163,26 @@ pub enum BinaryOperator {
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
+    EmptyOperator,
 }
 
-#[derive(Copy, Clone, Debug)]
+impl Default for BinaryOperator {
+    fn default() -> Self {
+        BinaryOperator::EmptyOperator
+    }
+}
+
+#[derive(Debug)]
 pub enum UnaryOperator {
     Not,
     Negate,
+    EmptyOperator,
+}
+
+impl Default for UnaryOperator {
+    fn default() -> Self {
+        UnaryOperator::EmptyOperator
+    }
 }
 
 impl Parser {
@@ -197,8 +247,8 @@ impl Parser {
         let parameters = self.parameters();
         self.match_token(TokenKind::CloseParen);
         self.match_token(TokenKind::Colon);
-        let return_type = self.match_something(Self::data_type, "data type")?;
-        let block = self.match_something(Self::block, "block")?;
+        let return_type = self.match_something(Self::data_type, "data type");
+        let block = self.match_something(Self::block, "block");
 
         Some(Function {
             identifier,
@@ -215,7 +265,7 @@ impl Parser {
         self.match_token(TokenKind::Colon);
         let data_type = self.data_type()?;
         let statement = if self.match_token_maybe(TokenKind::Equal).is_some() {
-            let expression = self.match_something(Self::expression, "expression")?;
+            let expression = self.match_something(Self::expression, "expression");
             Statement::VariableDeclarationAndAssignment {
                 identifier,
                 data_type,
@@ -262,7 +312,7 @@ impl Parser {
     fn parameter(&mut self) -> Option<Parameter> {
         let identifier = self.match_token_maybe(TokenKind::Identifier)?;
         self.match_token(TokenKind::Colon);
-        let data_type = self.match_something(Self::data_type, "data type")?;
+        let data_type = self.match_something(Self::data_type, "data type");
         Some(Parameter {
             identifier,
             data_type,
@@ -285,12 +335,12 @@ impl Parser {
             return Some(variable_declaration);
         } else if self.match_token_maybe(TokenKind::IfKeyword).is_some() {
             self.match_token(TokenKind::OpenParen);
-            let expression = self.match_something(Self::expression, "expression")?;
+            let expression = self.match_something(Self::expression, "expression");
             self.match_token(TokenKind::CloseParen);
 
-            let statement = self.match_something(Self::statement, "statement")?;
+            let statement = self.match_something(Self::statement, "statement");
             return if self.match_token_maybe(TokenKind::ElseKeyword).is_some() {
-                let else_statement = self.match_something(Self::statement, "statement")?;
+                let else_statement = self.match_something(Self::statement, "statement");
                 Some(Statement::IfElseStatement {
                     expression,
                     statement: Box::new(statement),
@@ -307,7 +357,7 @@ impl Parser {
                 block: Box::new(block),
             });
         } else if self.match_token_maybe(TokenKind::ByeKeyword).is_some() {
-            let expression = self.match_something(Self::expression, "expression")?;
+            let expression = self.match_something(Self::expression, "expression");
             self.match_token(TokenKind::Semicolon);
 
             return Some(Statement::ReturnStatement { expression });
@@ -355,7 +405,7 @@ impl Parser {
                     TokenKind::EqualEqual => BinaryOperator::Equal,
                     _ => unreachable!(),
                 });
-                let rhs = self.match_something(Self::comparison, "expression")?;
+                let rhs = self.match_something(Self::comparison, "expression");
                 expression = Some(Expression::BinaryExpression {
                     lhs: Box::new(expression.unwrap()),
                     op,
@@ -382,7 +432,7 @@ impl Parser {
                     TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
                     _ => unreachable!(),
                 });
-                let rhs = self.match_something(Self::term, "expression")?;
+                let rhs = self.match_something(Self::term, "expression");
                 expression = Some(Expression::BinaryExpression {
                     lhs: Box::new(expression.unwrap()),
                     op,
@@ -466,7 +516,7 @@ impl Parser {
 
                 Some(Expression::FunctionCall { arguments })
             } else if self.match_token_maybe(TokenKind::Equal).is_some() {
-                let expression = self.match_something(Self::expression, "expression")?;
+                let expression = self.match_something(Self::expression, "expression");
                 Some(Expression::AssignmentExpression {
                     expression: Box::new(expression),
                 })
@@ -482,7 +532,7 @@ impl Parser {
         } else if let Some(fiber) = self.match_token_maybe(TokenKind::FiberType) {
             return Some(Expression::FiberExpression(fiber));
         } else if self.match_token_maybe(TokenKind::OpenParen).is_some() {
-            let expression = self.match_something(Self::expression, "expression")?;
+            let expression = self.match_something(Self::expression, "expression");
             self.match_token(TokenKind::CloseParen);
             return Some(expression);
         }
@@ -543,17 +593,17 @@ impl Parser {
         return String::new();
     }
 
-    fn match_something<T>(
+    fn match_something<T: Default>(
         &mut self,
         grammar_func: fn(&mut Parser) -> Option<T>,
         error_message: &str,
-    ) -> Option<T> {
+    ) -> T {
         if let Some(ret_from_something) = grammar_func(self) {
-            return Some(ret_from_something);
+            return ret_from_something;
         }
         self.error_diag
             .borrow_mut()
             .expected_something_error(error_message, self.token_offset(-1));
-        None
+        T::default()
     }
 }
