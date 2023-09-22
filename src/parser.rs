@@ -500,8 +500,13 @@ impl Parser {
                 }
                 return String::new();
             }
+            if let Some(prev_token) = lexer.token_lookahead(-1) {
+                let row = prev_token.row();
+                let col = prev_token.col() + 1;
+                panic!("{}:{} - {}", row, col, error_message)
+            }
         }
-        panic!("{}", error_message)
+        panic!("No token found")
     }
 
     fn match_something<T>(

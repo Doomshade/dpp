@@ -73,15 +73,25 @@ pub enum DataType {
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub value: Option<String>,
+    row: u32,
+    col: u32,
+    value: Option<String>,
 }
 
 impl Token {
-    #[must_use] pub fn value(&self) -> Option<String> {
+    #[must_use]
+    pub fn value(&self) -> Option<String> {
         if let Some(val) = &self.value {
             return Some(String::from(val));
         }
         None
+    }
+
+    pub fn row(&self) -> u32 {
+        self.row
+    }
+    pub fn col(&self) -> u32 {
+        self.col
     }
 }
 
@@ -148,8 +158,8 @@ pub struct Lexer {
     position: usize,
     tokens: Vec<Token>,
     curr_token_index: usize,
-    row: usize,
-    col: usize,
+    row: u32,
+    col: u32,
 }
 
 impl Lexer {
@@ -168,7 +178,7 @@ impl Lexer {
 
     pub fn reset(&mut self) {
         self.tokens.clear();
-        self.row = 0;
+        self.row = 1;
         self.col = 0;
         self.curr_token_index = 0;
         self.position = 0;
@@ -193,11 +203,13 @@ impl Lexer {
     }
 
     #[must_use]
-    pub fn token_lookahead(&self, ahead: usize) -> Option<&Token> {
-        if self.curr_token_index + ahead >= self.tokens.len() {
+    pub fn token_lookahead(&self, ahead: i32) -> Option<&Token> {
+        if self.curr_token_index as i32 + ahead >= self.tokens.len() as i32
+            || self.curr_token_index as i32 + ahead < 0
+        {
             return None;
         }
-        Some(&self.tokens[self.curr_token_index + ahead])
+        Some(&self.tokens[(self.curr_token_index as i32 + ahead) as usize])
     }
 
     #[must_use]
@@ -214,6 +226,8 @@ impl Lexer {
         let token = match self.peek() {
             '\0' => Ok(Token {
                 kind: TokenKind::Eof,
+                row: self.row,
+                col: self.col,
                 value: None,
             }),
             'a'..='z' | 'A'..='Z' | '_' => Ok(self.handle_identifier()),
@@ -266,6 +280,8 @@ impl Lexer {
         self.consume();
         Token {
             kind: TokenKind::Character,
+            row: self.row,
+            col: self.col,
             value: Some(String::from(c)),
         }
     }
@@ -276,6 +292,8 @@ impl Lexer {
 
         Token {
             kind: TokenKind::Unknown,
+            row: self.row,
+            col: self.col,
             value: Some(String::from(c)),
         }
     }
@@ -292,6 +310,8 @@ impl Lexer {
 
         Token {
             kind: TokenKind::Comment,
+            row: self.row,
+            col: self.col,
             value: None,
         }
     }
@@ -331,6 +351,8 @@ impl Lexer {
 
         Token {
             kind,
+            row: self.row,
+            col: self.col,
             value: Some(buf),
         }
     }
@@ -354,19 +376,27 @@ impl Lexer {
 
         Token {
             kind,
+            row: self.row,
+            col: self.col,
             value: Some(String::from(c)),
         }
     }
 
     fn handle_whitespace(&mut self) -> Token {
         let mut c = self.peek();
-        while c.is_whitespace() || c == '\r' {
+        while c.is_whitespace() {
             self.consume();
+            if c == '\n' {
+                self.row += 1;
+                self.col = 0;
+            }
             c = self.peek();
         }
 
         Token {
             kind: TokenKind::Whitespace,
+            row: self.row,
+            col: self.col,
             value: None,
         }
     }
@@ -402,6 +432,8 @@ impl Lexer {
 
         Ok(Token {
             kind: TokenKind::Fiber,
+            row: self.row,
+            col: self.col,
             value: Some(buf),
         })
     }
@@ -418,6 +450,8 @@ impl Lexer {
 
         Token {
             kind: TokenKind::Number,
+            row: self.row,
+            col: self.col,
             value: Some(buf),
         }
     }
@@ -454,6 +488,8 @@ impl Lexer {
 
         Token {
             kind: token_kind,
+            row: self.row,
+            col: self.col,
             value: Some(buf),
         }
     }

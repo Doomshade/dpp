@@ -13,6 +13,7 @@ use crate::parser::Parser;
 
 pub mod ast;
 pub mod emitter;
+pub mod error_handler;
 pub mod lexer;
 pub mod parser;
 

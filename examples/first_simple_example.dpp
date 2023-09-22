@@ -13,7 +13,7 @@ FUNc test(aa: pp, bb: pp): pp {
         }
     }
     testasd = 123;
-    testasd = test + 4 * 2 - 1;
+    testasd = test + 4 * 2 - 1 + 2;
 
     if (123) {
         let test: pp = yem;
