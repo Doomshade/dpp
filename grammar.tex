@@ -16,20 +16,20 @@
         \ebnfnodett{transl-unit}{( function | var-decl )*}
 %        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}
 %        \ebnfnodett{struct-field}{var-decl ";"}
-        \ebnfnodett{function}{"FUNc" IDENTIFIER "(" parameters? ")" ":" data-type block}
-        \ebnfnodett{parameters}{parameter ("," parameter)*}
-        \ebnfnodett{parameter}{IDENTIFIER ":" data-type}
-        \ebnfnodett{block}{"\{" statement* "\}"}
-        \ebnfnode{\ttt{statement}}
+        \ebnfnodett{function}{"FUNc" IDENT "(" params? ")" ":" data-type block}
+        \ebnfnodett{params}{param ("," param)*}
+        \ebnfnodett{param}{IDENT ":" data-type}
+        \ebnfnodett{block}{"\{" stat* "\}"}
+        \ebnfnode{\ttt{stat}}
         {%
             \ttt{var-decl}\\
-            &\ttt{ | "if" "(" expression ")" statement ( "else" statement )?}\\
+            &\ttt{ | "if" "(" expr ")" stat ( "else" stat )?}\\
             &\ttt{ | block }\\
-            &\ttt{ | "bye" expression ";" }\\
-            &\ttt{ | expression ";" }\\
+            &\ttt{ | "bye" expr ";" }\\
+            &\ttt{ | expr ";" }\\
             &\ttt{ | ";" }
         }
-        \ebnfnodett{var-decl}{"let" IDENTIFIER ":" data-type ( "=" expression )? ";"}
+        \ebnfnodett{var-decl}{"let" IDENT ":" data-type ( "=" expr )? ";"}
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\
@@ -41,18 +41,18 @@
             &\ttt{ | "booba"}\\
             &\ttt{ | struct}
         }
-        \ebnfnodett{struct}{IDENTIFIER}
-        \ebnfnodett{expression}{equality}
-        \ebnfnodett{equality}{comparison ( ( "!=" | "==" ) comparison )*}
-        \ebnfnodett{comparison}{term ( ( ">" | ">=" | "<" | "<=" ) term )*}
+        \ebnfnodett{struct}{IDENT}
+        \ebnfnodett{expr}{equ}
+        \ebnfnodett{equ}{comp ( ( "!=" | "==" ) comp )*}
+        \ebnfnodett{comp}{term ( ( ">" | ">=" | "<" | "<=" ) term )*}
         \ebnfnodett{term}{factor ( ( "-" | "+" ) factor )*}
         \ebnfnodett{factor}{unary ( ( "/" | "*" ) unary )*}
         \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
         \ebnfnode{\ttt{primary}}
         {%
-            \ttt{IDENTIFIER ( "(" IDENTIFIER ( "," IDENTIFIER )* ")"}\\
-            &\ttt{ | "=" expression )? | NUMBER | STRING}\\
-            &\ttt{ | "yem" | "nom" | "(" expression ")"}
+            \ttt{IDENT ( "(" expr ( "," expr )* ")" | "=" expr )?}\\
+            &\ttt{ | NUMBER | STRING}\\
+            &\ttt{ | "yem" | "nom" | "(" expr ")"}
         }
     \end{align*}
 \end{document}

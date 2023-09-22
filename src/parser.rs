@@ -1,10 +1,9 @@
-use crate::error_diagnosis::ErrorDiagnosis;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
+use crate::error_diagnosis::ErrorDiagnosis;
 use crate::lexer::{Token, TokenKind};
-use crate::parser::Statement::EmptyStatement;
 
 #[derive(Debug)]
 pub struct Parser {
@@ -43,11 +42,12 @@ pub enum Statement {
         expression: Expression,
     },
     EmptyStatement,
+    InvalidStatement,
 }
 
 impl Default for Statement {
     fn default() -> Self {
-        EmptyStatement
+        Self::InvalidStatement
     }
 }
 
@@ -105,9 +105,11 @@ pub enum Expression {
         identifier: String,
     },
     FunctionCall {
+        identifier: String,
         arguments: Vec<Expression>,
     },
     AssignmentExpression {
+        identifier: String,
         expression: Box<Expression>,
     },
     EmptyExpression,
@@ -358,7 +360,7 @@ impl Parser {
 
             return Some(Statement::ExpressionStatement { expression });
         } else if self.match_token_maybe(TokenKind::Semicolon).is_some() {
-            return Some(EmptyStatement);
+            return Some(Statement::EmptyStatement);
         }
 
         None
@@ -391,12 +393,13 @@ impl Parser {
         while self.matches_token_kind(TokenKind::BangEqual)
             || self.matches_token_kind(TokenKind::EqualEqual)
         {
+            let op = self.binop(|kind| match kind {
+                TokenKind::BangEqual => BinaryOperator::NotEqual,
+                TokenKind::EqualEqual => BinaryOperator::Equal,
+                _ => unreachable!(),
+            });
+
             if let Some(expression) = comparison {
-                let op = self.binop(|kind| match kind {
-                    TokenKind::BangEqual => BinaryOperator::NotEqual,
-                    TokenKind::EqualEqual => BinaryOperator::Equal,
-                    _ => unreachable!(),
-                });
                 let rhs = self.match_something(Self::comparison, "expression");
                 comparison = Some(Expression::BinaryExpression {
                     lhs: Box::new(expression),
@@ -416,14 +419,14 @@ impl Parser {
             || self.matches_token_kind(TokenKind::Less)
             || self.matches_token_kind(TokenKind::LessEqual)
         {
+            let op = self.binop(|kind| match kind {
+                TokenKind::Greater => BinaryOperator::GreaterThan,
+                TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
+                TokenKind::Less => BinaryOperator::LessThan,
+                TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
+                _ => unreachable!(),
+            });
             if let Some(expression) = term {
-                let op = self.binop(|kind| match kind {
-                    TokenKind::Greater => BinaryOperator::GreaterThan,
-                    TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
-                    TokenKind::Less => BinaryOperator::LessThan,
-                    TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
-                    _ => unreachable!(),
-                });
                 let rhs = self.match_something(Self::term, "expression");
                 term = Some(Expression::BinaryExpression {
                     lhs: Box::new(expression),
@@ -439,12 +442,12 @@ impl Parser {
         let mut factor = self.factor();
 
         while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
+            let op = self.binop(|kind| match kind {
+                TokenKind::Dash => BinaryOperator::Subtract,
+                TokenKind::Plus => BinaryOperator::Add,
+                _ => unreachable!(),
+            });
             if let Some(expression) = factor {
-                let op = self.binop(|kind| match kind {
-                    TokenKind::Dash => BinaryOperator::Subtract,
-                    TokenKind::Plus => BinaryOperator::Add,
-                    _ => unreachable!(),
-                });
                 let rhs = self.match_something(Self::factor, "expression");
                 factor = Some(Expression::BinaryExpression {
                     lhs: Box::new(expression),
@@ -458,26 +461,26 @@ impl Parser {
     }
 
     fn factor(&mut self) -> Option<Expression> {
-        let mut expression = self.unary();
+        let mut unary = self.unary();
 
         while self.matches_token_kind(TokenKind::ForwardSlash)
             || self.matches_token_kind(TokenKind::Star)
         {
-            if expression.is_some() {
-                let op = self.binop(|kind| match kind {
-                    TokenKind::ForwardSlash => BinaryOperator::Divide,
-                    TokenKind::Star => BinaryOperator::Multiply,
-                    _ => unreachable!(),
-                });
+            let op = self.binop(|kind| match kind {
+                TokenKind::ForwardSlash => BinaryOperator::Divide,
+                TokenKind::Star => BinaryOperator::Multiply,
+                _ => unreachable!(),
+            });
+            if let Some(expression) = unary {
                 let rhs = self.match_something(Self::unary, "expression");
-                expression = Some(Expression::BinaryExpression {
-                    lhs: Box::new(expression.unwrap()),
+                unary = Some(Expression::BinaryExpression {
+                    lhs: Box::new(expression),
                     op,
                     rhs: Box::new(rhs),
                 });
             }
         }
-        expression
+        unary
     }
 
     fn unary(&mut self) -> Option<Expression> {
@@ -503,10 +506,14 @@ impl Parser {
                 let arguments = self.arguments();
                 self.match_token(TokenKind::CloseParen);
 
-                Some(Expression::FunctionCall { arguments })
+                Some(Expression::FunctionCall {
+                    identifier,
+                    arguments,
+                })
             } else if self.match_token_maybe(TokenKind::Equal).is_some() {
                 let expression = self.match_something(Self::expression, "expression");
                 Some(Expression::AssignmentExpression {
+                    identifier,
                     expression: Box::new(expression),
                 })
             } else {

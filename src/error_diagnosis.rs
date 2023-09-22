@@ -1,4 +1,3 @@
-
 use crate::lexer::{Token, TokenKind};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -39,7 +38,8 @@ pub struct ErrorDiagnosis {
 }
 
 impl ErrorDiagnosis {
-    #[must_use] pub fn new(file_name: &str) -> Self {
+    #[must_use]
+    pub fn new(file_name: &str) -> Self {
         Self {
             file_name: String::from(file_name),
             error_messages: Vec::new(),
@@ -47,7 +47,7 @@ impl ErrorDiagnosis {
     }
 
     pub fn handle(&mut self, error: &str) {
-        self.handle_error_at(0, 0, error)
+        self.handle_error_at(0, 0, error);
     }
 
     pub fn invalid_token_error(&mut self, token: &Token) {

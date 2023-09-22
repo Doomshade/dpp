@@ -8,7 +8,7 @@ FUNc test(aa: pp, bb: pp): pp {
     let asd: pp = "aaaaaaaaaaa";
     let asd: pp = aa == bb;
     let aa: pp = (a + (a(abc))) + c;
-    abcd(123 > 2, test(yem) < 5);
+    abcd(a > 2, test(yem) < 5);
     {
         {
             let a: pp;
