@@ -1,6 +1,6 @@
-use crate::error_diagnosis::ErrorDiagnosis;
 use std::fmt::{Display, Formatter};
-use std::rc::Rc;
+
+use crate::error_diagnosis::ErrorDiagnosis;
 
 #[derive(Debug)]
 pub struct SyntaxError {
@@ -228,24 +228,24 @@ impl Lexer {
 
     fn parse_token(&mut self) -> Result<Token, SyntaxError> {
         let token = match self.peek() {
-            '\0' => Ok(Token {
+            '\0' => Token {
                 kind: TokenKind::Eof,
                 row: self.row,
                 col: self.col,
                 value: None,
-            }),
-            'a'..='z' | 'A'..='Z' | '_' => Ok(self.handle_identifier()),
-            '0'..='9' => Ok(self.handle_number()),
+            },
+            'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
+            '0'..='9' => self.handle_number(),
             '"' => self.handle_string(),
-            ' ' | '\t' | '\n' | '\r' => Ok(self.handle_whitespace()),
-            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => Ok(self.handle_punctuation()),
+            ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
+            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.handle_punctuation(),
             '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
-                Ok(self.handle_operator())
+                self.handle_operator()
             }
-            '#' => Ok(self.handle_comment()),
-            '\'' => Ok(self.handle_char()),
-            _ => Ok(self.handle_unknown()),
-        }?;
+            '#' => self.handle_comment(),
+            '\'' => self.handle_char(),
+            _ => self.handle_unknown(),
+        };
 
         if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
             return self.parse_token();
@@ -405,7 +405,7 @@ impl Lexer {
         }
     }
 
-    fn handle_string(&mut self) -> Result<Token, SyntaxError> {
+    fn handle_string(&mut self) -> Token {
         let mut buf = String::with_capacity(256);
         // Consume the opening quote.
         self.consume();
@@ -424,22 +424,23 @@ impl Lexer {
         }
 
         if c == char::default() {
-            return Err(SyntaxError {
-                file: file!().to_string(),
-                row: line!() as usize,
-                col: column!() as usize,
-                message: String::from("Missing end of string"),
-            });
+            self.error_diag().handle("Missing end of string");
+            return Token {
+                kind: TokenKind::Fiber,
+                row: self.row,
+                col: self.col,
+                value: Some(buf),
+            };
         }
         // Consume the closing quote.
         self.consume();
 
-        Ok(Token {
+        Token {
             kind: TokenKind::Fiber,
             row: self.row,
             col: self.col,
             value: Some(buf),
-        })
+        }
     }
 
     fn handle_number(&mut self) -> Token {
