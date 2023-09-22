@@ -134,8 +134,7 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> TranslationUnit {
-        self.lexer.reset();
-        self.lexer.lex().expect("LUL");
+        self.lexer.lex();
         self.translation_unit()
     }
 

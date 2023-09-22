@@ -180,21 +180,13 @@ impl Lexer {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.tokens.clear();
-        self.row = 1;
-        self.col = 0;
-        self.curr_token_index = 0;
-        self.position = 0;
-    }
-
-    pub fn lex(&mut self) -> Result<(), SyntaxError> {
-        let mut token = self.parse_token()?;
+    pub fn lex(&mut self) -> &Vec<Token> {
+        let mut token = self.parse_token();
         while token.kind != TokenKind::Eof {
             self.tokens.push(token);
-            token = self.parse_token()?;
+            token = self.parse_token();
         }
-        Ok(())
+        &self.tokens
     }
 
     pub fn consume_token(&mut self) {
@@ -207,13 +199,13 @@ impl Lexer {
     }
 
     #[must_use]
-    pub fn token_lookahead(&self, ahead: i32) -> Option<&Token> {
-        if self.curr_token_index as i32 + ahead >= self.tokens.len() as i32
-            || self.curr_token_index as i32 + ahead < 0
+    pub fn token_lookahead(&self, offset: i32) -> Option<&Token> {
+        if self.curr_token_index as i32 + offset >= self.tokens.len() as i32
+            || self.curr_token_index as i32 + offset < 0
         {
             return None;
         }
-        Some(&self.tokens[(self.curr_token_index as i32 + ahead) as usize])
+        Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
     }
 
     #[must_use]
@@ -226,7 +218,7 @@ impl Lexer {
         None
     }
 
-    fn parse_token(&mut self) -> Result<Token, SyntaxError> {
+    fn parse_token(&mut self) -> Token {
         let token = match self.peek() {
             '\0' => Token {
                 kind: TokenKind::Eof,
@@ -250,7 +242,7 @@ impl Lexer {
         if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
             return self.parse_token();
         }
-        Ok(token)
+        token
     }
 
     fn peek(&self) -> char {
