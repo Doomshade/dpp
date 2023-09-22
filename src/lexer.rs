@@ -82,6 +82,16 @@ pub struct Token {
     value: Option<String>,
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(value) = &self.value {
+            write!(f, "{} ({})", value, self.kind)
+        } else {
+            write!(f, "{}", self.kind)
+        }
+    }
+}
+
 impl Token {
     #[must_use]
     pub fn value(&self) -> Option<String> {
@@ -107,8 +117,6 @@ impl Token {
 pub enum TokenKind {
     Identifier,
     Number,
-    Fiber,
-    Character,
     BangEqual,
     Comment,
     Whitespace,
@@ -156,8 +164,69 @@ pub enum TokenKind {
     NoppType,      // void
     PType,         // char
     BoobaType,     // bool
-    ThreadType,    // String
+    FiberType,     // String
     ElseKeyword,
+    DoubleQuote,
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let text_representation = match self {
+            TokenKind::Identifier => "identifier",
+            TokenKind::Number => "number",
+            TokenKind::FiberType => "fiber",
+            TokenKind::BangEqual => "\"!=\"",
+            TokenKind::Comment => "",
+            TokenKind::Whitespace => "",
+            TokenKind::Eof => "",
+            TokenKind::Unknown => "",
+            TokenKind::EqualEqual => "\"==\"",
+            TokenKind::Equal => "\"=\"",
+            TokenKind::Bang => "\"!\"",
+            TokenKind::Star => "\"*\"",
+            TokenKind::ForwardSlash => "\"/\"",
+            TokenKind::BackSlash => "\"\\\"",
+            TokenKind::Plus => "\"+\"",
+            TokenKind::MinusEqual => "\"-=\"",
+            TokenKind::PlusEqual => "\"+=\"",
+            TokenKind::PlusDash => "\"+-\"",
+            TokenKind::Dash => "\"-\"",
+            TokenKind::Greater => "\">\"",
+            TokenKind::GreaterEqual => "\">=\"",
+            TokenKind::Less => "\"<\"",
+            TokenKind::LessEqual => "\"<=\"",
+            TokenKind::NomKeyword => "nom",
+            TokenKind::YemKeyword => "yem",
+            TokenKind::OpenParen => "\"(\"",
+            TokenKind::CloseParen => "\")\"",
+            TokenKind::OpenBrace => "\"{\"",
+            TokenKind::CloseBrace => "\"}\"",
+            TokenKind::OpenBracket => "\"[\"",
+            TokenKind::CloseBracket => "\"]\"",
+            TokenKind::Colon => "\":\"",
+            TokenKind::Semicolon => "\";\"",
+            TokenKind::Ampersand => "\"&\"",
+            TokenKind::Pipe => "\"|\"",
+            TokenKind::Comma => "\",\"",
+            TokenKind::IfKeyword => "if",
+            TokenKind::LetKeyword => "let",
+            TokenKind::ByeKeyword => "bye",
+            TokenKind::PprintKeyword => "pprint",
+            TokenKind::PpanicKeyword => "ppanic",
+            TokenKind::PpinKeyword => "ppin",
+            TokenKind::FUNcKeyword => "FUNc",
+            TokenKind::ElseKeyword => "else",
+            TokenKind::XxlppType => "data type \"xxlpp\"",
+            TokenKind::PpType => "data type \"pp\"",
+            TokenKind::SppType => "data type \"spp\"",
+            TokenKind::XsppType => "data type \"xspp\"",
+            TokenKind::PType => "data type \"p\"",
+            TokenKind::BoobaType => "data type \"booba\"",
+            TokenKind::NoppType => "void data type \"nopp\"",
+            TokenKind::DoubleQuote => "\"\"\"",
+        };
+        write!(f, "{}", text_representation)
+    }
 }
 
 #[derive(Debug)]
@@ -176,8 +245,8 @@ impl Lexer {
         Self {
             chars,
             position: 0,
-            row: 0,
-            col: 0,
+            row: 1,
+            col: 1,
             error_diag,
         }
     }
@@ -192,6 +261,24 @@ impl Lexer {
         tokens
     }
 
+    fn new_token_with_value(&self, kind: TokenKind, value: String) -> Token {
+        Token {
+            kind,
+            row: self.row,
+            col: self.col,
+            value: Some(value),
+        }
+    }
+
+    fn new_token(&self, kind: TokenKind) -> Token {
+        Token {
+            kind,
+            row: self.row,
+            col: self.col,
+            value: Some(String::from("")),
+        }
+    }
+
     fn parse_token(&mut self) -> Token {
         let token = match self.peek() {
             '\0' => Token {
@@ -202,14 +289,14 @@ impl Lexer {
             },
             'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
             '0'..='9' => self.handle_number(),
-            '"' => self.handle_string(),
+            '"' => self.handle_fiber(),
             ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
             ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.handle_punctuation(),
             '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
                 self.handle_operator()
             }
             '#' => self.handle_comment(),
-            '\'' => self.handle_char(),
+            '\'' => self.handle_p(),
             _ => self.handle_unknown(),
         };
 
@@ -236,7 +323,7 @@ impl Lexer {
         self.position += 1;
     }
 
-    fn handle_char(&mut self) -> Token {
+    fn handle_p(&mut self) -> Token {
         // Consume opening quote.
         self.consume();
         let mut c = self.peek();
@@ -249,7 +336,7 @@ impl Lexer {
         // Consume closing quote.
         self.consume();
         Token {
-            kind: TokenKind::Character,
+            kind: TokenKind::PType,
             row: self.row,
             col: self.col,
             value: Some(String::from(c)),
@@ -358,7 +445,7 @@ impl Lexer {
             self.consume();
             if c == '\n' {
                 self.row += 1;
-                self.col = 0;
+                self.col = 1;
             }
             c = self.peek();
         }
@@ -371,7 +458,7 @@ impl Lexer {
         }
     }
 
-    fn handle_string(&mut self) -> Token {
+    fn handle_fiber(&mut self) -> Token {
         let mut buf = String::with_capacity(256);
         // Consume the opening quote.
         self.consume();
@@ -389,28 +476,24 @@ impl Lexer {
             }
         }
 
-        if c == char::default() || c == '\n' {
-            self.error_diag.borrow_mut().handle_error_at(
-                self.row + 1,
-                self.col + 1,
-                "Expected \"\"\"",
-            );
-            return Token {
-                kind: TokenKind::Fiber,
-                row: self.row,
-                col: self.col,
-                value: Some(buf),
-            };
+        if c == '"' {
+            // Consume the closing quote.
+            self.consume();
         }
-        // Consume the closing quote.
-        self.consume();
 
-        Token {
-            kind: TokenKind::Fiber,
+        let token = Token {
+            kind: TokenKind::FiberType,
             row: self.row,
             col: self.col,
             value: Some(buf),
+        };
+        if c != '"' {
+            self.error_diag
+                .borrow_mut()
+                .handle_unexpected_token(&token, TokenKind::DoubleQuote);
         }
+
+        token
     }
 
     fn handle_number(&mut self) -> Token {

@@ -26,15 +26,16 @@
             &\ttt{ | "if" "(" expression ")" statement ( "else" statement )?}\\
             &\ttt{ | block }\\
             &\ttt{ | "bye" expression ";" }\\
-            &\ttt{ | expression ";" }
+            &\ttt{ | expression ";" }\\
+            &\ttt{ | ";" }
         }
         \ebnfnodett{var-decl}{"let" IDENTIFIER ":" data-type ( "=" expression )? ";"}
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\
             &\ttt{ | "pp"}\\
-            &\ttt{ | "p"}\\
-            &\ttt{ | "spp"}\\
+            &\ttt{ | "sp"}\\
+            &\ttt{ | "xspp"}\\
             &\ttt{ | "p"}\\
             &\ttt{ | "nopp"}\\
             &\ttt{ | "booba"}\\

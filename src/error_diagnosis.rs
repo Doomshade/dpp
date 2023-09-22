@@ -1,3 +1,4 @@
+use crate::lexer::{Token, TokenKind};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -46,6 +47,24 @@ impl ErrorDiagnosis {
 
     pub fn handle(&mut self, error: &str) {
         self.handle_error_at(0, 0, error)
+    }
+
+    pub fn handle_invalid_token(&mut self, token: &Token) {
+        let message = ErrorMessage {
+            row: token.row(),
+            col: token.col(),
+            message: format!("Unexpected token: {}", token),
+        };
+        self.error_messages.push(message);
+    }
+
+    pub fn handle_unexpected_token(&mut self, token: &Token, expected_token_kind: TokenKind) {
+        let message = ErrorMessage {
+            row: token.row(),
+            col: token.col(),
+            message: format!("Expected {}.", expected_token_kind),
+        };
+        self.error_messages.push(message);
     }
 
     pub fn handle_error_at(&mut self, row: u32, col: u32, error: &str) {
