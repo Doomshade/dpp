@@ -28,10 +28,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let error_diag = Rc::new(RefCell::new(ErrorDiagnosis::new(path)));
     let mut lexer = Lexer::new(file.as_str(), error_diag.clone());
-    let tokens = Rc::new(lexer.lex());
-    error_diag.borrow().check_errors()?;
 
-    let translation_unit = Parser::new(tokens, error_diag.clone()).parse();
+    let translation_unit = Parser::new(Rc::new(lexer.lex()), error_diag.clone()).parse();
     error_diag.borrow().check_errors()?;
     let analyzer = SemanticAnalyzer::new(translation_unit);
     error_diag.clone().borrow().check_errors()?;

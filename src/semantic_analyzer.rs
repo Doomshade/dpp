@@ -1,4 +1,4 @@
-use crate::parser::{Parser, TranslationUnit};
+use crate::parser::TranslationUnit;
 
 pub struct SemanticAnalyzer {
     translation_unit: TranslationUnit,

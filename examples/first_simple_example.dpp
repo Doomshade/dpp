@@ -5,6 +5,7 @@ FUNc test(aa: pp, bb: pp): pp {
     let test: pp = (1 + 2) * 3 + 4 * 5;
     let test: pp = a >= a;
     let testasd: pp;
+    let asd: pp = "aa;
     let aa: pp = (a + (a(abc))) + c;
     abcd(123 > 2, test(yem) < 1);
     {
@@ -23,11 +24,11 @@ FUNc test(aa: pp, bb: pp): pp {
 
 FUNc hellyea(aa: pp, bb: pp): pp {
     let yup: pp = (1 + 2) * 3;
-    let nop: pp
+    let nop: pp;
     yup = 123;
-    nop = yup + 4 * 2 - 123
+    nop = yup + 4 * 2 - 123;
 
-    if 123 {
+    if (123) {
         let abc: pp = 123;
     } else if (456) {
         let def: pp = 1234;

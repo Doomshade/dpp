@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fmt::{format, Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 pub struct SyntaxError {
     error_messages: Vec<String>,

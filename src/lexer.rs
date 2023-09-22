@@ -377,7 +377,7 @@ impl Lexer {
         self.consume();
 
         let mut c = self.peek();
-        while c != char::default() && c != '"' {
+        while c != char::default() && c != '"' && c != '\n' {
             buf.push(c);
             self.consume();
             c = self.peek();
@@ -389,8 +389,12 @@ impl Lexer {
             }
         }
 
-        if c == char::default() {
-            self.error_diag.borrow_mut().handle("Unterminated string.");
+        if c == char::default() || c == '\n' {
+            self.error_diag.borrow_mut().handle_error_at(
+                self.row + 1,
+                self.col + 1,
+                "Expected \"\"\"",
+            );
             return Token {
                 kind: TokenKind::Fiber,
                 row: self.row,
