@@ -3,16 +3,25 @@ use std::io;
 use std::io::{BufWriter, Write};
 
 use crate::parser::{BinaryOperator, Block, Expression, Function, Statement, TranslationUnit};
+use crate::semantic_analyzer::SemanticAnalyzer;
 
-#[derive(Default)]
 pub struct Emitter {
     /// The number of bytes remaining on the stack. Each function will have its stack var
     /// eventually.
     stack: u32,
     label_count: usize,
+    semantic_analyzer: SemanticAnalyzer,
 }
 
 impl Emitter {
+    pub fn new(semantic_analyzer: SemanticAnalyzer) -> Self {
+        Self {
+            stack: 0,
+            label_count: 0,
+            semantic_analyzer,
+        }
+    }
+
     // pub fn emit(&mut self, file: &File) -> io::Result<()> {
     //     {
     //         let mut writer = BufWriter::new(file);
@@ -40,11 +49,9 @@ impl Emitter {
         Ok(())
     }
 
-    pub fn emit(
-        &mut self,
-        _translation_unit: TranslationUnit,
-        writer: &mut BufWriter<&File>,
-    ) -> io::Result<()> {
+    pub fn emit(&mut self, writer: &mut BufWriter<&File>) -> io::Result<()> {
+        let translation_unit = self.semantic_analyzer.analyze();
+        dbg!(&translation_unit);
         Self::start(writer)?;
         Self::end(writer)?;
         Ok(())

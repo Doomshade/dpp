@@ -12,7 +12,7 @@ FUNc test(aa: pp, bb: pp): pp {
             let a: pp;
         }
     }
-    testasd = 123;
+    testasd = 123
     testasd = test + 4 * 2 - 1 + 2;
 
     if (123) {

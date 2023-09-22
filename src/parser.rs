@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::lexer::{Lexer, TokenKind};
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct Parser {
     lexer: Lexer,
 }
@@ -506,15 +506,18 @@ impl Parser {
                 if let Some(token_value) = token_value {
                     return token_value;
                 }
-                return String::new();
             }
             if let Some(prev_token) = lexer.token_lookahead(-1) {
                 let row = prev_token.row();
                 let col = prev_token.col() + 1;
-                panic!("{}:{} - {}", row, col, error_message)
+                self.lexer
+                    .error_diag()
+                    .handle_error_at(row, col, error_message);
+            } else {
+                self.lexer.error_diag().handle("No token found");
             }
         }
-        panic!("No token found")
+        return String::new();
     }
 
     fn match_something<T>(
@@ -526,5 +529,8 @@ impl Parser {
             return ret_from_something;
         }
         panic!("{}", error_message)
+    }
+    pub fn lexer(&self) -> &Lexer {
+        &self.lexer
     }
 }

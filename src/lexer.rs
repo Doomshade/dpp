@@ -1,4 +1,6 @@
+use crate::error_diagnosis::ErrorDiagnosis;
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct SyntaxError {
@@ -152,7 +154,7 @@ pub enum TokenKind {
     ElseKeyword,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Lexer {
     chars: Vec<char>,
     position: usize,
@@ -160,11 +162,12 @@ pub struct Lexer {
     curr_token_index: usize,
     row: u32,
     col: u32,
+    error_diag: ErrorDiagnosis,
 }
 
 impl Lexer {
     #[must_use]
-    pub fn new(input: &str) -> Self {
+    pub fn new(input: &str, error_diag: ErrorDiagnosis) -> Self {
         let chars = input.chars().collect();
         Self {
             chars,
@@ -173,6 +176,7 @@ impl Lexer {
             curr_token_index: 0,
             row: 0,
             col: 0,
+            error_diag,
         }
     }
 
@@ -492,5 +496,8 @@ impl Lexer {
             col: self.col,
             value: Some(buf),
         }
+    }
+    pub fn error_diag(&mut self) -> &mut ErrorDiagnosis {
+        &mut self.error_diag
     }
 }
