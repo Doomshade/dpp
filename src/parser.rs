@@ -3,7 +3,9 @@ use std::fmt::Debug;
 use crate::lexer::{Lexer, TokenKind};
 
 #[derive(Default)]
-pub struct Parser;
+pub struct Parser {
+    lexer: Lexer,
+}
 
 #[derive(Debug)]
 pub enum Statement {
@@ -127,35 +129,23 @@ pub enum UnaryOperator {
 }
 
 impl Parser {
-    pub fn parse(&self, lexer: &mut Lexer) -> TranslationUnit {
-        lexer.reset();
-        lexer.lex().expect("LUL");
-        Self::translation_unit(lexer)
+    pub fn new(lexer: Lexer) -> Self {
+        Self { lexer }
     }
 
-    fn binop(lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> BinaryOperator) -> BinaryOperator {
-        let operator = lexer.token().expect("Failed to get token");
-        let kind = &operator.kind;
-        let op = op_matcher(kind);
-        lexer.consume_token();
-        op
+    pub fn parse(&mut self) -> TranslationUnit {
+        self.lexer.reset();
+        self.lexer.lex().expect("LUL");
+        self.translation_unit()
     }
 
-    fn unop(lexer: &mut Lexer, op_matcher: fn(&TokenKind) -> UnaryOperator) -> UnaryOperator {
-        let operator = lexer.token().expect("Failed to get token");
-        let kind = &operator.kind;
-        let op = op_matcher(kind);
-        lexer.consume_token();
-        op
-    }
-
-    fn translation_unit(lexer: &mut Lexer) -> TranslationUnit {
+    fn translation_unit(&mut self) -> TranslationUnit {
         let mut functions = Vec::<Function>::new();
         let mut variables = Vec::<Statement>::new();
         loop {
-            if let Some(function) = Self::function(lexer) {
+            if let Some(function) = self.function() {
                 functions.push(function);
-            } else if let Some(variable_declaration) = Self::variable_declaration(lexer) {
+            } else if let Some(variable_declaration) = self.variable_declaration() {
                 variables.push(variable_declaration);
             } else {
                 break;
@@ -167,14 +157,33 @@ impl Parser {
         }
     }
 
-    fn variable_declaration(lexer: &mut Lexer) -> Option<Statement> {
-        Self::match_token_maybe(lexer, TokenKind::LetKeyword)?;
+    fn function(&mut self) -> Option<Function> {
+        self.match_token_maybe(TokenKind::FUNcKeyword)?;
 
-        let identifier = Self::match_token(lexer, TokenKind::Identifier, "Expected identifier");
-        Self::match_token(lexer, TokenKind::Colon, "Expected \":\"");
-        let data_type = Self::data_type(lexer)?;
-        let statement = if Self::match_token_maybe(lexer, TokenKind::Equal).is_some() {
-            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
+        let identifier = self.match_token(TokenKind::Identifier, "Expected identifier");
+        self.match_token(TokenKind::OpenParen, "Expected \"(\"");
+        let parameters = self.parameters();
+        self.match_token(TokenKind::CloseParen, "Expected \")\"");
+        self.match_token(TokenKind::Colon, "Expected \":\"");
+        let return_type = self.match_something(Self::data_type, "Expected data type");
+        let block = self.match_something(Self::block, "Expected block");
+
+        Some(Function {
+            identifier,
+            return_type,
+            parameters,
+            block,
+        })
+    }
+
+    fn variable_declaration(&mut self) -> Option<Statement> {
+        self.match_token_maybe(TokenKind::LetKeyword)?;
+
+        let identifier = self.match_token(TokenKind::Identifier, "Expected identifier");
+        self.match_token(TokenKind::Colon, "Expected \":\"");
+        let data_type = self.data_type()?;
+        let statement = if self.match_token_maybe(TokenKind::Equal).is_some() {
+            let expression = self.match_something(Self::expression, "Expected expression");
             Statement::VariableDeclarationAndAssignment {
                 identifier,
                 data_type,
@@ -187,74 +196,75 @@ impl Parser {
             }
         };
 
-        Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+        self.match_token(TokenKind::Semicolon, "Expected \";\"");
         Some(statement)
     }
 
-    fn function(lexer: &mut Lexer) -> Option<Function> {
-        Self::match_token_maybe(lexer, TokenKind::FUNcKeyword)?;
-
-        let identifier = Self::match_token(lexer, TokenKind::Identifier, "Expected identifier");
-        Self::match_token(lexer, TokenKind::OpenParen, "Expected \"(\"");
-        let parameters = Self::parameters(lexer);
-        Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
-        Self::match_token(lexer, TokenKind::Colon, "Expected \":\"");
-        let return_type = Self::match_something(lexer, Self::data_type, "Expected data type");
-        let block = Self::match_something(lexer, Self::block, "Expected block");
-
-        Some(Function {
-            identifier,
-            return_type,
-            parameters,
-            block,
-        })
+    fn binop(&mut self, op_matcher: fn(&TokenKind) -> BinaryOperator) -> BinaryOperator {
+        let lexer = &mut self.lexer;
+        let operator = lexer.token().expect("Failed to get token");
+        let kind = &operator.kind;
+        let op = op_matcher(kind);
+        lexer.consume_token();
+        op
     }
 
-    fn parameters(lexer: &mut Lexer) -> Vec<Parameter> {
+    fn unop(&mut self, op_matcher: fn(&TokenKind) -> UnaryOperator) -> UnaryOperator {
+        let lexer = &mut self.lexer;
+        let operator = lexer.token().expect("Failed to get token");
+        let kind = &operator.kind;
+        let op = op_matcher(kind);
+        lexer.consume_token();
+        op
+    }
+
+    fn parameters(&mut self) -> Vec<Parameter> {
         let mut parameters = Vec::<Parameter>::new();
-        while let Some(parameter) = Self::parameter(lexer) {
+        while let Some(parameter) = self.parameter() {
             parameters.push(parameter);
-            if !Self::matches_token_kind(lexer, TokenKind::Comma) {
+            if self.match_token_maybe(TokenKind::Comma).is_none() {
                 break;
             }
-            lexer.consume_token();
         }
         parameters
     }
 
-    fn parameter(lexer: &mut Lexer) -> Option<Parameter> {
-        let identifier = Self::match_token_maybe(lexer, TokenKind::Identifier)?;
-        Self::match_token(lexer, TokenKind::Colon, "Expected \":\"");
-        let data_type = Self::match_something(lexer, Self::data_type, "Expected data type");
+    fn parameter(&mut self) -> Option<Parameter> {
+        let identifier = self.match_token_maybe(TokenKind::Identifier)?;
+        self.match_token(TokenKind::Colon, "Expected \":\"");
+        let data_type = self.match_something(Self::data_type, "Expected data type");
         Some(Parameter {
             identifier,
             data_type,
         })
     }
 
-    fn block(lexer: &mut Lexer) -> Option<Block> {
-        Self::match_token_maybe(lexer, TokenKind::OpenBrace)?;
+    fn block(&mut self) -> Option<Block> {
+        self.match_token_maybe(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement>::new();
-        while let Some(statement) = Self::statement(lexer) {
+        while let Some(statement) = self.statement() {
             statements.push(statement);
         }
-        Self::match_token(lexer, TokenKind::CloseBrace, "Expected \"}}\"");
+        self.match_token(TokenKind::CloseBrace, "Expected \"}}\"");
 
         Some(Block { statements })
     }
 
-    fn statement(lexer: &mut Lexer) -> Option<Statement> {
-        if let Some(variable_declaration) = Self::variable_declaration(lexer) {
+    fn statement(&mut self) -> Option<Statement> {
+        if let Some(variable_declaration) = self.variable_declaration() {
             return Some(variable_declaration);
-        } else if Self::match_token_maybe(lexer, TokenKind::IfKeyword).is_some() {
-            Self::match_token(lexer, TokenKind::OpenParen, "Expected \"(\"");
-            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
-            Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
+        } else if self.match_token_maybe(TokenKind::IfKeyword).is_some() {
+            self.match_token(TokenKind::OpenParen, "Expected \"(\"");
+            let expression = self.match_something(Self::expression, "Expected expression");
+            self.match_token(TokenKind::CloseParen, "Expected \")\"");
 
-            let statement = Self::match_something(lexer, Self::statement, "Expected statement");
-            return if Self::match_token_maybe(lexer, TokenKind::ElseKeyword).is_some() {
-                let else_statement =
-                    Self::match_something(lexer, Self::statement, "Expected statement");
+            let statement = self.match_something(
+                Self::statement,
+                "Expected \
+            statement",
+            );
+            return if self.match_token_maybe(TokenKind::ElseKeyword).is_some() {
+                let else_statement = self.match_something(Self::statement, "Expected statement");
                 Some(Statement::IfElseStatement {
                     expression,
                     statement: Box::new(statement),
@@ -266,17 +276,17 @@ impl Parser {
                     statement: Box::new(statement),
                 })
             };
-        } else if let Some(block) = Self::block(lexer) {
+        } else if let Some(block) = self.block() {
             return Some(Statement::BlockStatement {
                 block: Box::new(block),
             });
-        } else if Self::match_token_maybe(lexer, TokenKind::ByeKeyword).is_some() {
-            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
-            Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+        } else if self.match_token_maybe(TokenKind::ByeKeyword).is_some() {
+            let expression = self.match_something(Self::expression, "Expected expression");
+            self.match_token(TokenKind::Semicolon, "Expected \";\"");
 
             return Some(Statement::ReturnStatement { expression });
-        } else if let Some(expression) = Self::expression(lexer) {
-            Self::match_token(lexer, TokenKind::Semicolon, "Expected \";\"");
+        } else if let Some(expression) = self.expression() {
+            self.match_token(TokenKind::Semicolon, "Expected \";\"");
 
             return Some(Statement::ExpressionStatement { expression });
         }
@@ -284,7 +294,8 @@ impl Parser {
         None
     }
 
-    fn data_type(lexer: &mut Lexer) -> Option<DataType> {
+    fn data_type(&mut self) -> Option<DataType> {
+        let lexer = &mut self.lexer;
         if let Some(token) = lexer.token() {
             return match token.kind {
                 TokenKind::PpType => {
@@ -301,23 +312,23 @@ impl Parser {
         todo!()
     }
 
-    fn expression(lexer: &mut Lexer) -> Option<Expression> {
-        Self::equality(lexer)
+    fn expression(&mut self) -> Option<Expression> {
+        self.equality()
     }
 
-    fn equality(lexer: &mut Lexer) -> Option<Expression> {
-        let mut expression = Self::comparison(lexer);
+    fn equality(&mut self) -> Option<Expression> {
+        let mut expression = self.comparison();
 
-        while Self::matches_token_kind(lexer, TokenKind::BangEqual)
-            || Self::matches_token_kind(lexer, TokenKind::EqualEqual)
+        while self.matches_token_kind(TokenKind::BangEqual)
+            || self.matches_token_kind(TokenKind::EqualEqual)
         {
             if expression.is_some() {
-                let op = Self::binop(lexer, |kind| match kind {
+                let op = self.binop(|kind| match kind {
                     TokenKind::BangEqual => BinaryOperator::NotEqual,
                     TokenKind::EqualEqual => BinaryOperator::Equal,
                     _ => unreachable!(),
                 });
-                if let Some(rhs) = Self::comparison(lexer) {
+                if let Some(rhs) = self.comparison() {
                     expression = Some(Expression::BinaryExpression {
                         lhs: Box::new(expression.unwrap()),
                         op,
@@ -329,23 +340,23 @@ impl Parser {
         expression
     }
 
-    fn comparison(lexer: &mut Lexer) -> Option<Expression> {
-        let mut expression = Self::term(lexer);
+    fn comparison(&mut self) -> Option<Expression> {
+        let mut expression = self.term();
 
-        while Self::matches_token_kind(lexer, TokenKind::Greater)
-            || Self::matches_token_kind(lexer, TokenKind::GreaterEqual)
-            || Self::matches_token_kind(lexer, TokenKind::Less)
-            || Self::matches_token_kind(lexer, TokenKind::LessEqual)
+        while self.matches_token_kind(TokenKind::Greater)
+            || self.matches_token_kind(TokenKind::GreaterEqual)
+            || self.matches_token_kind(TokenKind::Less)
+            || self.matches_token_kind(TokenKind::LessEqual)
         {
             if expression.is_some() {
-                let op = Self::binop(lexer, |kind| match kind {
+                let op = self.binop(|kind| match kind {
                     TokenKind::Greater => BinaryOperator::GreaterThan,
                     TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
                     TokenKind::Less => BinaryOperator::LessThan,
                     TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
                     _ => unreachable!(),
                 });
-                let rhs = Self::match_something(lexer, Self::term, "Expected expression");
+                let rhs = self.match_something(Self::term, "Expected expression");
                 expression = Some(Expression::BinaryExpression {
                     lhs: Box::new(expression.unwrap()),
                     op,
@@ -356,19 +367,17 @@ impl Parser {
         expression
     }
 
-    fn term(lexer: &mut Lexer) -> Option<Expression> {
-        let mut expression = Self::factor(lexer);
+    fn term(&mut self) -> Option<Expression> {
+        let mut expression = self.factor();
 
-        while Self::matches_token_kind(lexer, TokenKind::Dash)
-            || Self::matches_token_kind(lexer, TokenKind::Plus)
-        {
+        while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
             if expression.is_some() {
-                let op = Self::binop(lexer, |kind| match kind {
+                let op = self.binop(|kind| match kind {
                     TokenKind::Dash => BinaryOperator::Subtract,
                     TokenKind::Plus => BinaryOperator::Add,
                     _ => unreachable!(),
                 });
-                if let Some(factor) = Self::factor(lexer) {
+                if let Some(factor) = self.factor() {
                     expression = Some(Expression::BinaryExpression {
                         lhs: Box::new(expression.unwrap()),
                         op,
@@ -381,19 +390,19 @@ impl Parser {
         expression
     }
 
-    fn factor(lexer: &mut Lexer) -> Option<Expression> {
-        let mut expression = Self::unary(lexer);
+    fn factor(&mut self) -> Option<Expression> {
+        let mut expression = self.unary();
 
-        while Self::matches_token_kind(lexer, TokenKind::ForwardSlash)
-            || Self::matches_token_kind(lexer, TokenKind::Star)
+        while self.matches_token_kind(TokenKind::ForwardSlash)
+            || self.matches_token_kind(TokenKind::Star)
         {
             if expression.is_some() {
-                let op = Self::binop(lexer, |kind| match kind {
+                let op = self.binop(|kind| match kind {
                     TokenKind::ForwardSlash => BinaryOperator::Divide,
                     TokenKind::Star => BinaryOperator::Multiply,
                     _ => unreachable!(),
                 });
-                if let Some(unary) = Self::unary(lexer) {
+                if let Some(unary) = self.unary() {
                     expression = Some(Expression::BinaryExpression {
                         lhs: Box::new(expression.unwrap()),
                         op,
@@ -405,16 +414,14 @@ impl Parser {
         expression
     }
 
-    fn unary(lexer: &mut Lexer) -> Option<Expression> {
-        if Self::matches_token_kind(lexer, TokenKind::Bang)
-            || Self::matches_token_kind(lexer, TokenKind::Dash)
-        {
-            let op = Self::unop(lexer, |kind| match kind {
+    fn unary(&mut self) -> Option<Expression> {
+        if self.matches_token_kind(TokenKind::Bang) || self.matches_token_kind(TokenKind::Dash) {
+            let op = self.unop(|kind| match kind {
                 TokenKind::Bang => UnaryOperator::Not,
                 TokenKind::Dash => UnaryOperator::Negate,
                 _ => unreachable!(),
             });
-            if let Some(unary) = Self::unary(lexer) {
+            if let Some(unary) = self.unary() {
                 return Some(Expression::UnaryExpression {
                     op,
                     operand: Box::new(unary),
@@ -422,63 +429,63 @@ impl Parser {
             }
         }
 
-        Self::primary(lexer)
+        self.primary()
     }
 
-    fn primary(lexer: &mut Lexer) -> Option<Expression> {
-        if let Some(identifier) = Self::match_token_maybe(lexer, TokenKind::Identifier) {
-            return if Self::match_token_maybe(lexer, TokenKind::OpenParen).is_some() {
-                let arguments = Self::arguments(lexer);
-                Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
+    fn primary(&mut self) -> Option<Expression> {
+        if let Some(identifier) = self.match_token_maybe(TokenKind::Identifier) {
+            return if self.match_token_maybe(TokenKind::OpenParen).is_some() {
+                let arguments = self.arguments();
+                self.match_token(TokenKind::CloseParen, "Expected \")\"");
 
                 Some(Expression::FunctionCall { arguments })
-            } else if Self::match_token_maybe(lexer, TokenKind::Equal).is_some() {
-                let expression =
-                    Self::match_something(lexer, Self::expression, "Expected expression");
+            } else if self.match_token_maybe(TokenKind::Equal).is_some() {
+                let expression = self.match_something(Self::expression, "Expected expression");
                 Some(Expression::AssignmentExpression {
                     expression: Box::new(expression),
                 })
             } else {
                 Some(Expression::IdentifierExpression { identifier })
             };
-        } else if Self::match_token_maybe(lexer, TokenKind::NomKeyword).is_some() {
+        } else if self.match_token_maybe(TokenKind::NomKeyword).is_some() {
             return Some(Expression::BoobaExpression(false));
-        } else if Self::match_token_maybe(lexer, TokenKind::YemKeyword).is_some() {
+        } else if self.match_token_maybe(TokenKind::YemKeyword).is_some() {
             return Some(Expression::BoobaExpression(true));
-        } else if let Some(number) = Self::match_token_maybe(lexer, TokenKind::Number) {
+        } else if let Some(number) = self.match_token_maybe(TokenKind::Number) {
             return Some(Expression::PpExpression(number.parse::<i32>().unwrap()));
-        } else if let Some(fiber) = Self::match_token_maybe(lexer, TokenKind::Fiber) {
+        } else if let Some(fiber) = self.match_token_maybe(TokenKind::Fiber) {
             return Some(Expression::FiberExpression(fiber));
-        } else if Self::match_token_maybe(lexer, TokenKind::OpenParen).is_some() {
-            let expression = Self::match_something(lexer, Self::expression, "Expected expression");
-            Self::match_token(lexer, TokenKind::CloseParen, "Expected \")\"");
+        } else if self.match_token_maybe(TokenKind::OpenParen).is_some() {
+            let expression = self.match_something(Self::expression, "Expected expression");
+            self.match_token(TokenKind::CloseParen, "Expected \")\"");
             return Some(expression);
         }
 
         None
     }
 
-    fn arguments(lexer: &mut Lexer) -> Vec<Expression> {
+    fn arguments(&mut self) -> Vec<Expression> {
         let mut args = Vec::<Expression>::new();
-        while let Some(expression) = Self::expression(lexer) {
+        while let Some(expression) = self.expression() {
             args.push(expression);
-            if !Self::matches_token_kind(lexer, TokenKind::Comma) {
+            if self.match_token_maybe(TokenKind::Comma).is_none() {
                 break;
             }
-            lexer.consume_token();
         }
 
         args
     }
 
-    fn matches_token_kind(lexer: &Lexer, token_kind: TokenKind) -> bool {
+    fn matches_token_kind(&self, token_kind: TokenKind) -> bool {
+        let lexer = &self.lexer;
         if let Some(token) = lexer.token() {
             return token.kind == token_kind;
         }
         false
     }
 
-    fn match_token_maybe(lexer: &mut Lexer, token_kind: TokenKind) -> Option<String> {
+    fn match_token_maybe(&mut self, token_kind: TokenKind) -> Option<String> {
+        let lexer = &mut self.lexer;
         if let Some(token) = lexer.token() {
             if token.kind == token_kind {
                 let token_value = token.value();
@@ -490,7 +497,8 @@ impl Parser {
         None
     }
 
-    fn match_token(lexer: &mut Lexer, token_kind: TokenKind, error_message: &str) -> String {
+    fn match_token(&mut self, token_kind: TokenKind, error_message: &str) -> String {
+        let lexer = &mut self.lexer;
         if let Some(token) = lexer.token() {
             if token.kind == token_kind {
                 let token_value = token.value();
@@ -510,11 +518,11 @@ impl Parser {
     }
 
     fn match_something<T>(
-        lexer: &mut Lexer,
-        grammar_func: fn(&mut Lexer) -> Option<T>,
+        &mut self,
+        grammar_func: fn(&mut Parser) -> Option<T>,
         error_message: &str,
     ) -> T {
-        if let Some(ret_from_something) = grammar_func(lexer) {
+        if let Some(ret_from_something) = grammar_func(self) {
             return ret_from_something;
         }
         panic!("{}", error_message)
