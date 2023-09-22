@@ -1,3 +1,4 @@
+use crate::lexer;
 use crate::lexer::{Token, TokenKind};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -60,8 +61,8 @@ impl ErrorDiagnosis {
 
     pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token>) {
         let message = ErrorMessage {
-            row: optional_token.map_or(0, |token| token.row()),
-            col: optional_token.map_or(0, |token| token.col()),
+            row: optional_token.map_or(0, Token::row),
+            col: optional_token.map_or(0, Token::col),
             message: format!("Expected {}.", error),
         };
         self.error_messages.push(message);
