@@ -24,6 +24,7 @@
         {%
             \ttt{var-decl}\\
             &\ttt{ | "if" "(" expr ")" stat ( "else" stat )?}\\
+            &\ttt{ | "fori" "(" IDENT "," expr ")" stat }\\
             &\ttt{ | block }\\
             &\ttt{ | "bye" expr ";" }\\
             &\ttt{ | expr ";" }\\

@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::lexer::{Token, TokenKind};
@@ -51,6 +52,12 @@ pub enum Statement {
     },
     EmptyStatement {
         position: (u32, u32),
+    },
+    ForiStatement {
+        position: (u32, u32),
+        index_ident: String,
+        length_expression: Expression,
+        statement: Box<Statement>,
     },
     #[default]
     InvalidStatement,
@@ -166,10 +173,17 @@ pub enum Expression {
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub enum DataType {
+    Xxlpp,
+    Nopp,
     Pp,
+    Spp,
+    Xspp,
+    P,
     Fiber,
     Booba,
-    Struct(Struct),
+    Struct {
+        name: String,
+    },
     #[default]
     InvalidDataType,
 }
@@ -392,6 +406,20 @@ impl Parser {
                     statement: Box::new(statement),
                 })
             };
+        } else if self.match_token_maybe(TokenKind::ForiKeyword).is_some() {
+            self.match_token(TokenKind::OpenParen);
+            let ident = self.match_token(TokenKind::Identifier);
+            self.match_token(TokenKind::Comma);
+            let expression = self.match_(Self::expression, "expression");
+            self.match_token(TokenKind::CloseParen);
+            let statement = self.match_(Self::statement, "statement");
+
+            return Some(Statement::ForiStatement {
+                position,
+                index_ident: ident,
+                length_expression: expression,
+                statement: Box::new(statement),
+            });
         } else if let Some(block) = self.block() {
             return Some(Statement::BlockStatement {
                 position,
@@ -426,6 +454,18 @@ impl Parser {
                     self.consume_token();
                     Some(DataType::Pp)
                 }
+                TokenKind::PType => {
+                    self.consume_token();
+                    Some(DataType::P)
+                }
+                TokenKind::XsppType => {
+                    self.consume_token();
+                    Some(DataType::Xspp)
+                }
+                TokenKind::XxlppType => {
+                    self.consume_token();
+                    Some(DataType::Xxlpp)
+                }
                 TokenKind::FiberType => {
                     self.consume_token();
                     Some(DataType::Fiber)
@@ -434,8 +474,14 @@ impl Parser {
                     self.consume_token();
                     Some(DataType::Booba)
                 }
-                TokenKind::Identifier => Some(DataType::Struct(Struct::InvalidStruct)),
-                _ => None,
+                TokenKind::Identifier => {
+                    let name = self.match_token(TokenKind::Identifier);
+                    Some(DataType::Struct { name })
+                }
+                _ => {
+                    self.consume_token();
+                    None
+                }
             };
         }
         None
@@ -494,15 +540,17 @@ impl Parser {
                 _ => unreachable!(),
             });
             let rhs = self.match_(Self::term, "expression");
-            term.as_ref()?;
-            if let Some(expression) = term {
-                term = Some(Expression::BinaryExpression {
-                    position,
-                    lhs: Box::new(expression),
-                    op,
-                    rhs: Box::new(rhs),
-                });
+            if term.is_none() {
+                self.add_error("expression");
             }
+
+            let expression = term?;
+            term = Some(Expression::BinaryExpression {
+                position,
+                lhs: Box::new(expression),
+                op,
+                rhs: Box::new(rhs),
+            });
         }
 
         term
@@ -583,14 +631,14 @@ impl Parser {
         let position = self.position;
         if let Some(identifier) = self.match_token_maybe(TokenKind::Identifier) {
             return if self.match_token_maybe(TokenKind::OpenParen).is_some() {
-                let arguments = self.arguments();
+                let arguments = self.match_(Self::arguments, "arguments");
                 self.match_token(TokenKind::CloseParen);
 
-                Some(Expression::FunctionCall {
+                return Some(Expression::FunctionCall {
                     position,
                     identifier,
                     arguments,
-                })
+                });
             } else if self.match_token_maybe(TokenKind::Equal).is_some() {
                 let expression = self.match_(Self::expression, "expression");
                 Some(Expression::AssignmentExpression {
@@ -630,24 +678,23 @@ impl Parser {
         None
     }
 
-    fn arguments(&mut self) -> Vec<Expression> {
+    fn arguments(&mut self) -> Option<Vec<Expression>> {
         let mut args = Vec::<Expression>::new();
         // No expressions provided, just return an empty vec. Don't consume the close
         // parenthesis as the caller does that for us.
         if self.matches_token_kind(TokenKind::CloseParen) {
-            return args;
+            return Some(args);
         }
 
         loop {
-            if let Some(expression) = self.is_word(Self::expression) {
-                args.push(expression);
-                if self.match_token_maybe(TokenKind::Comma).is_none() {
-                    break;
-                }
+            let expression = self.is_word(Self::expression)?;
+            args.push(expression);
+            if self.match_token_maybe(TokenKind::Comma).is_none() {
+                break;
             }
         }
 
-        args
+        Some(args)
     }
 
     fn matches_token_kind(&mut self, token_kind: TokenKind) -> bool {
@@ -726,24 +773,13 @@ impl Parser {
             return ret_from_something;
         }
 
-        self.error_diag
-            .borrow_mut()
-            .expected_something_error(error_message, self.token_offset(-1));
+        self.add_error(error_message);
         T::default()
     }
 
-    fn match_or_default<T: Default>(
-        &mut self,
-        grammar_func: fn(&mut Self) -> Option<T>,
-        error_message: &str,
-    ) -> T {
-        if let Some(ret_from_something) = grammar_func(self) {
-            return ret_from_something;
-        }
-
+    fn add_error(&mut self, error_message: &str) {
         self.error_diag
             .borrow_mut()
             .expected_something_error(error_message, self.token_offset(-1));
-        T::default()
     }
 }

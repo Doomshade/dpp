@@ -1,5 +1,4 @@
 use crate::lexer::{Token, TokenKind};
-use crate::parser::Variable;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};

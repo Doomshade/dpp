@@ -1,7 +1,7 @@
 let x: pp;
 let y: pp = 123;
 
-FUNc test(aa: pp, bb: pp): pp {
+FUNc test(aa: pp, bb: pp): ppa {
     let a: pp = 5;
     let testt: pp = (1 + 2) * 3 + 4 * 5;
     let testasd: pp;
@@ -9,7 +9,8 @@ FUNc test(aa: pp, bb: pp): pp {
     let c: pp;
     let bb: pp;
     let aa: pp = (a + (a(abc))) + c;
-    abcd(a > 1);
+
+    abcd( > 456);
     {
         {
             let a: pp;

@@ -158,21 +158,24 @@ pub enum TokenKind {
     Ampersand,
     Pipe,
     Comma,
-    IfKeyword,     // if
-    LetKeyword,    // let
-    ByeKeyword,    // return
+    IfKeyword,  // if
+    LetKeyword, // let
+    ByeKeyword, // return
+    FUNcKeyword,
+    // func
     PprintKeyword, // print()
     PpanicKeyword, // panic()
     PpinKeyword,   // read()
     XxlppType,     // u64
     PpType,        // u32
-    FUNcKeyword,   // func
     SppType,       // u16
     XsppType,      // u8
-    NoppType,      // void
     PType,         // char
     BoobaType,     // bool
     FiberType,     // String
+    NoppType,
+    // void
+    ForiKeyword,
     ElseKeyword,
     DoubleQuote,
 }
@@ -224,6 +227,7 @@ impl Display for TokenKind {
             Self::PpinKeyword => "ppin",
             Self::FUNcKeyword => "FUNc",
             Self::ElseKeyword => "else",
+            Self::ForiKeyword => "fori",
             Self::XxlppType => "data type \"xxlpp\"",
             Self::PpType => "data type \"pp\"",
             Self::SppType => "data type \"spp\"",
@@ -497,6 +501,7 @@ impl Lexer {
             "booba" => TokenKind::BoobaType,
             "if" => TokenKind::IfKeyword,
             "else" => TokenKind::ElseKeyword,
+            "fori" => TokenKind::ForiKeyword,
             "let" => TokenKind::LetKeyword,
             "bye" => TokenKind::ByeKeyword,
             "pprint" => TokenKind::PprintKeyword,
