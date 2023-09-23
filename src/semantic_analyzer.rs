@@ -1,7 +1,6 @@
 use crate::error_diagnosis::ErrorDiagnosis;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::process::id;
 use std::rc::Rc;
 
 use crate::parser::{Block, DataType, Expression, Function, Statement, TranslationUnit};
@@ -14,7 +13,7 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new(error_diag: Rc<RefCell<ErrorDiagnosis>>) -> Self {
-        SemanticAnalyzer {
+        Self {
             symbol_table: Vec::default(),
             globals: HashMap::default(),
             error_diag,
@@ -67,7 +66,20 @@ impl SemanticAnalyzer {
         };
     }
 
-    fn handle_scope(&mut self, block: Block) {
+    ///
+    ///
+    /// # Arguments
+    ///
+    /// * `block`:
+    ///
+    /// returns: ()
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///
+    /// ```
+    fn handle_scope(&mut self, block: &Block) {
         match block {
             Block::Block { .. } => {
                 let scope = HashMap::new();
@@ -85,7 +97,7 @@ impl SemanticAnalyzer {
                 position,
             } => {
                 for scope in &self.symbol_table {
-                    if let Some(_) = scope.get(&identifier) {
+                    if scope.get(&identifier).is_some() {
                         self.error_diag.borrow_mut().variable_already_exists(
                             position.0,
                             position.1,
@@ -117,14 +129,14 @@ impl SemanticAnalyzer {
                         identifier.as_str(),
                     );
                 }
-                if self.globals.contains_key(&identifier) {
+                if !self.globals.contains_key(&identifier) {
+                    self.globals.insert(identifier, data_type);
+                } else {
                     self.error_diag.borrow_mut().variable_already_exists(
                         position.0,
                         position.1,
                         identifier.as_str(),
                     );
-                } else {
-                    self.globals.insert(identifier, data_type);
                 }
             }
             _ => {}
@@ -142,13 +154,12 @@ impl SemanticAnalyzer {
             Expression::BinaryExpression { lhs, rhs, .. } => {
                 let left_type = self.evaluate_expression_data_type(lhs);
                 let right_type = self.evaluate_expression_data_type(rhs);
-                if left_type != right_type {
-                    panic!("invalid binop")
-                }
+                assert!(!(left_type != right_type), "invalid binop");
 
                 left_type
             }
-            Expression::IdentifierExpression { identifier, .. } => {
+            Expression::IdentifierExpression { identifier, .. }
+            | Expression::FunctionCall { identifier, .. } => {
                 if let Some(data_type) = self.globals.get(identifier) {
                     return data_type;
                 }
@@ -159,22 +170,7 @@ impl SemanticAnalyzer {
                 }
                 panic!("Unknown identifier {identifier}")
             }
-            Expression::FunctionCall { identifier, .. } => {
-                if let Some(data_type) = self.globals.get(identifier) {
-                    return data_type;
-                }
-                for symbols in &self.symbol_table {
-                    if let Some(data_type) = symbols.get(identifier) {
-                        return data_type;
-                    }
-                }
-                panic!("Unknown identifier {identifier}")
-            }
-            Expression::AssignmentExpression {
-                identifier,
-                expression,
-                ..
-            } => {
+            Expression::AssignmentExpression { identifier, .. } => {
                 if let Some(data_type) = self.globals.get(identifier) {
                     return data_type;
                 }
