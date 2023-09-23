@@ -687,7 +687,7 @@ impl Parser {
         }
 
         loop {
-            let expression = self.is_word(Self::expression)?;
+            let expression = self.match_(Self::expression, "expression");
             args.push(expression);
             if self.match_token_maybe(TokenKind::Comma).is_none() {
                 break;

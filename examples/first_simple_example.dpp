@@ -10,7 +10,7 @@ FUNc test(aa: pp, bb: pp): ppa {
     let bb: pp;
     let aa: pp = (a + (a(abc))) + c;
 
-    abcd( > 456);
+    abcd( > 456, a);
     {
         {
             let a: pp;
