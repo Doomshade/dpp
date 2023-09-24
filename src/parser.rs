@@ -375,34 +375,41 @@ impl Parser {
     fn params(&mut self) -> Vec<Parameter> {
         self.expect(TokenKind::OpenParen);
         let mut parameters = Vec::<Parameter>::new();
+
+        // Check if the close parenthesis is present first,
+        // then try to parse a parameter. If a parameter is present,
+        // check if "," or the close parenthesis is there.
+        // If neither is there, we say we expected
         if self.accepts(TokenKind::CloseParen).is_some() {
             return parameters;
-        } else if let Some(parameter) = self.parameter() {
-            parameters.push(parameter);
-            loop {
-                if self.accepts(TokenKind::Comma).is_some() {
-                    parameters.push(self.expect_(Self::parameter, "parameter"));
-                } else {
-                    break;
-                }
-            }
-            self.expect(TokenKind::CloseParen);
-        } else {
-            self.expect(TokenKind::CloseParen);
         }
+
+        let parameter = self.parameter();
+        parameters.push(parameter);
+        loop {
+            if self.accepts(TokenKind::Comma).is_some() {
+                parameters.push(self.parameter());
+            } else if self.accepts(TokenKind::CloseParen).is_some() {
+                break;
+            } else {
+                self.add_error("Expected \",\"");
+                parameters.push(self.parameter());
+            }
+        }
+
         parameters
     }
 
-    fn parameter(&mut self) -> Option<Parameter> {
+    fn parameter(&mut self) -> Parameter {
         let position = self.position;
-        let identifier = self.accepts(TokenKind::Identifier)?;
+        let identifier = self.expect(TokenKind::Identifier);
         self.expect(TokenKind::Colon);
         let data_type = self.expect_(Self::data_type, "data type");
-        Some(Parameter::Parameter {
+        Parameter::Parameter {
             position,
             identifier,
             data_type,
-        })
+        }
     }
 
     fn block(&mut self) -> Option<Block> {
@@ -746,18 +753,30 @@ impl Parser {
 
         if self.accepts(TokenKind::CloseParen).is_some() {
             return Some(args);
-        } else if let Some(arg) = self.expr() {
-            args.push(arg);
-            loop {
-                if self.accepts(TokenKind::Comma).is_some() {
-                    args.push(self.expect_(Self::expr, "expression"));
-                } else {
-                    break;
-                }
+        }
+        // else if let Some(arg) = self.expr() {
+        //     args.push(arg);
+        //     loop {
+        //         if self.accepts(TokenKind::Comma).is_some() {
+        //             args.push(self.expect_(Self::expr, "expression"));
+        //         } else if self.accepts(TokenKind::CloseParen).is_some() {
+        //             break;
+        //         }
+        //     }
+        // } else {
+        //     self.expect(TokenKind::CloseParen);
+        // }
+        let arg = self.expect_(Self::expr, "expression");
+        args.push(arg);
+        loop {
+            if self.accepts(TokenKind::Comma).is_some() {
+                args.push(self.expect_(Self::expr, "expression"));
+            } else if self.accepts(TokenKind::CloseParen).is_some() {
+                break;
+            } else {
+                self.add_error("Expected \",\"");
+                args.push(self.expect_(Self::expr, "expression"));
             }
-            self.expect(TokenKind::CloseParen);
-        } else {
-            self.expect(TokenKind::CloseParen);
         }
         Some(args)
     }
