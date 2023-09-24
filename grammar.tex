@@ -4,7 +4,7 @@
     \text{\texttt{#1}}
 }
 \newcommand{\ebnfnode}[2]{%
-    #1\hspace{20px} &\to #2\ttt{ ;}\\
+    #1\hspace{20px} &\to #2\ttt{ .}\\
 }
 
 \newcommand{\ebnfnodett}[2]{%
@@ -22,27 +22,26 @@
         \ebnfnodett{block}{"\{" stat* "\}"}
         \ebnfnode{\ttt{stat}}
         {%
-            \ttt{var-decl}\\
-            &\ttt{ | "if" "(" expr ")" stat ( "else" stat )?}\\
-            &\ttt{ | "for" "(" IDENT "," expr ")" stat }\\
-            &\ttt{ | block }\\
+            \ttt{"if" "(" expr ")" stat ( "else" stat )?}\\
+            &\ttt{ | "for" "(" IDENT "to" expr ")" stat }\\
             &\ttt{ | "bye" expr ";" }\\
-            &\ttt{ | expr ";" }\\
-            &\ttt{ | ";" }
+            &\ttt{ | ";" }\\
+            &\ttt{ | var-decl }\\
+            &\ttt{ | block }\\
+            &\ttt{ | expr ";" }
         }
         \ebnfnodett{var-decl}{data-type "->" IDENT ( "=" expr )? ";"}
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\
             &\ttt{ | "pp"}\\
-            &\ttt{ | "sp"}\\
+            &\ttt{ | "spp"}\\
             &\ttt{ | "xspp"}\\
             &\ttt{ | "p"}\\
             &\ttt{ | "nopp"}\\
             &\ttt{ | "booba"}\\
-            &\ttt{ | struct}
+            &\ttt{ | "yarn"}
         }
-        \ebnfnodett{struct}{IDENT}
         \ebnfnodett{expr}{equ}
         \ebnfnodett{equ}{comp ( ( "!=" | "==" ) comp )*}
         \ebnfnodett{comp}{term ( ( ">" | ">=" | "<" | "<=" ) term )*}
@@ -51,9 +50,9 @@
         \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
         \ebnfnode{\ttt{primary}}
         {%
-            \ttt{IDENT ( "(" (expr ( "," expr )*)? ")" )?}\\
-            &\ttt{ | NUMBER | STRING}\\
-            &\ttt{ | "yem" | "nom" | "(" expr ")"}
+            \ttt{"yem" | "nom" | NUMBER | STRING | "(" expr ")"}\\
+            &\ttt{ | IDENT ( "(" ( args )? ")" )?}
         }
+        \ebnfnodett{args}{expr ( "," expr )*}
     \end{align*}
 \end{document}

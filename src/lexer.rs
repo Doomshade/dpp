@@ -172,7 +172,8 @@ pub enum TokenKind {
     XsppType,      // u8
     PType,         // char
     BoobaType,     // bool
-    FiberType,     // String
+    YarnType,
+    // String
     NoppType,
     // void
     ForKeyword,
@@ -187,7 +188,7 @@ impl Display for TokenKind {
         let text_representation = match self {
             Self::Identifier => "identifier",
             Self::Number => "number",
-            Self::FiberType => "fiber",
+            Self::YarnType => "yarn",
             Self::BangEqual => "!=",
             Self::Comment => "",
             Self::Whitespace => "",
@@ -298,7 +299,7 @@ impl Lexer {
             '\0' => self.new_token(TokenKind::Eof),
             'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
             '0'..='9' => self.handle_number(),
-            '"' => self.handle_fiber(),
+            '"' => self.handle_yarn(),
             ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
             ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.handle_punctuation(),
             '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
@@ -450,7 +451,7 @@ impl Lexer {
         self.new_token(TokenKind::Whitespace)
     }
 
-    fn handle_fiber(&mut self) -> Token {
+    fn handle_yarn(&mut self) -> Token {
         let mut buf = String::with_capacity(256);
         // Consume the opening quote.
         self.consume();
@@ -473,7 +474,7 @@ impl Lexer {
             self.consume();
         }
 
-        let token = self.new_token_with_value(TokenKind::FiberType, buf);
+        let token = self.new_token_with_value(TokenKind::YarnType, buf);
         if c != '"' {
             self.error_diag
                 .borrow_mut()
