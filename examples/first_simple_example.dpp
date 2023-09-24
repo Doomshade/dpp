@@ -10,6 +10,7 @@ FUNc test(firstarg: pp, secondarg: pp) -> pp {
     pp -> another_expr = (a + (a(abc))) + c;
 
     abcde(a > 456, a);
+    abcde("");
     # blocc
     {
         { # another blocc

@@ -17,7 +17,7 @@
 %        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}
 %        \ebnfnodett{struct-field}{var-decl ";"}
         \ebnfnodett{function}{"FUNc" IDENT params "->" data-type block}
-        \ebnfnodett{params}{"(" (param ("," param))* ")"}
+        \ebnfnodett{params}{"(" (param ("," param)*)? ")"}
         \ebnfnodett{param}{IDENT ":" data-type}
         \ebnfnodett{block}{"\{" stat* "\}"}
         \ebnfnode{\ttt{stat}}
@@ -53,6 +53,6 @@
             \ttt{"yem" | "nom" | NUMBER | STRING | "(" expr ")"}\\
             &\ttt{ | IDENT ( "(" ( args )? ")" )?}
         }
-        \ebnfnodett{args}{expr ( "," expr )*}
+        \ebnfnodett{args}{"(" (expr ("," expr)*)? ")"}
     \end{align*}
 \end{document}

@@ -390,14 +390,6 @@ impl Parser {
         } else {
             self.expect(TokenKind::CloseParen);
         }
-
-        // let mut parameters = Vec::<Parameter>::new();
-        // while let Some(parameter) = self.parameter() {
-        //     parameters.push(parameter);
-        //     if self.accepts(TokenKind::Comma).is_none() {
-        //         break;
-        //     }
-        // }
         parameters
     }
 
@@ -703,10 +695,7 @@ impl Parser {
     fn primary(&mut self) -> Option<Expression> {
         let position = self.position;
         if let Some(identifier) = self.accepts(TokenKind::Identifier) {
-            return if self.accepts(TokenKind::OpenParen).is_some() {
-                let arguments = self.args();
-                self.expect(TokenKind::CloseParen);
-
+            return if let Some(arguments) = self.args() {
                 return Some(Expression::FunctionCall {
                     position,
                     identifier,
@@ -751,21 +740,25 @@ impl Parser {
         None
     }
 
-    fn args(&mut self) -> Vec<Expression> {
+    fn args(&mut self) -> Option<Vec<Expression>> {
+        self.accepts(TokenKind::OpenParen)?;
         let mut args = Vec::<Expression>::new();
-        // No expressions provided, just return an empty vec. Don't consume the close
-        // parenthesis as the caller does that for us.
-        if self.matches_token_kind(TokenKind::CloseParen) {
-            return args;
-        }
 
-        loop {
-            let expression = self.expect_(Self::expr, "expression");
-            args.push(expression);
-            if self.accepts(TokenKind::Comma).is_none() {
-                break;
+        if self.accepts(TokenKind::CloseParen).is_some() {
+            return Some(args);
+        } else if let Some(arg) = self.expr() {
+            args.push(arg);
+            loop {
+                if self.accepts(TokenKind::Comma).is_some() {
+                    args.push(self.expect_(Self::expr, "expression"));
+                } else {
+                    break;
+                }
             }
+            self.expect(TokenKind::CloseParen);
+        } else {
+            self.expect(TokenKind::CloseParen);
         }
-        args
+        Some(args)
     }
 }
