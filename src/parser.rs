@@ -287,7 +287,7 @@ impl Parser {
         self.match_token(TokenKind::OpenParen);
         let parameters = self.parameters();
         self.match_token(TokenKind::CloseParen);
-        self.match_token(TokenKind::Colon);
+        self.match_token(TokenKind::Arrow);
         let return_type = self.match_(Self::data_type, "data type");
         let block = self.match_(Self::block, "block");
 
@@ -302,11 +302,10 @@ impl Parser {
 
     fn variable_declaration(&mut self) -> Option<Statement> {
         let position = self.position;
-        self.match_token_maybe(TokenKind::LetKeyword)?;
+        let data_type = self.data_type()?;
+        self.match_token(TokenKind::Arrow);
 
         let identifier = self.match_token(TokenKind::Identifier);
-        self.match_token(TokenKind::Colon);
-        let data_type = self.match_(Self::data_type, "data type");
         let statement = if self.match_token_maybe(TokenKind::Equal).is_some() {
             let expression = self.match_(Self::expression, "expression");
             Statement::VariableDeclarationAndAssignment {
@@ -406,7 +405,7 @@ impl Parser {
                     statement: Box::new(statement),
                 })
             };
-        } else if self.match_token_maybe(TokenKind::ForiKeyword).is_some() {
+        } else if self.match_token_maybe(TokenKind::ForKeyword).is_some() {
             self.match_token(TokenKind::OpenParen);
             let ident = self.match_token(TokenKind::Identifier);
             self.match_token(TokenKind::Comma);
@@ -474,14 +473,7 @@ impl Parser {
                     self.consume_token();
                     Some(DataType::Booba)
                 }
-                TokenKind::Identifier => {
-                    let name = self.match_token(TokenKind::Identifier);
-                    Some(DataType::Struct { name })
-                }
-                _ => {
-                    self.consume_token();
-                    None
-                }
+                _ => None,
             };
         }
         None

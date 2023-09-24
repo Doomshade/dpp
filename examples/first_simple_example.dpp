@@ -1,42 +1,41 @@
-let x: pp;
-let y: pp = 123;
+pp -> x;
+pp -> y = 123;
 
-FUNc test(aa: pp, bb: pp): ppa {
-    let a: pp = 5;
-    let testt: pp = (1 + 2) * 3 + 4 * 5;
-    let testasd: pp;
-    let asd: pp = 123;
-    let c: pp;
-    let bb: pp;
-    let aa: pp = (a + (a(abc))) + c;
+FUNc test(firstarg: pp, secondarg: pp) -> pp {
+    pp -> a = 5;
+    pp -> expr = (1 + 2) * 3 + 4 * 5;
+    pp -> decl;
+    pp -> assign = 123;
+    pp -> c;
+    pp -> another_expr = (a + (a(abc))) + c;
 
-    abcd( > 456, a);
+    abcde(a > 456, a);
+    # blocc
     {
-        {
-            let a: pp;
+        { # another blocc
+            pp -> a;
         }
     }
-    testasd = 123;
-    testasddd = test + 4 * 2 - 1 + 2;
 
     if (a > 2) {
-        let test: pp = yem;
+        booba -> test = yem;
     }
-    bye test = 3;
+    bye "hello";
 }
 
-FUNc hellyea(aa: pp, bb: pp): pp {
-    let yup: pp = (1 + 3) * 3;
-    let nop: pp;
+FUNc hellyea(fuk: pp, dis: pp) -> pp {
+    pp -> yup = (1 + 3) * 3;
+    pp -> nop;
     yup = 123;
-    nop = yup *(1)+ 4 * 2 - 123;
+    nop = yup * (1) + 4 * 123;
 
-    if (123) {
-        let abc: pp = 123;
-    } else if (456) {
-        let def: pp = 1234;
+    if (yem) {
+        pp -> abc = 123;
+    } else if (nom) {
+        pp -> def = 1234;
     } else {
-        let ghi: pp = 456;
+        pp -> ghi = 456;
     }
 
+    bye 69;
 }

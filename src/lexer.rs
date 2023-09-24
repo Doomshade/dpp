@@ -175,9 +175,11 @@ pub enum TokenKind {
     FiberType,     // String
     NoppType,
     // void
-    ForiKeyword,
+    ForKeyword,
     ElseKeyword,
     DoubleQuote,
+    ToKeyword,
+    Arrow,
 }
 
 impl Display for TokenKind {
@@ -227,7 +229,7 @@ impl Display for TokenKind {
             Self::PpinKeyword => "ppin",
             Self::FUNcKeyword => "FUNc",
             Self::ElseKeyword => "else",
-            Self::ForiKeyword => "fori",
+            Self::ForKeyword => "for",
             Self::XxlppType => "data type \"xxlpp\"",
             Self::PpType => "data type \"pp\"",
             Self::SppType => "data type \"spp\"",
@@ -236,6 +238,8 @@ impl Display for TokenKind {
             Self::BoobaType => "data type \"booba\"",
             Self::NoppType => "void data type \"nopp\"",
             Self::DoubleQuote => "\"\"\"",
+            Self::ToKeyword => "to",
+            Self::Arrow => "->",
         };
         write!(f, "{text_representation}")
     }
@@ -370,7 +374,16 @@ impl Lexer {
         self.consume();
 
         match operator {
-            '>' | '<' | '!' | '=' | '+' | '-' | '*' | '/' | '%' => {
+            '-' => {
+                if self.peek() == '=' {
+                    buf.push(self.peek());
+                    self.consume();
+                } else if self.peek() == '>' {
+                    buf.push(self.peek());
+                    self.consume();
+                }
+            }
+            '>' | '<' | '!' | '=' | '+' | '*' | '/' | '%' => {
                 if self.peek() == '=' {
                     buf.push(self.peek());
                     self.consume();
@@ -380,6 +393,7 @@ impl Lexer {
         }
 
         let kind: TokenKind = match buf.as_str() {
+            "->" => TokenKind::Arrow,
             ">" => TokenKind::Greater,
             ">=" => TokenKind::GreaterEqual,
             "<" => TokenKind::Less,
@@ -501,7 +515,8 @@ impl Lexer {
             "booba" => TokenKind::BoobaType,
             "if" => TokenKind::IfKeyword,
             "else" => TokenKind::ElseKeyword,
-            "fori" => TokenKind::ForiKeyword,
+            "fori" => TokenKind::ForKeyword,
+            "to" => TokenKind::ToKeyword,
             "let" => TokenKind::LetKeyword,
             "bye" => TokenKind::ByeKeyword,
             "pprint" => TokenKind::PprintKeyword,

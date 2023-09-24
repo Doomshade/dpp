@@ -16,7 +16,7 @@
         \ebnfnodett{transl-unit}{( function | var-decl )*}
 %        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}
 %        \ebnfnodett{struct-field}{var-decl ";"}
-        \ebnfnodett{function}{"FUNc" IDENT "(" params? ")" ":" data-type block}
+        \ebnfnodett{function}{"FUNc" IDENT "(" params? ")" "->" data-type block}
         \ebnfnodett{params}{param ("," param)*}
         \ebnfnodett{param}{IDENT ":" data-type}
         \ebnfnodett{block}{"\{" stat* "\}"}
@@ -24,13 +24,13 @@
         {%
             \ttt{var-decl}\\
             &\ttt{ | "if" "(" expr ")" stat ( "else" stat )?}\\
-            &\ttt{ | "fori" "(" IDENT "," expr ")" stat }\\
+            &\ttt{ | "for" "(" IDENT "," expr ")" stat }\\
             &\ttt{ | block }\\
             &\ttt{ | "bye" expr ";" }\\
             &\ttt{ | expr ";" }\\
             &\ttt{ | ";" }
         }
-        \ebnfnodett{var-decl}{"let" IDENT ":" data-type ( "=" expr )? ";"}
+        \ebnfnodett{var-decl}{data-type "->" IDENT ( "=" expr )? ";"}
         \ebnfnode{\ttt{data-type}}
         {%
             \ttt{"xxlpp"}\\

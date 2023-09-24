@@ -1,5 +1,6 @@
 use crate::lexer::{Token, TokenKind};
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -25,11 +26,25 @@ impl Display for SyntaxError {
 
 impl Error for SyntaxError {}
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ErrorMessage {
     row: u32,
     col: u32,
     message: String,
+}
+
+impl Ord for ErrorMessage {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.row
+            .cmp(&other.row)
+            .then_with(|| self.col.cmp(&other.col))
+    }
+}
+
+impl PartialOrd for ErrorMessage {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Debug)]
@@ -110,13 +125,19 @@ impl ErrorDiagnosis {
         if error_messages.is_empty() {
             return Ok(());
         }
-        let mut errors = Vec::new();
+        let mut priority_queue: BinaryHeap<ErrorMessage> = BinaryHeap::new();
 
-        for (error_message, _) in error_messages {
-            errors.push(String::from(error_message));
+        for (_, error_message) in error_messages {
+            priority_queue.push(error_message.clone());
         }
+        let vec = priority_queue
+            .into_sorted_vec()
+            .iter()
+            .map(|x| x.message.clone())
+            .collect();
+
         Err(SyntaxError {
-            error_messages: errors,
+            error_messages: vec,
         })
     }
 }
