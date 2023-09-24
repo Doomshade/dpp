@@ -16,8 +16,8 @@
         \ebnfnodett{transl-unit}{( function | var-decl )*}
 %        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}
 %        \ebnfnodett{struct-field}{var-decl ";"}
-        \ebnfnodett{function}{"FUNc" IDENT "(" params? ")" "->" data-type block}
-        \ebnfnodett{params}{param ("," param)*}
+        \ebnfnodett{function}{"FUNc" IDENT params "->" data-type block}
+        \ebnfnodett{params}{"(" (param ("," param))* ")"}
         \ebnfnodett{param}{IDENT ":" data-type}
         \ebnfnodett{block}{"\{" stat* "\}"}
         \ebnfnode{\ttt{stat}}

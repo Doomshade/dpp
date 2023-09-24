@@ -296,7 +296,7 @@ impl Parser {
         String::new()
     }
 
-    fn accept_<T: Default>(&mut self, grammar_func: fn(&mut Self) -> Option<T>) -> Option<T> {
+    fn accepts_<T: Default>(&mut self, grammar_func: fn(&mut Self) -> Option<T>) -> Option<T> {
         if let Some(ret_from_something) = grammar_func(self) {
             return Some(ret_from_something);
         }
@@ -334,9 +334,9 @@ impl Parser {
         let mut functions = Vec::<Function>::new();
         let mut variables = Vec::<Statement>::new();
         loop {
-            if let Some(function) = self.accept_(Self::function) {
+            if let Some(function) = self.accepts_(Self::function) {
                 functions.push(function);
-            } else if let Some(variable_declaration) = self.accept_(Self::var_decl) {
+            } else if let Some(variable_declaration) = self.accepts_(Self::var_decl) {
                 variables.push(variable_declaration);
             } else if self.curr_token_index == self.tokens.len() {
                 break;
@@ -358,9 +358,7 @@ impl Parser {
         self.accepts(TokenKind::FUNcKeyword)?;
 
         let identifier = self.expect(TokenKind::Identifier);
-        self.expect(TokenKind::OpenParen);
-        let parameters = self.parameters();
-        self.expect(TokenKind::CloseParen);
+        let parameters = self.params();
         self.expect(TokenKind::Arrow);
         let return_type = self.expect_(Self::data_type, "data type");
         let block = self.expect_(Self::block, "block");
@@ -374,14 +372,32 @@ impl Parser {
         })
     }
 
-    fn parameters(&mut self) -> Vec<Parameter> {
+    fn params(&mut self) -> Vec<Parameter> {
+        self.expect(TokenKind::OpenParen);
         let mut parameters = Vec::<Parameter>::new();
-        while let Some(parameter) = self.parameter() {
+        if self.accepts(TokenKind::CloseParen).is_some() {
+            return parameters;
+        } else if let Some(parameter) = self.parameter() {
             parameters.push(parameter);
-            if self.accepts(TokenKind::Comma).is_none() {
-                break;
+            loop {
+                if self.accepts(TokenKind::Comma).is_some() {
+                    parameters.push(self.expect_(Self::parameter, "parameter"));
+                } else {
+                    break;
+                }
             }
+            self.expect(TokenKind::CloseParen);
+        } else {
+            self.expect(TokenKind::CloseParen);
         }
+
+        // let mut parameters = Vec::<Parameter>::new();
+        // while let Some(parameter) = self.parameter() {
+        //     parameters.push(parameter);
+        //     if self.accepts(TokenKind::Comma).is_none() {
+        //         break;
+        //     }
+        // }
         parameters
     }
 
@@ -479,7 +495,7 @@ impl Parser {
 
     fn var_decl(&mut self) -> Option<Statement> {
         let position = self.position;
-        let data_type = self.data_type()?;
+        let data_type = self.accepts_(Self::data_type)?;
         self.expect(TokenKind::Arrow);
 
         let identifier = self.expect(TokenKind::Identifier);
