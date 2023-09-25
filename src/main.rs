@@ -8,8 +8,8 @@ use std::fs;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::lexer::{Lexer, Token};
+use crate::parser::{Parser, TranslationUnit};
 use crate::semantic_analyzer::SemanticAnalyzer;
 
 pub mod emitter;
@@ -19,24 +19,44 @@ pub mod parser;
 pub mod semantic_analyzer;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // TODO: Pass this as a command line argument.
     let path = "examples/first_simple_example.dpp";
+    // TODO: Make this Arc so that we can use the lines in the error diagnosis.
     let file = fs::read_to_string(path)?;
-
     let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(path)));
+
+    // Lex -> parse -> analyze -> emit.
+    // Pass error diag to each step.
+    analyze(parse(lex(file, &error_diag)?, &error_diag)?, &error_diag)?;
+    Ok(())
+}
+
+fn lex(
+    file: String,
+    error_diag: &Arc<RefCell<ErrorDiagnosis>>,
+) -> Result<Vec<Token>, Box<dyn Error>> {
     let mut lexer = Lexer::new(file.as_str(), error_diag.clone());
-
     let tokens = lexer.lex();
-    let translation_unit = Parser::new(Arc::new(tokens), error_diag.clone()).parse();
     error_diag.borrow().check_errors()?;
-    dbg!(&translation_unit);
+    Ok(tokens)
+}
+
+fn parse(
+    tokens: Vec<Token>,
+    error_diag: &Arc<RefCell<ErrorDiagnosis>>,
+) -> Result<TranslationUnit, Box<dyn Error>> {
+    let mut parser = Parser::new(Arc::new(tokens), error_diag.clone());
+    let result = parser.parse();
+    error_diag.borrow().check_errors()?;
+    Ok(result)
+}
+
+fn analyze(
+    translation_unit: TranslationUnit,
+    error_diag: &Arc<RefCell<ErrorDiagnosis>>,
+) -> Result<(), Box<dyn Error>> {
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
-    analyzer.analyze(translation_unit);
+    let result = analyzer.analyze(translation_unit);
     error_diag.borrow().check_errors()?;
-
-    // let file_name = String::from("out/dpp/first_simple_example.asm");
-    // let file = File::create(file_name)?;
-    // let mut writer = BufWriter::new(&file);
-    // emitter.emit(program, &file)?;
-
     Ok(())
 }

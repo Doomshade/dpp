@@ -13,7 +13,19 @@ pub struct Parser {
     position: (u32, u32),
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+// For each declaration in grammar we declare an enum and a function that parses that declaration.
+//
+// Each enum always consists of a default variant, usually prefixed by "Invalid" that allows us to
+// continue parsing even though an error occurred. That way we are able to insert a placeholder
+// in the AST and continue parsing. This is useful for error recovery.
+//
+// Each enum also contains a variant for each possible production in the grammar,
+// usually defaulting to one variant with the same name (e.g. Function::Function). This adds a
+// little bit of boilerplate, but it allows us to easily add new productions to the grammar.
+//
+// Each enum also derives Debug that lets us print the tree structure of the AST.
+
+#[derive(Debug, Default)]
 pub enum TranslationUnit {
     TranslationUnit {
         functions: Vec<Function>,
@@ -23,7 +35,7 @@ pub enum TranslationUnit {
     InvalidTranslationUnit,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum Function {
     Function {
         position: (u32, u32),
@@ -36,7 +48,7 @@ pub enum Function {
     InvalidFunction,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum Parameters {
     Parameters {
         position: (u32, u32),
@@ -46,7 +58,7 @@ pub enum Parameters {
     InvalidParameters,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum Parameter {
     Parameter {
         position: (u32, u32),
@@ -57,7 +69,7 @@ pub enum Parameter {
     InvalidParameter,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum Block {
     Block {
         position: (u32, u32),
@@ -67,7 +79,7 @@ pub enum Block {
     InvalidBlock,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum Statement {
     VariableDeclaration {
         position: (u32, u32),
@@ -116,7 +128,7 @@ pub enum Statement {
     InvalidStatement,
 }
 
-#[derive(Debug, PartialEq, Default, Eq)]
+#[derive(Debug, Default)]
 pub enum Expression {
     PpExpression {
         position: (u32, u32),
@@ -159,7 +171,7 @@ pub enum Expression {
     InvalidExpression,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub enum DataType {
     Xxlpp,
     Nopp,
@@ -176,13 +188,13 @@ pub enum DataType {
     InvalidDataType,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum Struct {
     #[default]
     InvalidStruct,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -198,7 +210,7 @@ pub enum BinaryOperator {
     InvalidBinaryOperator,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum UnaryOperator {
     Not,
     Negate,
