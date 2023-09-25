@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 
@@ -252,12 +252,12 @@ pub struct Lexer {
     position: usize,
     row: u32,
     col: u32,
-    error_diag: Rc<RefCell<ErrorDiagnosis>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis>>,
 }
 
 impl Lexer {
     #[must_use]
-    pub fn new(input: &str, error_diag: Rc<RefCell<ErrorDiagnosis>>) -> Self {
+    pub fn new(input: &str, error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
         let chars = input.chars().collect();
         Self {
             chars,

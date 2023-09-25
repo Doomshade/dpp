@@ -5,14 +5,13 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::fs;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::semantic_analyzer::SemanticAnalyzer;
 
-pub mod ast;
 pub mod emitter;
 pub mod error_diagnosis;
 pub mod lexer;
@@ -23,13 +22,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = "examples/first_simple_example.dpp";
     let file = fs::read_to_string(path)?;
 
-    let error_diag = Rc::new(RefCell::new(ErrorDiagnosis::new(path)));
+    let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(path)));
     let mut lexer = Lexer::new(file.as_str(), error_diag.clone());
 
     let tokens = lexer.lex();
-    dbg!(&tokens);
-    let translation_unit = Parser::new(Rc::new(tokens), error_diag.clone()).parse();
-    dbg!(&translation_unit);
+    let translation_unit = Parser::new(Arc::new(tokens), error_diag.clone()).parse();
     error_diag.borrow().check_errors()?;
     dbg!(&translation_unit);
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());

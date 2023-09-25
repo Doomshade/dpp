@@ -1,5 +1,6 @@
 \documentclass[12pt, a4paper]{article}
 \usepackage{amsmath}
+\usepackage{syntax}
 \newcommand{\ttt}[1]{
     \text{\texttt{#1}}
 }
@@ -12,6 +13,61 @@
 }
 
 \begin{document}
+    \setlength{\grammarparsep}{0.6em} % increase separation between rules
+    \setlength{\grammarindent}{10em} % increase separation between LHS/RHS
+
+    \begin{grammar}
+
+        <transl-unit> ::= \{ (<function> | <var-decl>) \}
+
+        <function> ::= `func' <ident> <params> `->' <data-type> <block>
+
+        <params> ::= `(' [<param> \{ `,' <param> \}] `)'
+
+        <param> ::= <ident> `:' <data-type>
+
+        <block> ::= `{' \{ <stat> \} `}'
+
+        <stat> ::= `if' `(' <expr> `)' <stat> [`else' <stat>]
+        \alt `for' `(' <ident> `to' <expr> `)' <stat>
+        \alt `bye' <expr> `;'
+        \alt `;'
+        \alt <var-decl>
+        \alt <block>
+        \alt <expr> `;'
+
+        <var-decl> ::= <data-type> `->' <ident> [`=' <expr>] `;'
+
+        <data-type> ::= `xxlpp' // long
+        \alt `pp' // int
+        \alt `spp' // short
+        \alt `xspp' // byte
+        \alt `p' // char
+        \alt `nopp' // void
+        \alt `booba' // bool
+        \alt `yarn' // string
+
+        <expr> ::= <equ>
+
+        <equ> ::= <comp> \{ (`!=' | `==') <comp> \}
+
+        <comp> ::= <term> \{ (`>' | `>=' | `<=' | `<') <term> \}
+
+        <term> ::= <factor> \{ (`+' | `-') <factor> \}
+
+        <factor> ::= <unary> \{ (`*' | `/') <unary> \}
+
+        <unary> ::= (`!' | `-') <unary> | <primary>
+
+        <primary> ::= `yem' // true
+        \alt `nom' // false
+        \alt <number>
+        \alt <string>
+        \alt `(' <expr> `)'
+        \alt <ident> [`(' [<args>] `)']
+
+        <args> ::= <expr> \{ `,' <expr> \}
+    \end{grammar}
     \begin{align*}
         \ebnfnodett{transl-unit}{( function | var-decl )*}
 %        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}

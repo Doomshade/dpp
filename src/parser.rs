@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -8,8 +7,8 @@ use crate::lexer::{Token, TokenKind};
 
 #[derive(Debug)]
 pub struct Parser {
-    tokens: Rc<Vec<Token>>,
-    error_diag: Rc<RefCell<ErrorDiagnosis>>,
+    tokens: Arc<Vec<Token>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis>>,
     curr_token_index: usize,
     position: (u32, u32),
 }
@@ -208,7 +207,7 @@ pub enum UnaryOperator {
 }
 
 impl Parser {
-    pub fn new(tokens: Rc<Vec<Token>>, error_diag: Rc<RefCell<ErrorDiagnosis>>) -> Self {
+    pub fn new(tokens: Arc<Vec<Token>>, error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
         Self {
             position: (1, 1),
             tokens,

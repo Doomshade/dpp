@@ -1,18 +1,18 @@
-use crate::error_diagnosis::ErrorDiagnosis;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
+use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parser::{Block, DataType, Expression, Function, Statement, TranslationUnit};
 
 pub struct SemanticAnalyzer {
     symbol_table: Vec<HashMap<String, DataType>>,
     globals: HashMap<String, DataType>,
-    error_diag: Rc<RefCell<ErrorDiagnosis>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis>>,
 }
 
 impl SemanticAnalyzer {
-    pub fn new(error_diag: Rc<RefCell<ErrorDiagnosis>>) -> Self {
+    pub fn new(error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
         Self {
             symbol_table: Vec::default(),
             globals: HashMap::default(),
