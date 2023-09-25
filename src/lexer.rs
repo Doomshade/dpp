@@ -186,6 +186,8 @@ pub enum TokenKind {
     LoopKeyword,
     BreakKeyword,
     ContinueKeyword,
+    CaseKeyword,
+    SwitchKeyword,
 }
 
 impl Display for TokenKind {
@@ -251,6 +253,8 @@ impl Display for TokenKind {
             Self::LoopKeyword => "loop",
             Self::BreakKeyword => "break",
             Self::ContinueKeyword => "continue",
+            Self::SwitchKeyword => "switch",
+            Self::CaseKeyword => "case",
         };
         write!(f, "{text_representation}")
     }
@@ -542,6 +546,8 @@ impl Lexer {
             "nom" => TokenKind::NomKeyword,
             "break" => TokenKind::BreakKeyword,
             "continue" => TokenKind::ContinueKeyword,
+            "switch" => TokenKind::SwitchKeyword,
+            "case" => TokenKind::CaseKeyword,
             _ => TokenKind::Identifier,
         };
 

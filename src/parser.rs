@@ -135,8 +135,6 @@ pub enum Statement {
         expression: Expression,
         statement: Box<Statement>,
     },
-    #[default]
-    InvalidStatement,
     DoWhileStatement {
         position: (u32, u32),
         block: Block,
@@ -152,6 +150,23 @@ pub enum Statement {
     ContinueStatement {
         position: (u32, u32),
     },
+    SwitchStatement {
+        position: (u32, u32),
+        expression: Expression,
+        cases: Vec<Case>,
+    },
+    #[default]
+    InvalidStatement,
+}
+
+#[derive(Debug, Default)]
+pub enum Case {
+    Case {
+        expression: Expression,
+        block: Box<Block>,
+    },
+    #[default]
+    InvalidCase,
 }
 
 #[derive(Debug, Default)]
@@ -551,10 +566,24 @@ impl Parser {
         } else if self.accepts(TokenKind::ContinueKeyword).is_some() {
             self.expect(TokenKind::Semicolon);
             return Some(Statement::ContinueStatement { position });
+        } else if self.accepts(TokenKind::SwitchKeyword).is_some() {
+            self.expect(TokenKind::OpenParen);
+            let expression = self.expect_(Self::expr, "expression");
+            self.expect(TokenKind::CloseParen);
+            self.expect(TokenKind::OpenBrace);
+            let mut cases = Vec::<Case>::new();
+            while let Some(case) = self.case() {
+                cases.push(case);
+            }
+            self.expect(TokenKind::CloseBrace);
+            return Some(Statement::SwitchStatement {
+                position,
+                expression,
+                cases,
+            });
         } else if self.accepts(TokenKind::ByeKeyword).is_some() {
             let expression = self.expect_(Self::expr, "expression");
             self.expect(TokenKind::Semicolon);
-
             return Some(Statement::ReturnStatement {
                 position,
                 expression,
@@ -577,6 +606,17 @@ impl Parser {
         }
 
         None
+    }
+
+    fn case(&mut self) -> Case {
+        self.expect(TokenKind::CaseKeyword);
+        let expression = self.expect_(Self::expr, "expression");
+        self.expect(TokenKind::Colon);
+        let block = self.expect_(Self::block, "block");
+        Case::Case {
+            expression,
+            block: Box::new(block),
+        }
     }
 
     fn var_decl(&mut self) -> Option<Statement> {

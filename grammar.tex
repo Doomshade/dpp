@@ -34,11 +34,15 @@
         \alt `do' <block> `while' `(' <expr> `)' `;'
         \alt `loop' <block>
         \alt `break' `;'
+        \alt `continue' `;'
+        \alt `switch' `(' <expr> `)' `{' \{ <case> \} `}'
         \alt `bye' <expr> `;'
         \alt `;'
         \alt <var-decl>
         \alt <block>
         \alt <expr> `;'
+
+        <case> ::= `case' <expr> `:' <block>
 
         <var-decl> ::= <data-type> `->' <ident> [`=' <expr>] `;'
 
@@ -68,51 +72,8 @@
         \alt <number>
         \alt <string>
         \alt `(' <expr> `)'
-        \alt <ident> [`=' <expr> | `(' [<args>] `)']
+        \alt <ident> [`(' [<args>] `)']
 
         <args> ::= <expr> \{ `,' <expr> \}
     \end{grammar}
-    \begin{align*}
-        \ebnfnodett{transl-unit}{( function | var-decl )*}
-%        \ebnfnodett{struct-decl}{"struct" IDENTIFIER "\{" struct-field* "\}"}
-%        \ebnfnodett{struct-field}{var-decl ";"}
-        \ebnfnodett{function}{"FUNc" IDENT params "->" data-type block}
-        \ebnfnodett{params}{"(" (param ("," param)*)? ")"}
-        \ebnfnodett{param}{IDENT ":" data-type}
-        \ebnfnodett{block}{"\{" stat* "\}"}
-        \ebnfnode{\ttt{stat}}
-        {%
-            \ttt{"if" "(" expr ")" stat ( "else" stat )?}\\
-            &\ttt{ | "for" "(" IDENT "to" expr ")" stat }\\
-            &\ttt{ | "bye" expr ";" }\\
-            &\ttt{ | ";" }\\
-            &\ttt{ | var-decl }\\
-            &\ttt{ | block }\\
-            &\ttt{ | expr ";" }
-        }
-        \ebnfnodett{var-decl}{data-type "->" IDENT ( "=" expr )? ";"}
-        \ebnfnode{\ttt{data-type}}
-        {%
-            \ttt{"xxlpp"}\\
-            &\ttt{ | "pp"}\\
-            &\ttt{ | "spp"}\\
-            &\ttt{ | "xspp"}\\
-            &\ttt{ | "p"}\\
-            &\ttt{ | "nopp"}\\
-            &\ttt{ | "booba"}\\
-            &\ttt{ | "yarn"}
-        }
-        \ebnfnodett{expr}{equ}
-        \ebnfnodett{equ}{comp ( ( "!=" | "==" ) comp )*}
-        \ebnfnodett{comp}{term ( ( ">" | ">=" | "<" | "<=" ) term )*}
-        \ebnfnodett{term}{factor ( ( "-" | "+" ) factor )*}
-        \ebnfnodett{factor}{unary ( ( "/" | "*" ) unary )*}
-        \ebnfnodett{unary}{( "!" | "-" ) unary | primary}
-        \ebnfnode{\ttt{primary}}
-        {%
-            \ttt{"yem" | "nom" | NUMBER | STRING | "(" expr ")"}\\
-            &\ttt{ | IDENT ( "(" ( args )? ")" )?}
-        }
-        \ebnfnodett{args}{"(" (expr ("," expr)*)? ")"}
-    \end{align*}
 \end{document}
