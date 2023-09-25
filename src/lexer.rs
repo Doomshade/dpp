@@ -182,6 +182,10 @@ pub enum TokenKind {
     ToKeyword,
     Arrow,
     WhileKeyword,
+    DoKeyword,
+    LoopKeyword,
+    BreakKeyword,
+    ContinueKeyword,
 }
 
 impl Display for TokenKind {
@@ -243,6 +247,10 @@ impl Display for TokenKind {
             Self::ToKeyword => "to",
             Self::Arrow => "->",
             Self::WhileKeyword => "while",
+            Self::DoKeyword => "do",
+            Self::LoopKeyword => "loop",
+            Self::BreakKeyword => "break",
+            Self::ContinueKeyword => "continue",
         };
         write!(f, "{text_representation}")
     }
@@ -528,8 +536,12 @@ impl Lexer {
             "ppanic" => TokenKind::PpanicKeyword,
             "ppin" => TokenKind::PpinKeyword,
             "FUNc" => TokenKind::FUNcKeyword,
+            "do" => TokenKind::DoKeyword,
+            "loop" => TokenKind::LoopKeyword,
             "yem" => TokenKind::YemKeyword,
             "nom" => TokenKind::NomKeyword,
+            "break" => TokenKind::BreakKeyword,
+            "continue" => TokenKind::ContinueKeyword,
             _ => TokenKind::Identifier,
         };
 

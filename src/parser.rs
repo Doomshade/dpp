@@ -137,6 +137,21 @@ pub enum Statement {
     },
     #[default]
     InvalidStatement,
+    DoWhileStatement {
+        position: (u32, u32),
+        block: Block,
+        expression: Expression,
+    },
+    LoopStatement {
+        position: (u32, u32),
+        block: Box<Block>,
+    },
+    BreakStatement {
+        position: (u32, u32),
+    },
+    ContinueStatement {
+        position: (u32, u32),
+    },
 }
 
 #[derive(Debug, Default)]
@@ -512,6 +527,30 @@ impl Parser {
                 expression,
                 statement: Box::new(statement),
             });
+        } else if self.accepts(TokenKind::DoKeyword).is_some() {
+            let block = self.expect_(Self::block, "block");
+            self.expect(TokenKind::WhileKeyword);
+            self.expect(TokenKind::OpenParen);
+            let expression = self.expect_(Self::expr, "expression");
+            self.expect(TokenKind::CloseParen);
+            self.expect(TokenKind::Semicolon);
+            return Some(Statement::DoWhileStatement {
+                position,
+                block,
+                expression,
+            });
+        } else if self.accepts(TokenKind::LoopKeyword).is_some() {
+            let block = self.expect_(Self::block, "block");
+            return Some(Statement::LoopStatement {
+                position,
+                block: Box::new(block),
+            });
+        } else if self.accepts(TokenKind::BreakKeyword).is_some() {
+            self.expect(TokenKind::Semicolon);
+            return Some(Statement::BreakStatement { position });
+        } else if self.accepts(TokenKind::ContinueKeyword).is_some() {
+            self.expect(TokenKind::Semicolon);
+            return Some(Statement::ContinueStatement { position });
         } else if self.accepts(TokenKind::ByeKeyword).is_some() {
             let expression = self.expect_(Self::expr, "expression");
             self.expect(TokenKind::Semicolon);

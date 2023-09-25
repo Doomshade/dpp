@@ -22,6 +22,16 @@ FUNc test(firstarg: pp, a: pp) -> pp {
 
     }
 
+    while(yem) {}
+
+    do {
+        pp -> a;
+    } while(yem);
+
+    loop {
+        break;
+    }
+
     if (a > 2) {
         booba -> test = yem;
     }

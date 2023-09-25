@@ -31,6 +31,9 @@
         <stat> ::= `if' `(' <expr> `)' <stat> [`else' <stat>]
         \alt `for' `(' <ident> [ <expr> ] `to' <expr> `)' <stat>
         \alt `while' `(' <expr> `)' <stat>
+        \alt `do' <block> `while' `(' <expr> `)' `;'
+        \alt `loop' <block>
+        \alt `break' `;'
         \alt `bye' <expr> `;'
         \alt `;'
         \alt <var-decl>
