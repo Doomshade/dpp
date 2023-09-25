@@ -18,6 +18,10 @@ FUNc test(firstarg: pp, a: pp) -> pp {
         }
     }
 
+    for(i = len() to 10) {
+
+    }
+
     if (a > 2) {
         booba -> test = yem;
     }

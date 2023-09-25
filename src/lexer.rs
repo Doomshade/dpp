@@ -516,7 +516,7 @@ impl Lexer {
             "booba" => TokenKind::BoobaType,
             "if" => TokenKind::IfKeyword,
             "else" => TokenKind::ElseKeyword,
-            "fori" => TokenKind::ForKeyword,
+            "for" => TokenKind::ForKeyword,
             "to" => TokenKind::ToKeyword,
             "let" => TokenKind::LetKeyword,
             "bye" => TokenKind::ByeKeyword,

@@ -27,7 +27,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
-    analyze(parse(lex(file, &error_diag)?, &error_diag)?, &error_diag)?;
+    analyze(
+        dbg!(parse(lex(file, &error_diag)?, &error_diag)?),
+        &error_diag,
+    )?;
     Ok(())
 }
 
@@ -56,7 +59,7 @@ fn analyze(
     error_diag: &Arc<RefCell<ErrorDiagnosis>>,
 ) -> Result<(), Box<dyn Error>> {
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
-    let result = analyzer.analyze(translation_unit);
+    analyzer.analyze(translation_unit);
     error_diag.borrow().check_errors()?;
     Ok(())
 }

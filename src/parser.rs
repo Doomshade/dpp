@@ -124,6 +124,12 @@ pub enum Statement {
         length_expression: Expression,
         statement: Box<Statement>,
     },
+    ForStatementWithIdentExpression {
+        position: (u32, u32),
+        ident: Expression,
+        length_expression: Expression,
+        statement: Box<Statement>,
+    },
     #[default]
     InvalidStatement,
 }
@@ -464,10 +470,25 @@ impl Parser {
         } else if self.accepts(TokenKind::ForKeyword).is_some() {
             self.expect(TokenKind::OpenParen);
             let ident = self.expect(TokenKind::Identifier);
+            let ident_expression: Option<Expression>;
+            if self.accepts(TokenKind::Equal).is_some() {
+                ident_expression = Some(self.expect_(Self::expr, "expression"));
+            } else {
+                ident_expression = None;
+            }
             self.expect(TokenKind::ToKeyword);
             let expression = self.expect_(Self::expr, "expression");
             self.expect(TokenKind::CloseParen);
             let statement = self.expect_(Self::statement, "statement");
+
+            if let Some(ident_expression) = ident_expression {
+                return Some(Statement::ForStatementWithIdentExpression {
+                    position,
+                    ident: ident_expression,
+                    length_expression: expression,
+                    statement: Box::new(statement),
+                });
+            }
 
             return Some(Statement::ForStatement {
                 position,

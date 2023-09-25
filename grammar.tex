@@ -29,7 +29,7 @@
         <block> ::= `{' \{ <stat> \} `}'
 
         <stat> ::= `if' `(' <expr> `)' <stat> [`else' <stat>]
-        \alt `for' `(' <ident> `to' <expr> `)' <stat>
+        \alt `for' `(' <ident> [ <expr> ] `to' <expr> `)' <stat>
         \alt `bye' <expr> `;'
         \alt `;'
         \alt <var-decl>
@@ -64,7 +64,7 @@
         \alt <number>
         \alt <string>
         \alt `(' <expr> `)'
-        \alt <ident> [`(' [<args>] `)']
+        \alt <ident> [`=' <expr> | `(' [<args>] `)']
 
         <args> ::= <expr> \{ `,' <expr> \}
     \end{grammar}
