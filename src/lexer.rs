@@ -181,6 +181,7 @@ pub enum TokenKind {
     DoubleQuote,
     ToKeyword,
     Arrow,
+    WhileKeyword,
 }
 
 impl Display for TokenKind {
@@ -241,6 +242,7 @@ impl Display for TokenKind {
             Self::DoubleQuote => "\"\"\"",
             Self::ToKeyword => "to",
             Self::Arrow => "->",
+            Self::WhileKeyword => "while",
         };
         write!(f, "{text_representation}")
     }
@@ -506,6 +508,7 @@ impl Lexer {
             self.consume();
             c = self.peek();
         }
+
         let kind = match buf.as_str() {
             "xxlpp" => TokenKind::XxlppType,
             "pp" => TokenKind::PpType,
@@ -515,6 +518,7 @@ impl Lexer {
             "nopp" => TokenKind::NoppType,
             "booba" => TokenKind::BoobaType,
             "if" => TokenKind::IfKeyword,
+            "while" => TokenKind::WhileKeyword,
             "else" => TokenKind::ElseKeyword,
             "for" => TokenKind::ForKeyword,
             "to" => TokenKind::ToKeyword,

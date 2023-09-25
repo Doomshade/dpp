@@ -130,6 +130,11 @@ pub enum Statement {
         length_expression: Expression,
         statement: Box<Statement>,
     },
+    WhileStatement {
+        position: (u32, u32),
+        expression: Expression,
+        statement: Box<Statement>,
+    },
     #[default]
     InvalidStatement,
 }
@@ -494,6 +499,17 @@ impl Parser {
                 position,
                 index_ident: ident,
                 length_expression: expression,
+                statement: Box::new(statement),
+            });
+        } else if self.accepts(TokenKind::WhileKeyword).is_some() {
+            self.expect(TokenKind::OpenParen);
+            let expression = self.expect_(Self::expr, "expression");
+            self.expect(TokenKind::CloseParen);
+            let statement = self.expect_(Self::statement, "statement");
+
+            return Some(Statement::WhileStatement {
+                position,
+                expression,
                 statement: Box::new(statement),
             });
         } else if self.accepts(TokenKind::ByeKeyword).is_some() {
