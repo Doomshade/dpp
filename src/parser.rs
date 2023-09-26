@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::lexer::{Token, TokenKind};
-
 #[derive(Debug)]
 pub struct Parser {
     tokens: Arc<Vec<Token>>,
@@ -13,17 +12,17 @@ pub struct Parser {
     position: (u32, u32),
 }
 
-// For each declaration in grammar we declare an enum and a function that parses that declaration.
-//
-// Each enum always consists of a default variant, usually prefixed by "Invalid" that allows us to
-// continue parsing even though an error occurred. That way we are able to insert a placeholder
-// in the AST and continue parsing. This is useful for error recovery.
-//
-// Each enum also contains a variant for each possible production in the grammar,
-// usually defaulting to one variant with the same name (e.g. Function::Function). This adds a
-// little bit of boilerplate, but it allows us to easily add new productions to the grammar.
-//
-// Each enum also derives Debug that lets us print the tree structure of the AST.
+/// For each declaration in grammar we declare an enum and a function that parses that declaration.
+///
+/// Each enum always consists of a default variant, usually prefixed by "Invalid" that allows us to
+/// continue parsing even though an error occurred. That way we are able to insert a placeholder
+/// in the AST and continue parsing. This is useful for error recovery.
+///
+/// Each enum also contains a variant for each possible production in the grammar,
+/// usually defaulting to one variant with the same name (e.g. Function::Function). This adds a
+/// little bit of boilerplate, but it allows us to easily add new productions to the grammar.
+///
+/// Each enum also derives Debug that lets us print the tree structure of the AST.\
 
 #[derive(Debug, Default)]
 pub enum TranslationUnit {
@@ -314,6 +313,36 @@ impl Parser {
         false
     }
 
+    /// Checks whether **the token** is accepted in the current state. If
+    /// it does, returns the result of the function in Some and **consumes the token**. If it does
+    /// not, returns None.
+    ///
+    /// The result of the function is either the value of the token or an empty string if the
+    /// value is not present.
+    /// # Arguments
+    ///
+    /// * `token_kind`: the token kind to accept
+    ///
+    /// returns: Option<String> the value of the token; is an empty string if it does not exist,
+    /// or None if the token is not accepted
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if self.accepts(TokenKind::IfKeyword).is_some() {
+    ///     (...)
+    /// }
+    ///
+    /// // or
+    /// if let Some(identifier) = self.accepts(TokenKind::Identifier) {
+    ///    (...)
+    /// }
+    ///
+    /// // or
+    /// fn some_function(&mut self) -> Option<...> {
+    ///     // If it is not accepted, return prematurely from the parsing function.
+    ///     self.accepts(TokenKind::OpenParen)?;
+    /// ```
     fn accepts(&mut self, token_kind: TokenKind) -> Option<String> {
         if let Some(token) = self.token() {
             if token.kind() == token_kind {
@@ -329,6 +358,37 @@ impl Parser {
         None
     }
 
+    /// Expects a **token** of a certain kind. If the token is not present an error is added to the
+    /// error diagnostics. If the token is present, it is consumed and the value of the token is
+    /// returned. If the token has no value, an empty string is returned.
+    ///
+    /// Note that this function fabricates the token if it's not present to continue proper parsing.
+    /// For example, if we expect a colon, but a semicolon is present, we add an error and continue
+    /// as if a colon was present. This is useful for error recovery.
+    ///
+    /// # Arguments
+    ///
+    /// * `token_kind`: The token kind to expect.
+    ///
+    /// returns: String the value of the token. Is empty if it does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Expect an open parenthesis. If it is not present, pretend it's
+    /// // there and continue parsing.
+    /// self.expect(TokenKind::OpenParen);
+    ///
+    /// // (...)
+    ///
+    /// // Expect a close parenthesis. If it is not present, pretend it's
+    /// // there and continue parsing.
+    /// self.expect(TokenKind::CloseParen);
+    ///
+    /// // or
+    /// let identifier = self.expect(TokenKind::Identifier);
+    ///
+    /// ```
     fn expect(&mut self, token_kind: TokenKind) -> String {
         if let Some(token) = self.token() {
             if token.kind() == token_kind {
@@ -337,7 +397,9 @@ impl Parser {
                 if let Some(token_value) = token_value {
                     return token_value;
                 }
-            } else if let Some(prev_token) = self.token_offset(-1) {
+            }
+            // Log the error at the previous token as we expected something else there.
+            else if let Some(prev_token) = self.token_offset(-1) {
                 self.error_diag
                     .borrow_mut()
                     .expected_different_token_error(prev_token, token_kind);
@@ -348,6 +410,27 @@ impl Parser {
         String::new()
     }
 
+    /// Check whether **the rewrite (grammar) function** accepts the input in the current state. If
+    /// it does, returns the result of the function in Some. If it does not, returns None.
+    ///
+    /// The postfix *_* is added to the function name to distinguish between accepting a token
+    /// and a rewrite (grammar) function.
+    ///
+    /// # Arguments
+    ///
+    /// * `grammar_func`: the grammar function to call
+    ///
+    /// returns: Option<T> the result of the call
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Check if the current state accepts a function declaration.
+    /// // If it does, push the function declaration to some vector.
+    /// if let Some(function) = self.accepts_(Self::function) {
+    ///      functions.push(function);
+    ///  }
+    /// ```
     fn accepts_<T: Default>(&mut self, grammar_func: fn(&mut Self) -> Option<T>) -> Option<T> {
         if let Some(ret_from_something) = grammar_func(self) {
             return Some(ret_from_something);
@@ -356,6 +439,30 @@ impl Parser {
         None
     }
 
+    /// Expects **the rewrite (grammar) function** to accept the input in the current state. If
+    /// it does, returns the result of the function. If it does not, returns the default
+    /// value of the rewrite function result (usually *InvalidSomething*) and adds an error to the
+    /// error diagnostics.
+    ///
+    /// The error message passed to diagnostics is in format "Expected: {error_message}".
+    ///
+    /// The postfix *_* is added to the function name to distinguish between accepting a token
+    /// and a rewrite (grammar) function.
+    /// # Arguments
+    ///
+    /// * `grammar_func`: the grammar function to call
+    /// * `error_message`: the error message
+    ///
+    /// returns: Option<T> the result of the call
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Expect a block in the current state.
+    /// // Pass in the string "block" as the error message if the block is not present.
+    /// // The error will be prefixed with "Expected: (...)".
+    /// let block = self.expect_(Self::block, "block");
+    /// ```
     fn expect_<T: Default>(
         &mut self,
         grammar_func: fn(&mut Self) -> Option<T>,
@@ -391,8 +498,11 @@ impl Parser {
             } else if let Some(variable_declaration) = self.accepts_(Self::var_decl) {
                 variables.push(variable_declaration);
             } else if self.curr_token_index == self.tokens.len() {
+                // We reached the end!
                 break;
             } else if let Some(token) = self.token() {
+                // No rewrite function accepted this token in ANY state. Just
+                // throw an error, consume the token, and continue parsing.
                 self.error_diag.borrow_mut().invalid_token_error(token);
                 self.consume_token();
             } else {
