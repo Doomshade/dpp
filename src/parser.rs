@@ -483,13 +483,10 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> TranslationUnit {
-        match self.translation_unit() {
-            Some(tn) => tn,
-            None => panic!(),
-        }
+        self.translation_unit()
     }
 
-    fn translation_unit(&mut self) -> Option<TranslationUnit> {
+    fn translation_unit(&mut self) -> TranslationUnit {
         let mut functions = Vec::<Function>::new();
         let mut variables = Vec::<Statement>::new();
         loop {
@@ -509,10 +506,10 @@ impl Parser {
                 panic!("Something unexpected happened :( (compiler error)")
             }
         }
-        Some(TranslationUnit::TranslationUnit {
+        TranslationUnit::TranslationUnit {
             functions,
             variables,
-        })
+        }
     }
 
     fn function(&mut self) -> Option<Function> {

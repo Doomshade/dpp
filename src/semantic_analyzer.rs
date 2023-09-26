@@ -11,6 +11,8 @@ pub struct SemanticAnalyzer {
     error_diag: Arc<RefCell<ErrorDiagnosis>>,
 }
 
+pub struct BoundTranslationUnit {}
+
 impl SemanticAnalyzer {
     pub fn new(error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
         Self {
@@ -18,6 +20,10 @@ impl SemanticAnalyzer {
             globals: HashMap::default(),
             error_diag,
         }
+    }
+
+    pub fn build_sym_table(&mut self, translation_unit: TranslationUnit) -> BoundTranslationUnit {
+        BoundTranslationUnit {}
     }
 
     pub fn analyze(&mut self, translation_unit: TranslationUnit) {
@@ -66,19 +72,6 @@ impl SemanticAnalyzer {
         };
     }
 
-    ///
-    ///
-    /// # Arguments
-    ///
-    /// * `block`:
-    ///
-    /// returns: ()
-    ///
-    /// # Examples
-    ///
-    /// ```
-    ///
-    /// ```
     fn handle_scope(&mut self, block: &Block) {
         match block {
             Block::Block { .. } => {
