@@ -270,61 +270,41 @@ pub struct Parser {
     error: bool,
 }
 
-#[derive(Debug, Default)]
-pub enum TranslationUnit {
-    TranslationUnit {
-        functions: Vec<Function>,
-        variables: Vec<Statement>,
-    },
-    #[default]
-    InvalidTranslationUnit,
+#[derive(Debug)]
+pub struct TranslationUnit {
+    pub functions: Vec<Function>,
+    pub variables: Vec<Statement>,
 }
 
-#[derive(Debug, Default)]
-pub enum Function {
-    Function {
-        position: (u32, u32),
-        identifier: String,
-        return_type: DataType,
-        parameters: Vec<Parameter>,
-        block: Block,
-    },
-    #[default]
-    InvalidFunction,
+#[derive(Debug)]
+pub struct Function {
+    pub position: (u32, u32),
+    pub identifier: String,
+    pub return_type: DataType,
+    pub parameters: Vec<Parameter>,
+    pub block: Block,
 }
 
-#[derive(Debug, Default)]
-pub enum Parameters {
-    Parameters {
-        position: (u32, u32),
-        parameters: Vec<Parameter>,
-    },
-    #[default]
-    InvalidParameters,
+#[derive(Debug)]
+pub struct Parameters {
+    position: (u32, u32),
+    parameters: Vec<Parameter>,
 }
 
-#[derive(Debug, Default)]
-pub enum Parameter {
-    Parameter {
-        position: (u32, u32),
-        identifier: String,
-        data_type: DataType,
-    },
-    #[default]
-    InvalidParameter,
+#[derive(Debug)]
+pub struct Parameter {
+    position: (u32, u32),
+    identifier: String,
+    data_type: DataType,
 }
 
-#[derive(Debug, Default)]
-pub enum Block {
-    Block {
-        position: (u32, u32),
-        statements: Vec<Statement>,
-    },
-    #[default]
-    InvalidBlock,
+#[derive(Debug)]
+pub struct Block {
+    pub position: (u32, u32),
+    pub statements: Vec<Statement>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum Statement {
     VariableDeclaration {
         position: (u32, u32),
@@ -400,21 +380,15 @@ pub enum Statement {
         expression: Expression,
         cases: Vec<Case>,
     },
-    #[default]
-    InvalidStatement,
 }
 
-#[derive(Debug, Default)]
-pub enum Case {
-    Case {
-        expression: Expression,
-        block: Box<Block>,
-    },
-    #[default]
-    InvalidCase,
+#[derive(Debug)]
+pub struct Case {
+    expression: Expression,
+    block: Box<Block>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum Expression {
     PpExpression {
         position: (u32, u32),
@@ -453,11 +427,9 @@ pub enum Expression {
         identifier: String,
         expression: Box<Expression>,
     },
-    #[default]
-    InvalidExpression,
 }
 
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum DataType {
     // u64
     Xxlpp,
@@ -475,20 +447,13 @@ pub enum DataType {
     Booba,
     // void
     Nopp,
-    Struct {
-        name: String,
-    },
-    #[default]
-    InvalidDataType,
+    Struct { name: String },
 }
 
-#[derive(Debug, Default)]
-pub enum Struct {
-    #[default]
-    InvalidStruct,
-}
+#[derive(Debug)]
+pub struct Struct {}
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -500,14 +465,10 @@ pub enum BinaryOperator {
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
-    #[default]
-    InvalidBinaryOperator,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum UnaryOperator {
     Not,
     Negate,
-    #[default]
-    InvalidUnaryOperator,
 }

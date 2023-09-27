@@ -14,11 +14,11 @@ FUNc asd(firstarg: pp, a: pp) -> pp {
     # blocc
     {
         { # another blocc
-            pp -> a;
+            pp -> pa;
         }
     }
 
-    switch(a) {
+    switch(a > 2) {
         case 69 {
             pp -> a;
         }

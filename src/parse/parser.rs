@@ -25,6 +25,13 @@ impl Parser {
         }
     }
 
+    fn go_back(&mut self) {
+        self.curr_token_index -= 1;
+        if let Some(token) = self.token() {
+            self.position = token.position();
+        }
+    }
+
     #[must_use]
     fn token(&self) -> Option<&Token> {
         return self.token_offset(0);
@@ -128,22 +135,16 @@ impl Parser {
         while let Some(token) = self.token() {
             match token.kind() {
                 TokenKind::Eof
-                | TokenKind::Semicolon
                 | TokenKind::IfKeyword
-                | TokenKind::ByeKeyword
                 | TokenKind::ForKeyword
-                | TokenKind::ElseKeyword
                 | TokenKind::WhileKeyword
                 | TokenKind::DoKeyword
                 | TokenKind::LoopKeyword
                 | TokenKind::BreakKeyword
                 | TokenKind::ContinueKeyword
-                | TokenKind::CaseKeyword
-                | TokenKind::SwitchKeyword => {
-                    self.consume_token();
-                    break;
-                }
-                TokenKind::CloseBrace | TokenKind::FUNcKeyword => {
+                | TokenKind::SwitchKeyword
+                | TokenKind::ByeKeyword
+                | TokenKind::Semicolon => {
                     break;
                 }
                 _ => {
@@ -190,13 +191,14 @@ impl Parser {
                 // No rewrite function accepted this token in ANY state. Just
                 // throw an error, consume the token, and continue parsing.
                 self.error_diag.borrow_mut().invalid_token_error(token);
+                self.consume_token();
                 self.error = true;
                 self.go_into_panic_mode();
             } else {
                 panic!("Something unexpected happened :( (compiler error)")
             }
         }
-        TranslationUnit::TranslationUnit {
+        TranslationUnit {
             functions,
             variables,
         }
@@ -211,7 +213,7 @@ impl Parser {
         let return_type = self.data_type()?;
         let block = self.block()?;
 
-        Some(Function::Function {
+        Some(Function {
             position: self.position,
             identifier,
             return_type,
@@ -235,9 +237,20 @@ impl Parser {
 
         let parameter = self.parameter()?;
         parameters.push(parameter);
+
+        let mut invalid_params = false;
         while !self.matches_token_kind(TokenKind::CloseParen) {
-            self.expect(TokenKind::Comma)?;
-            parameters.push(self.parameter()?);
+            if !invalid_params {
+                invalid_params = invalid_params || self.expect(TokenKind::Comma).is_none();
+                if !invalid_params {
+                    let parameter = self.parameter();
+                    invalid_params = invalid_params || parameter.is_none();
+                    parameters.push(parameter?);
+                }
+            } else {
+                self.add_error("parameter");
+                self.consume_token();
+            }
         }
         self.expect(TokenKind::CloseParen)?;
 
@@ -248,7 +261,7 @@ impl Parser {
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
         let data_type = self.data_type()?;
-        Some(Parameter::Parameter {
+        Some(Parameter {
             position: self.position,
             identifier,
             data_type,
@@ -267,7 +280,7 @@ impl Parser {
         }
         self.expect(TokenKind::CloseBrace)?;
 
-        Some(Block::Block {
+        Some(Block {
             position: self.position,
             statements,
         })
@@ -460,7 +473,7 @@ impl Parser {
             _ => {
                 self.error = true;
                 self.go_into_panic_mode();
-                return None;
+                return self.statement();
             }
         };
     }
@@ -469,7 +482,7 @@ impl Parser {
         self.expect(TokenKind::CaseKeyword)?;
         let expression = self.expr()?;
         let block = self.block()?;
-        Some(Case::Case {
+        Some(Case {
             expression,
             block: Box::new(block),
         })

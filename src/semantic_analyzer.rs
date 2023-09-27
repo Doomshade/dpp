@@ -28,59 +28,39 @@ impl SemanticAnalyzer {
     }
 
     pub fn analyze(&mut self, translation_unit: TranslationUnit) {
-        match translation_unit {
-            TranslationUnit::TranslationUnit {
-                functions,
-                variables,
-            } => {
-                for variable in variables {
-                    self.handle_statement(variable);
-                }
+        let functions = translation_unit.functions;
+        let variables = translation_unit.variables;
+        for variable in variables {
+            self.handle_statement(variable);
+        }
 
-                for function in functions {
-                    match function {
-                        Function::Function {
-                            identifier,
-                            return_type,
-                            position,
-                            block,
-                            ..
-                        } => {
-                            if self.globals.contains_key(&identifier) {
-                                self.error_diag.borrow_mut().variable_already_exists(
-                                    position.0,
-                                    position.1,
-                                    identifier.as_str(),
-                                );
-                            } else {
-                                self.globals.insert(identifier, return_type);
-                            }
-
-                            match block {
-                                Block::Block { statements, .. } => {
-                                    for statement in statements {
-                                        self.handle_statement(statement);
-                                    }
-                                }
-                                Block::InvalidBlock => panic!("RIP"),
-                            }
-                        }
-                        Function::InvalidFunction => panic!("RIP"),
-                    }
-                }
+        for function in functions {
+            let (identifier, return_type, position, block) = (
+                function.identifier,
+                function.return_type,
+                function.position,
+                function.block,
+            );
+            if self.globals.contains_key(&identifier) {
+                self.error_diag.borrow_mut().variable_already_exists(
+                    position.0,
+                    position.1,
+                    identifier.as_str(),
+                );
+            } else {
+                self.globals.insert(identifier, return_type);
             }
-            TranslationUnit::InvalidTranslationUnit => panic!("RIP"),
-        };
+
+            let statements = block.statements;
+            for statement in statements {
+                self.handle_statement(statement);
+            }
+        }
     }
 
     fn handle_scope(&mut self, block: &Block) {
-        match block {
-            Block::Block { .. } => {
-                let scope = HashMap::new();
-                self.symbol_table.push(scope);
-            }
-            Block::InvalidBlock => {}
-        }
+        let scope = HashMap::new();
+        self.symbol_table.push(scope);
     }
 
     fn handle_statement(&mut self, variable: Statement) {
@@ -175,7 +155,6 @@ impl SemanticAnalyzer {
                 }
                 panic!("Unknown identifier")
             }
-            Expression::InvalidExpression => &DataType::InvalidDataType,
         }
     }
 }

@@ -68,7 +68,7 @@ impl ErrorDiagnosis {
     }
 
     pub fn invalid_token_error(&mut self, token: &Token) {
-        self.insert_error_message(token.row(), token.col(), format!("Unexpected \"{token}\"."));
+        self.insert_error_message(token.row(), token.col(), format!("Unexpected {token}."));
     }
 
     pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token>) {
