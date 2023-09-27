@@ -64,51 +64,6 @@ impl Parser {
         false
     }
 
-    /// Checks whether **the token** is accepted in the current state. If
-    /// it does, returns the result of the function in Some and **consumes the token**. If it does
-    /// not, returns None.
-    ///
-    /// The result of the function is either the value of the token or an empty string if the
-    /// value is not present.
-    /// # Arguments
-    ///
-    /// * `token_kind`: the token kind to accept
-    ///
-    /// returns: Option<String> the value of the token; is an empty string if it does not exist,
-    /// or None if the token is not accepted
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// if self.accepts(TokenKind::IfKeyword).is_some() {
-    ///     (...)
-    /// }
-    ///
-    /// // or
-    /// if let Some(identifier) = self.accepts(TokenKind::Identifier) {
-    ///    (...)
-    /// }
-    ///
-    /// // or
-    /// fn some_function(&mut self) -> Option<...> {
-    ///     // If it is not accepted, return prematurely from the parsing function.
-    ///     self.accepts(TokenKind::OpenParen)?;
-    /// ```
-    fn accepts(&mut self, token_kind: TokenKind) -> Option<String> {
-        if let Some(token) = self.token() {
-            if token.kind() == token_kind {
-                let optional_token_value = token.value();
-                self.consume_token();
-                if let Some(token_value) = optional_token_value {
-                    return Some(token_value);
-                }
-                return Some(String::new());
-            }
-        }
-
-        None
-    }
-
     /// Expects a **token** of a certain kind. If the token is not present an error is added to the
     /// error diagnostics. If the token is present, it is consumed and the value of the token is
     /// returned. If the token has no value, an empty string is returned.
@@ -181,72 +136,6 @@ impl Parser {
         Some(String::new())
     }
 
-    /// Check whether **the rewrite (grammar) function** accepts the input in the current state. If
-    /// it does, returns the result of the function in Some. If it does not, returns None.
-    ///
-    /// The postfix *_* is added to the function name to distinguish between accepting a token
-    /// and a rewrite (grammar) function.
-    ///
-    /// # Arguments
-    ///
-    /// * `grammar_func`: the grammar function to call
-    ///
-    /// returns: Option<T> the result of the call
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Check if the current state accepts a function declaration.
-    /// // If it does, push the function declaration to some vector.
-    /// if let Some(function) = self.accepts_(Self::function) {
-    ///      functions.push(function);
-    ///  }
-    /// ```
-    fn accepts_<T: Default>(&mut self, grammar_func: fn(&mut Self) -> Option<T>) -> Option<T> {
-        if let Some(ret_from_something) = grammar_func(self) {
-            return Some(ret_from_something);
-        }
-
-        None
-    }
-
-    /// Expects **the rewrite (grammar) function** to accept the input in the current state. If
-    /// it does, returns the result of the function. If it does not, returns the default
-    /// value of the rewrite function result (usually *InvalidSomething*) and adds an error to the
-    /// error diagnostics.
-    ///
-    /// The error message passed to diagnostics is in format "Expected: {error_message}".
-    ///
-    /// The postfix *_* is added to the function name to distinguish between accepting a token
-    /// and a rewrite (grammar) function.
-    /// # Arguments
-    ///
-    /// * `grammar_func`: the grammar function to call
-    /// * `error_message`: the error message
-    ///
-    /// returns: Option<T> the result of the call
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Expect a block in the current state.
-    /// // Pass in the string "block" as the error message if the block is not present.
-    /// // The error will be prefixed with "Expected: (...)".
-    /// let block = self.expect_(Self::block, "block");
-    /// ```
-    fn expect_<T: Default>(
-        &mut self,
-        grammar_func: fn(&mut Self) -> Option<T>,
-        error_message: &str,
-    ) -> T {
-        if let Some(ret_from_something) = grammar_func(self) {
-            return ret_from_something;
-        }
-
-        self.add_error(error_message);
-        T::default()
-    }
-
     fn go_into_panic_mode(&mut self) -> bool {
         if !self.error {
             return false;
@@ -279,6 +168,7 @@ impl Parser {
                 }
             }
         }
+        self.consume_token();
         self.error = false;
 
         return true;
@@ -398,7 +288,10 @@ impl Parser {
         let mut statements = Vec::<Statement>::new();
 
         while !self.matches_token_kind(TokenKind::CloseBrace) {
-            statements.push(self.statement()?);
+            match self.statement() {
+                Some(statement) => statements.push(statement),
+                None => {}
+            }
         }
         self.expect(TokenKind::CloseBrace)?;
 
@@ -416,13 +309,13 @@ impl Parser {
             TokenKind::IfKeyword => {
                 self.expect(TokenKind::IfKeyword)?;
                 self.expect(TokenKind::OpenParen)?;
-                let expression = self.expect_(Self::expr, "expression");
+                let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
 
-                let statement = self.expect_(Self::statement, "statement");
+                let statement = self.statement()?;
                 if self.matches_token_kind(TokenKind::ElseKeyword) {
                     self.expect(TokenKind::ElseKeyword)?;
-                    let else_statement = self.expect_(Self::statement, "statement");
+                    let else_statement = self.statement()?;
                     Some(Statement::IfElseStatement {
                         position,
                         expression,
@@ -444,14 +337,14 @@ impl Parser {
                 let ident_expression: Option<Expression>;
                 if self.matches_token_kind(TokenKind::Equal) {
                     self.expect(TokenKind::Equal)?;
-                    ident_expression = Some(self.expect_(Self::expr, "expression"));
+                    ident_expression = Some(self.expr()?);
                 } else {
                     ident_expression = None;
                 }
                 self.expect(TokenKind::ToKeyword)?;
-                let expression = self.expect_(Self::expr, "expression");
+                let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
-                let statement = self.expect_(Self::statement, "statement");
+                let statement = self.statement()?;
 
                 if let Some(ident_expression) = ident_expression {
                     return Some(Statement::ForStatementWithIdentExpression {
@@ -472,9 +365,9 @@ impl Parser {
             TokenKind::WhileKeyword => {
                 self.expect(TokenKind::WhileKeyword)?;
                 self.expect(TokenKind::OpenParen)?;
-                let expression = self.expect_(Self::expr, "expression");
+                let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
-                let statement = self.expect_(Self::statement, "statement");
+                let statement = self.statement()?;
 
                 return Some(Statement::WhileStatement {
                     position,
@@ -484,10 +377,10 @@ impl Parser {
             }
             TokenKind::DoKeyword => {
                 self.expect(TokenKind::DoKeyword)?;
-                let block = self.expect_(Self::block, "block");
+                let block = self.block()?;
                 self.expect(TokenKind::WhileKeyword)?;
                 self.expect(TokenKind::OpenParen)?;
-                let expression = self.expect_(Self::expr, "expression");
+                let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
                 self.expect(TokenKind::Semicolon)?;
                 return Some(Statement::DoWhileStatement {
@@ -498,7 +391,7 @@ impl Parser {
             }
             TokenKind::LoopKeyword => {
                 self.expect(TokenKind::LoopKeyword)?;
-                let block = self.expect_(Self::block, "block");
+                let block = self.block()?;
                 return Some(Statement::LoopStatement {
                     position,
                     block: Box::new(block),
@@ -545,7 +438,7 @@ impl Parser {
             }
             TokenKind::ByeKeyword => {
                 self.expect(TokenKind::ByeKeyword)?;
-                let expression = self.expect_(Self::expr, "expression");
+                let expression = self.expr()?;
                 self.expect(TokenKind::Semicolon)?;
                 return Some(Statement::ReturnStatement {
                     position,
@@ -589,7 +482,9 @@ impl Parser {
             }
             _ => {
                 self.add_error("statement");
-                None
+                self.error = true;
+                self.go_into_panic_mode();
+                return None;
             }
         };
     }
@@ -825,84 +720,87 @@ impl Parser {
 
     fn primary(&mut self) -> Option<Expression> {
         let position = self.position;
-        if let Some(identifier) = self.accepts(TokenKind::Identifier) {
-            return if let Some(arguments) = self.args() {
-                return Some(Expression::FunctionCall {
+        return match self.token()?.kind() {
+            TokenKind::Identifier => {
+                let identifier = self.expect(TokenKind::Identifier)?;
+                return match self.token()?.kind() {
+                    TokenKind::OpenParen => {
+                        let arguments = self.args()?;
+                        Some(Expression::FunctionCall {
+                            position,
+                            identifier,
+                            arguments,
+                        })
+                    }
+                    TokenKind::Equal => {
+                        self.expect(TokenKind::Equal)?;
+                        let expression = self.expr()?;
+                        Some(Expression::AssignmentExpression {
+                            position,
+                            identifier,
+                            expression: Box::new(expression),
+                        })
+                    }
+                    _ => Some(Expression::IdentifierExpression {
+                        position,
+                        identifier,
+                    }),
+                };
+            }
+            TokenKind::YemKeyword => {
+                self.expect(TokenKind::YemKeyword)?;
+                Some(Expression::BoobaExpression {
                     position,
-                    identifier,
-                    arguments,
-                });
-            } else if self.accepts(TokenKind::Equal).is_some() {
-                let expression = self.expect_(Self::expr, "expression");
-                Some(Expression::AssignmentExpression {
-                    position,
-                    identifier,
-                    expression: Box::new(expression),
+                    booba: true,
                 })
-            } else {
-                Some(Expression::IdentifierExpression {
+            }
+            TokenKind::NomKeyword => {
+                self.expect(TokenKind::NomKeyword)?;
+                Some(Expression::BoobaExpression {
                     position,
-                    identifier,
+                    booba: false,
                 })
-            };
-        } else if self.accepts(TokenKind::NomKeyword).is_some() {
-            return Some(Expression::BoobaExpression {
-                position,
-                booba: false,
-            });
-        } else if self.accepts(TokenKind::YemKeyword).is_some() {
-            return Some(Expression::BoobaExpression {
-                position,
-                booba: true,
-            });
-        } else if let Some(number) = self.accepts(TokenKind::Number) {
-            return Some(Expression::PpExpression {
-                position,
-                pp: number.parse::<i32>().unwrap(),
-            });
-        } else if let Some(yarn) = self.accepts(TokenKind::Yarn) {
-            return Some(Expression::YarnExpression { position, yarn });
-        } else if self.accepts(TokenKind::OpenParen).is_some() {
-            let expression = self.expect_(Self::expr, "expression");
-            self.expect(TokenKind::CloseParen)?;
-            return Some(expression);
-        }
-
-        None
+            }
+            TokenKind::Number => {
+                let number = self.expect(TokenKind::Number)?;
+                Some(Expression::PpExpression {
+                    position,
+                    pp: number.parse::<i32>().unwrap(),
+                })
+            }
+            TokenKind::Yarn => {
+                let yarn = self.expect(TokenKind::Yarn)?;
+                Some(Expression::YarnExpression { position, yarn })
+            }
+            TokenKind::OpenParen => {
+                self.expect(TokenKind::OpenParen)?;
+                let expression = self.expr()?;
+                self.expect(TokenKind::CloseParen)?;
+                Some(expression)
+            }
+            _ => {
+                self.add_error("expression");
+                None
+            }
+        };
     }
 
     fn args(&mut self) -> Option<Vec<Expression>> {
-        self.accepts(TokenKind::OpenParen)?;
+        self.expect(TokenKind::OpenParen)?;
         let mut args = Vec::<Expression>::new();
 
-        if self.accepts(TokenKind::CloseParen).is_some() {
+        if self.matches_token_kind(TokenKind::CloseParen) {
+            self.expect(TokenKind::CloseParen)?;
             return Some(args);
         }
-        // else if let Some(arg) = self.expr() {
-        //     args.push(arg);
-        //     loop {
-        //         if self.accepts(TokenKind::Comma).is_some() {
-        //             args.push(self.expect_(Self::expr, "expression"));
-        //         } else if self.accepts(TokenKind::CloseParen).is_some() {
-        //             break;
-        //         }
-        //     }
-        // } else {
-        //     self.expect(TokenKind::CloseParen)?;
-        // }
-        let arg = self.expect_(Self::expr, "expression");
+
+        let arg = self.expr()?;
         args.push(arg);
-        loop {
-            if self.accepts(TokenKind::Comma).is_some() {
-                args.push(self.expect_(Self::expr, "expression"));
-            } else if self.accepts(TokenKind::CloseParen).is_some() {
-                break;
-            } else {
-                self.add_error("Expected \",\"");
-                self.consume_token();
-                args.push(self.expect_(Self::expr, "expression"));
-            }
+        while !self.matches_token_kind(TokenKind::CloseParen) {
+            self.expect(TokenKind::Comma)?;
+            args.push(self.expr()?);
         }
+        self.expect(TokenKind::CloseParen)?;
         Some(args)
     }
 }
