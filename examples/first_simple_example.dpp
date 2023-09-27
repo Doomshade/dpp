@@ -1,7 +1,7 @@
 pp -> x;
 pp -> y = 123;
 
-FUNc test(firstarg: pp, a: pp) -> pp {
+FUNc asd(firstarg: pp, a: pp) -> pp {
     pp -> a = 5;
     pp -> expr = (1 + 2) * 3 + 4 * 5;
     pp -> decl;

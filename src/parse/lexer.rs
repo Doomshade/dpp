@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::fmt::Display;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;

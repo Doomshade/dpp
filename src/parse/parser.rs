@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -39,22 +38,6 @@ impl Parser {
             return None;
         }
         Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
-    }
-
-    fn binop(&mut self, op_matcher: fn(&TokenKind) -> BinaryOperator) -> BinaryOperator {
-        let operator = self.token().expect("Failed to get token");
-        let kind = &operator.kind();
-        let op = op_matcher(kind);
-        self.consume_token();
-        op
-    }
-
-    fn unop(&mut self, op_matcher: fn(&TokenKind) -> UnaryOperator) -> UnaryOperator {
-        let operator = self.token().expect("Failed to get token");
-        let kind = &operator.kind();
-        let op = op_matcher(kind);
-        self.consume_token();
-        op
     }
 
     fn matches_token_kind(&mut self, token_kind: TokenKind) -> bool {
@@ -148,7 +131,6 @@ impl Parser {
                 | TokenKind::Semicolon
                 | TokenKind::IfKeyword
                 | TokenKind::ByeKeyword
-                | TokenKind::FUNcKeyword
                 | TokenKind::ForKeyword
                 | TokenKind::ElseKeyword
                 | TokenKind::WhileKeyword
@@ -157,8 +139,11 @@ impl Parser {
                 | TokenKind::BreakKeyword
                 | TokenKind::ContinueKeyword
                 | TokenKind::CaseKeyword
-                | TokenKind::SwitchKeyword => break,
-                TokenKind::CloseBrace => {
+                | TokenKind::SwitchKeyword => {
+                    self.consume_token();
+                    break;
+                }
+                TokenKind::CloseBrace | TokenKind::FUNcKeyword => {
                     break;
                 }
                 _ => {
@@ -167,7 +152,6 @@ impl Parser {
                 }
             }
         }
-        self.consume_token();
         self.error = false;
 
         return true;
@@ -179,13 +163,6 @@ impl Parser {
             .expected_something_error(error_message, self.token_offset(-1));
     }
 
-    fn is_at_end(&self) -> bool {
-        if let Some(token) = self.token() {
-            return token.kind() == TokenKind::Eof;
-        }
-        self.curr_token_index == self.tokens.len()
-    }
-
     pub fn parse(&mut self) -> TranslationUnit {
         self.translation_unit()
     }
@@ -195,14 +172,12 @@ impl Parser {
         let mut variables = Vec::<Statement>::new();
         loop {
             if self.matches_token_kind(TokenKind::FUNcKeyword) {
-                match self.function() {
-                    Some(function) => functions.push(function),
-                    None => {}
+                if let Some(function) = self.function() {
+                    functions.push(function)
                 }
             } else if self.matches_data_type() {
-                match self.var_decl() {
-                    Some(var_decl) => variables.push(var_decl),
-                    None => {}
+                if let Some(var_decl) = self.var_decl() {
+                    variables.push(var_decl)
                 }
             } else if self.curr_token_index == self.tokens.len() {
                 // We reached the end!
@@ -215,7 +190,8 @@ impl Parser {
                 // No rewrite function accepted this token in ANY state. Just
                 // throw an error, consume the token, and continue parsing.
                 self.error_diag.borrow_mut().invalid_token_error(token);
-                self.consume_token();
+                self.error = true;
+                self.go_into_panic_mode();
             } else {
                 panic!("Something unexpected happened :( (compiler error)")
             }
