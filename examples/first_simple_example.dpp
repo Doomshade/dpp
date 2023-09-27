@@ -19,12 +19,12 @@ FUNc test(firstarg: pp, a: pp) -> pp {
     }
 
     switch(a) {
-        case 69: {
+        case 69 {
             pp -> a;
         }
     }
 
-    for(i = len() to 10) {
+    for(i = len() to  10) {
 
     }
 

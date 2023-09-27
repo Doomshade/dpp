@@ -3,260 +3,10 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::lexer::{Token, TokenKind};
-#[derive(Debug)]
-pub struct Parser {
-    tokens: Arc<Vec<Token>>,
-    error_diag: Arc<RefCell<ErrorDiagnosis>>,
-    curr_token_index: usize,
-    position: (u32, u32),
-}
-
-/// For each declaration in grammar we declare an enum and a function that parses that declaration.
-///
-/// Each enum always consists of a default variant, usually prefixed by "Invalid" that allows us to
-/// continue parsing even though an error occurred. That way we are able to insert a placeholder
-/// in the AST and continue parsing. This is useful for error recovery.
-///
-/// Each enum also contains a variant for each possible production in the grammar,
-/// usually defaulting to one variant with the same name (e.g. Function::Function). This adds a
-/// little bit of boilerplate, but it allows us to easily add new productions to the grammar.
-///
-/// Each enum also derives Debug that lets us print the tree structure of the AST.\
-
-#[derive(Debug, Default)]
-pub enum TranslationUnit {
-    TranslationUnit {
-        functions: Vec<Function>,
-        variables: Vec<Statement>,
-    },
-    #[default]
-    InvalidTranslationUnit,
-}
-
-#[derive(Debug, Default)]
-pub enum Function {
-    Function {
-        position: (u32, u32),
-        identifier: String,
-        return_type: DataType,
-        parameters: Vec<Parameter>,
-        block: Block,
-    },
-    #[default]
-    InvalidFunction,
-}
-
-#[derive(Debug, Default)]
-pub enum Parameters {
-    Parameters {
-        position: (u32, u32),
-        parameters: Vec<Parameter>,
-    },
-    #[default]
-    InvalidParameters,
-}
-
-#[derive(Debug, Default)]
-pub enum Parameter {
-    Parameter {
-        position: (u32, u32),
-        identifier: String,
-        data_type: DataType,
-    },
-    #[default]
-    InvalidParameter,
-}
-
-#[derive(Debug, Default)]
-pub enum Block {
-    Block {
-        position: (u32, u32),
-        statements: Vec<Statement>,
-    },
-    #[default]
-    InvalidBlock,
-}
-
-#[derive(Debug, Default)]
-pub enum Statement {
-    VariableDeclaration {
-        position: (u32, u32),
-        identifier: String,
-        data_type: DataType,
-    },
-    VariableDeclarationAndAssignment {
-        position: (u32, u32),
-        identifier: String,
-        data_type: DataType,
-        expression: Expression,
-    },
-    IfStatement {
-        position: (u32, u32),
-        expression: Expression,
-        statement: Box<Statement>,
-    },
-    IfElseStatement {
-        position: (u32, u32),
-        expression: Expression,
-        statement: Box<Statement>,
-        else_statement: Box<Statement>,
-    },
-    ReturnStatement {
-        position: (u32, u32),
-        expression: Expression,
-    },
-    BlockStatement {
-        position: (u32, u32),
-        block: Box<Block>,
-    },
-    ExpressionStatement {
-        position: (u32, u32),
-        expression: Expression,
-    },
-    EmptyStatement {
-        position: (u32, u32),
-    },
-    ForStatement {
-        position: (u32, u32),
-        index_ident: String,
-        length_expression: Expression,
-        statement: Box<Statement>,
-    },
-    ForStatementWithIdentExpression {
-        position: (u32, u32),
-        ident: Expression,
-        length_expression: Expression,
-        statement: Box<Statement>,
-    },
-    WhileStatement {
-        position: (u32, u32),
-        expression: Expression,
-        statement: Box<Statement>,
-    },
-    DoWhileStatement {
-        position: (u32, u32),
-        block: Block,
-        expression: Expression,
-    },
-    LoopStatement {
-        position: (u32, u32),
-        block: Box<Block>,
-    },
-    BreakStatement {
-        position: (u32, u32),
-    },
-    ContinueStatement {
-        position: (u32, u32),
-    },
-    SwitchStatement {
-        position: (u32, u32),
-        expression: Expression,
-        cases: Vec<Case>,
-    },
-    #[default]
-    InvalidStatement,
-}
-
-#[derive(Debug, Default)]
-pub enum Case {
-    Case {
-        expression: Expression,
-        block: Box<Block>,
-    },
-    #[default]
-    InvalidCase,
-}
-
-#[derive(Debug, Default)]
-pub enum Expression {
-    PpExpression {
-        position: (u32, u32),
-        pp: i32,
-    },
-    BoobaExpression {
-        position: (u32, u32),
-        booba: bool,
-    },
-    FiberExpression {
-        position: (u32, u32),
-        fiber: String,
-    },
-    UnaryExpression {
-        position: (u32, u32),
-        op: UnaryOperator,
-        operand: Box<Expression>,
-    },
-    BinaryExpression {
-        position: (u32, u32),
-        lhs: Box<Expression>,
-        op: BinaryOperator,
-        rhs: Box<Expression>,
-    },
-    IdentifierExpression {
-        position: (u32, u32),
-        identifier: String,
-    },
-    FunctionCall {
-        position: (u32, u32),
-        identifier: String,
-        arguments: Vec<Expression>,
-    },
-    AssignmentExpression {
-        position: (u32, u32),
-        identifier: String,
-        expression: Box<Expression>,
-    },
-    #[default]
-    InvalidExpression,
-}
-
-#[derive(Debug, Default, Eq, PartialEq)]
-pub enum DataType {
-    Xxlpp,
-    Nopp,
-    Pp,
-    Spp,
-    Xspp,
-    P,
-    Yarn,
-    Booba,
-    Struct {
-        name: String,
-    },
-    #[default]
-    InvalidDataType,
-}
-
-#[derive(Debug, Default)]
-pub enum Struct {
-    #[default]
-    InvalidStruct,
-}
-
-#[derive(Debug, Default)]
-pub enum BinaryOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    NotEqual,
-    Equal,
-    GreaterThan,
-    GreaterThanOrEqual,
-    LessThan,
-    LessThanOrEqual,
-    #[default]
-    InvalidBinaryOperator,
-}
-
-#[derive(Debug, Default)]
-pub enum UnaryOperator {
-    Not,
-    Negate,
-    #[default]
-    InvalidUnaryOperator,
-}
+use crate::parse::{
+    BinaryOperator, Block, Case, DataType, Expression, Function, Parameter, Parser, Statement,
+    Token, TokenKind, TranslationUnit, UnaryOperator,
+};
 
 impl Parser {
     pub fn new(tokens: Arc<Vec<Token>>, error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
@@ -715,15 +465,14 @@ impl Parser {
         None
     }
 
-    fn case(&mut self) -> Case {
-        self.expect(TokenKind::CaseKeyword);
+    fn case(&mut self) -> Option<Case> {
+        self.accepts(TokenKind::CaseKeyword)?;
         let expression = self.expect_(Self::expr, "expression");
-        self.expect(TokenKind::Colon);
         let block = self.expect_(Self::block, "block");
-        Case::Case {
+        Some(Case::Case {
             expression,
             block: Box::new(block),
-        }
+        })
     }
 
     fn var_decl(&mut self) -> Option<Statement> {
@@ -1009,6 +758,7 @@ impl Parser {
                 break;
             } else {
                 self.add_error("Expected \",\"");
+                self.consume_token();
                 args.push(self.expect_(Self::expr, "expression"));
             }
         }

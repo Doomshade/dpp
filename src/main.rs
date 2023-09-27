@@ -8,14 +8,12 @@ use std::fs;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::lexer::{Lexer, Token};
-use crate::parser::{Parser, TranslationUnit};
+use crate::parse::{Lexer, Parser, Token, TranslationUnit};
 use crate::semantic_analyzer::SemanticAnalyzer;
 
 pub mod emitter;
 pub mod error_diagnosis;
-pub mod lexer;
-pub mod parser;
+pub mod parse;
 pub mod semantic_analyzer;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -62,4 +60,12 @@ fn analyze(
     analyzer.analyze(translation_unit);
     error_diag.borrow().check_errors()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test() {
+        assert_eq!(1, 1);
+    }
 }

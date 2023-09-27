@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parser::{Block, DataType, Expression, Function, Statement, TranslationUnit};
+use crate::parse::Function;
+use crate::parse::{Block, DataType, Expression, Statement, TranslationUnit};
 
 pub struct SemanticAnalyzer {
     symbol_table: Vec<HashMap<String, DataType>>,
