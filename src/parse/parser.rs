@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::env::var;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -290,6 +291,13 @@ impl Parser {
             .expected_something_error(error_message, self.token_offset(-1));
     }
 
+    fn is_at_end(&self) -> bool {
+        if let Some(token) = self.token() {
+            return token.kind() == TokenKind::Eof;
+        }
+        self.curr_token_index == self.tokens.len()
+    }
+
     pub fn parse(&mut self) -> TranslationUnit {
         self.translation_unit()
     }
@@ -298,10 +306,16 @@ impl Parser {
         let mut functions = Vec::<Function>::new();
         let mut variables = Vec::<Statement>::new();
         loop {
-            if let Some(function) = self.accepts_(Self::function) {
-                functions.push(function);
-            } else if let Some(variable_declaration) = self.accepts_(Self::var_decl) {
-                variables.push(variable_declaration);
+            if self.matches_token_kind(TokenKind::FUNcKeyword) {
+                match self.function() {
+                    Some(function) => functions.push(function),
+                    None => {}
+                }
+            } else if self.matches_data_type() {
+                match self.var_decl() {
+                    Some(var_decl) => variables.push(var_decl),
+                    None => {}
+                }
             } else if self.curr_token_index == self.tokens.len() {
                 // We reached the end!
                 break;
@@ -326,13 +340,13 @@ impl Parser {
 
     fn function(&mut self) -> Option<Function> {
         let position = self.position;
-        self.accepts(TokenKind::FUNcKeyword)?;
+        self.expect(TokenKind::FUNcKeyword)?;
 
         let identifier = self.expect(TokenKind::Identifier)?;
         let parameters = self.params()?;
         self.expect(TokenKind::Arrow)?;
-        let return_type = self.expect_(Self::data_type, "data type");
-        let block = self.expect_(Self::block, "block");
+        let return_type = self.data_type()?;
+        let block = self.block()?;
 
         Some(Function::Function {
             position,
@@ -351,22 +365,18 @@ impl Parser {
         // then try to parse a parameter. If a parameter is present,
         // check if "," or the close parenthesis is there.
         // If neither is there, we say we expected
-        if self.accepts(TokenKind::CloseParen).is_some() {
+        if self.matches_token_kind(TokenKind::CloseParen) {
+            self.expect(TokenKind::CloseParen)?;
             return Some(parameters);
         }
 
         let parameter = self.parameter()?;
         parameters.push(parameter);
-        loop {
-            if self.accepts(TokenKind::Comma).is_some() {
-                parameters.push(self.parameter()?);
-            } else if self.accepts(TokenKind::CloseParen).is_some() {
-                break;
-            } else {
-                self.add_error("Expected \",\"");
-                parameters.push(self.parameter()?);
-            }
+        while !self.matches_token_kind(TokenKind::CloseParen) {
+            self.expect(TokenKind::Comma)?;
+            parameters.push(self.parameter()?);
         }
+        self.expect(TokenKind::CloseParen)?;
 
         Some(parameters)
     }
@@ -375,7 +385,7 @@ impl Parser {
         let position = self.position;
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
-        let data_type = self.expect_(Self::data_type, "data type");
+        let data_type = self.data_type()?;
         Some(Parameter::Parameter {
             position,
             identifier,
@@ -385,7 +395,7 @@ impl Parser {
 
     fn block(&mut self) -> Option<Block> {
         let position = self.position;
-        self.accepts(TokenKind::OpenBrace)?;
+        self.expect(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement>::new();
 
         while !self.matches_token_kind(TokenKind::CloseBrace) {
@@ -397,13 +407,6 @@ impl Parser {
             position,
             statements,
         })
-    }
-
-    fn is_at_end(&self) -> bool {
-        if let Some(token) = self.token() {
-            return token.kind() == TokenKind::Eof;
-        }
-        self.curr_token_index == self.tokens.len()
     }
 
     fn statement(&mut self) -> Option<Statement> {
@@ -581,9 +584,9 @@ impl Parser {
     }
 
     fn case(&mut self) -> Option<Case> {
-        self.accepts(TokenKind::CaseKeyword)?;
-        let expression = self.expect_(Self::expr, "expression");
-        let block = self.expect_(Self::block, "block");
+        self.expect(TokenKind::CaseKeyword)?;
+        let expression = self.expr()?;
+        let block = self.block()?;
         Some(Case::Case {
             expression,
             block: Box::new(block),
@@ -627,7 +630,7 @@ impl Parser {
                 | TokenKind::PKeyword
                 | TokenKind::NoppKeyword
                 | TokenKind::BoobaKeyword
-                | TokenKind::Yarn => true,
+                | TokenKind::YarnKeyword => true,
                 _ => false,
             };
         }
@@ -665,7 +668,7 @@ impl Parser {
                     self.consume_token();
                     Some(DataType::Booba)
                 }
-                TokenKind::Yarn => {
+                TokenKind::YarnKeyword => {
                     self.consume_token();
                     Some(DataType::Yarn)
                 }
@@ -685,134 +688,128 @@ impl Parser {
 
     fn equ(&mut self) -> Option<Expression> {
         let position = self.position;
-        let mut comparison = self.comp();
+        let mut expr = self.comp()?;
 
         while self.matches_token_kind(TokenKind::BangEqual)
             || self.matches_token_kind(TokenKind::EqualEqual)
         {
-            let op = self.binop(|kind| match kind {
+            let op = match self.token()?.kind() {
                 TokenKind::BangEqual => BinaryOperator::NotEqual,
                 TokenKind::EqualEqual => BinaryOperator::Equal,
                 _ => unreachable!(),
-            });
+            };
+            self.consume_token();
 
-            let rhs = self.expect_(Self::comp, "expression");
-            comparison.as_ref()?;
-            if let Some(expression) = comparison {
-                comparison = Some(Expression::BinaryExpression {
-                    position,
-                    lhs: Box::new(expression),
-                    op,
-                    rhs: Box::new(rhs),
-                });
-            }
+            let rhs = self.comp()?;
+            expr = Expression::BinaryExpression {
+                position,
+                lhs: Box::new(expr),
+                op,
+                rhs: Box::new(rhs),
+            };
         }
 
-        comparison
+        Some(expr)
     }
 
     fn comp(&mut self) -> Option<Expression> {
         let position = self.position;
-        let mut term = self.term();
+        let mut expr = self.term()?;
 
         while self.matches_token_kind(TokenKind::Greater)
             || self.matches_token_kind(TokenKind::GreaterEqual)
             || self.matches_token_kind(TokenKind::Less)
             || self.matches_token_kind(TokenKind::LessEqual)
         {
-            let op = self.binop(|kind| match kind {
+            let op = match self.token()?.kind() {
                 TokenKind::Greater => BinaryOperator::GreaterThan,
                 TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
                 TokenKind::Less => BinaryOperator::LessThan,
                 TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
                 _ => unreachable!(),
-            });
-            let rhs = self.expect_(Self::term, "expression");
-            if term.is_none() {
-                self.add_error("expression");
-            }
+            };
+            self.consume_token();
+            let rhs = self.term()?;
 
-            let expression = term?;
-            term = Some(Expression::BinaryExpression {
+            expr = Expression::BinaryExpression {
                 position,
-                lhs: Box::new(expression),
+                lhs: Box::new(expr),
                 op,
                 rhs: Box::new(rhs),
-            });
+            };
         }
 
-        term
+        Some(expr)
     }
 
     fn term(&mut self) -> Option<Expression> {
         let position = self.position;
-        let mut factor = self.factor();
+        let mut expr = self.factor()?;
 
         while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
-            let op = self.binop(|kind| match kind {
+            let op = match self.token()?.kind() {
                 TokenKind::Dash => BinaryOperator::Subtract,
                 TokenKind::Plus => BinaryOperator::Add,
                 _ => unreachable!(),
-            });
-            let rhs = self.expect_(Self::factor, "expression");
-            factor.as_ref()?;
+            };
+            self.consume_token();
+            let rhs = self.factor()?;
 
-            if let Some(expression) = factor {
-                factor = Some(Expression::BinaryExpression {
-                    position,
-                    lhs: Box::new(expression),
-                    op,
-                    rhs: Box::new(rhs),
-                });
-            }
+            expr = Expression::BinaryExpression {
+                position,
+                lhs: Box::new(expr),
+                op,
+                rhs: Box::new(rhs),
+            };
         }
 
-        factor
+        Some(expr)
     }
 
     fn factor(&mut self) -> Option<Expression> {
         let position = self.position;
-        let mut unary = self.unary();
+        let mut expr = self.unary()?;
 
         while self.matches_token_kind(TokenKind::ForwardSlash)
             || self.matches_token_kind(TokenKind::Star)
         {
-            let op = self.binop(|kind| match kind {
+            let op = match self.token()?.kind() {
                 TokenKind::ForwardSlash => BinaryOperator::Divide,
                 TokenKind::Star => BinaryOperator::Multiply,
                 _ => unreachable!(),
-            });
-            unary.as_ref()?;
-            if let Some(expression) = unary {
-                let rhs = self.expect_(Self::unary, "expression");
-                unary = Some(Expression::BinaryExpression {
-                    position,
-                    lhs: Box::new(expression),
-                    op,
-                    rhs: Box::new(rhs),
-                });
-            }
+            };
+            self.consume_token();
+            let rhs = self.unary()?;
+            expr = Expression::BinaryExpression {
+                position,
+                lhs: Box::new(expr),
+                op,
+                rhs: Box::new(rhs),
+            };
         }
-        unary
+        Some(expr)
     }
 
     fn unary(&mut self) -> Option<Expression> {
         let position = self.position;
-        if self.matches_token_kind(TokenKind::Bang) || self.matches_token_kind(TokenKind::Dash) {
-            let op = self.unop(|kind| match kind {
+        return if self.matches_token_kind(TokenKind::Bang)
+            || self.matches_token_kind(TokenKind::Dash)
+        {
+            let op = match self.token()?.kind() {
                 TokenKind::Bang => UnaryOperator::Not,
                 TokenKind::Dash => UnaryOperator::Negate,
                 _ => unreachable!(),
-            });
-            let operand = self.expect_(Self::unary, "expression");
-            return Some(Expression::UnaryExpression {
+            };
+            self.consume_token();
+            let operand = self.unary()?;
+            Some(Expression::UnaryExpression {
                 position,
                 op,
                 operand: Box::new(operand),
-            });
-        }
-
-        self.primary()
+            })
+        } else {
+            self.primary()
+        };
     }
 
     fn primary(&mut self) -> Option<Expression> {
