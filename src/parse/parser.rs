@@ -173,6 +173,7 @@ impl Parser {
                 self.error_diag.borrow_mut().handle("No token found");
                 self.error = true;
             }
+            return Some(String::new());
         }
 
         self.error_diag.borrow_mut().handle("No token found");
@@ -251,6 +252,33 @@ impl Parser {
             return false;
         }
 
+        println!("PANIC PANIC PANIC!");
+        // Consume tokens until we find a synchronizing token.
+        while let Some(token) = self.token() {
+            match token.kind() {
+                TokenKind::Eof
+                | TokenKind::Semicolon
+                | TokenKind::IfKeyword
+                | TokenKind::ByeKeyword
+                | TokenKind::FUNcKeyword
+                | TokenKind::ForKeyword
+                | TokenKind::ElseKeyword
+                | TokenKind::WhileKeyword
+                | TokenKind::DoKeyword
+                | TokenKind::LoopKeyword
+                | TokenKind::BreakKeyword
+                | TokenKind::ContinueKeyword
+                | TokenKind::CaseKeyword
+                | TokenKind::SwitchKeyword => break,
+                TokenKind::CloseBrace => {
+                    break;
+                }
+                _ => {
+                    self.consume_token();
+                    continue;
+                }
+            }
+        }
         self.error = false;
 
         return true;
@@ -359,8 +387,9 @@ impl Parser {
         let position = self.position;
         self.accepts(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement>::new();
-        while let Some(statement) = self.statement() {
-            statements.push(statement);
+
+        while !self.matches_token_kind(TokenKind::CloseBrace) {
+            statements.push(self.statement()?);
         }
         self.expect(TokenKind::CloseBrace)?;
 
@@ -370,133 +399,185 @@ impl Parser {
         })
     }
 
+    fn is_at_end(&self) -> bool {
+        if let Some(token) = self.token() {
+            return token.kind() == TokenKind::Eof;
+        }
+        self.curr_token_index == self.tokens.len()
+    }
+
     fn statement(&mut self) -> Option<Statement> {
         let position = self.position;
-        if self.accepts(TokenKind::IfKeyword).is_some() {
-            self.expect(TokenKind::OpenParen)?;
-            let expression = self.expect_(Self::expr, "expression");
-            self.expect(TokenKind::CloseParen)?;
+        let token_kind = self.token()?.kind();
 
-            let statement = self.expect_(Self::statement, "statement");
-            return if self.accepts(TokenKind::ElseKeyword).is_some() {
-                let else_statement = self.expect_(Self::statement, "statement");
-                Some(Statement::IfElseStatement {
-                    position,
-                    expression,
-                    statement: Box::new(statement),
-                    else_statement: Box::new(else_statement),
-                })
-            } else {
-                Some(Statement::IfStatement {
-                    position,
-                    expression,
-                    statement: Box::new(statement),
-                })
-            };
-        } else if self.accepts(TokenKind::ForKeyword).is_some() {
-            self.expect(TokenKind::OpenParen)?;
-            let ident = self.expect(TokenKind::Identifier)?;
-            let ident_expression: Option<Expression>;
-            if self.accepts(TokenKind::Equal).is_some() {
-                ident_expression = Some(self.expect_(Self::expr, "expression"));
-            } else {
-                ident_expression = None;
+        return match token_kind {
+            TokenKind::IfKeyword => {
+                self.expect(TokenKind::IfKeyword)?;
+                self.expect(TokenKind::OpenParen)?;
+                let expression = self.expect_(Self::expr, "expression");
+                self.expect(TokenKind::CloseParen)?;
+
+                let statement = self.expect_(Self::statement, "statement");
+                if self.matches_token_kind(TokenKind::ElseKeyword) {
+                    self.expect(TokenKind::ElseKeyword)?;
+                    let else_statement = self.expect_(Self::statement, "statement");
+                    Some(Statement::IfElseStatement {
+                        position,
+                        expression,
+                        statement: Box::new(statement),
+                        else_statement: Box::new(else_statement),
+                    })
+                } else {
+                    Some(Statement::IfStatement {
+                        position,
+                        expression,
+                        statement: Box::new(statement),
+                    })
+                }
             }
-            self.expect(TokenKind::ToKeyword)?;
-            let expression = self.expect_(Self::expr, "expression");
-            self.expect(TokenKind::CloseParen)?;
-            let statement = self.expect_(Self::statement, "statement");
+            TokenKind::ForKeyword => {
+                self.expect(TokenKind::ForKeyword)?;
+                self.expect(TokenKind::OpenParen)?;
+                let ident = self.expect(TokenKind::Identifier)?;
+                let ident_expression: Option<Expression>;
+                if self.matches_token_kind(TokenKind::Equal) {
+                    self.expect(TokenKind::Equal)?;
+                    ident_expression = Some(self.expect_(Self::expr, "expression"));
+                } else {
+                    ident_expression = None;
+                }
+                self.expect(TokenKind::ToKeyword)?;
+                let expression = self.expect_(Self::expr, "expression");
+                self.expect(TokenKind::CloseParen)?;
+                let statement = self.expect_(Self::statement, "statement");
 
-            if let Some(ident_expression) = ident_expression {
-                return Some(Statement::ForStatementWithIdentExpression {
+                if let Some(ident_expression) = ident_expression {
+                    return Some(Statement::ForStatementWithIdentExpression {
+                        position,
+                        ident: ident_expression,
+                        length_expression: expression,
+                        statement: Box::new(statement),
+                    });
+                }
+
+                return Some(Statement::ForStatement {
                     position,
-                    ident: ident_expression,
+                    index_ident: ident,
                     length_expression: expression,
                     statement: Box::new(statement),
                 });
             }
+            TokenKind::WhileKeyword => {
+                self.expect(TokenKind::WhileKeyword)?;
+                self.expect(TokenKind::OpenParen)?;
+                let expression = self.expect_(Self::expr, "expression");
+                self.expect(TokenKind::CloseParen)?;
+                let statement = self.expect_(Self::statement, "statement");
 
-            return Some(Statement::ForStatement {
-                position,
-                index_ident: ident,
-                length_expression: expression,
-                statement: Box::new(statement),
-            });
-        } else if self.accepts(TokenKind::WhileKeyword).is_some() {
-            self.expect(TokenKind::OpenParen)?;
-            let expression = self.expect_(Self::expr, "expression");
-            self.expect(TokenKind::CloseParen)?;
-            let statement = self.expect_(Self::statement, "statement");
-
-            return Some(Statement::WhileStatement {
-                position,
-                expression,
-                statement: Box::new(statement),
-            });
-        } else if self.accepts(TokenKind::DoKeyword).is_some() {
-            let block = self.expect_(Self::block, "block");
-            self.expect(TokenKind::WhileKeyword)?;
-            self.expect(TokenKind::OpenParen)?;
-            let expression = self.expect_(Self::expr, "expression");
-            self.expect(TokenKind::CloseParen)?;
-            self.expect(TokenKind::Semicolon)?;
-            return Some(Statement::DoWhileStatement {
-                position,
-                block,
-                expression,
-            });
-        } else if self.accepts(TokenKind::LoopKeyword).is_some() {
-            let block = self.expect_(Self::block, "block");
-            return Some(Statement::LoopStatement {
-                position,
-                block: Box::new(block),
-            });
-        } else if self.accepts(TokenKind::BreakKeyword).is_some() {
-            self.expect(TokenKind::Semicolon)?;
-            return Some(Statement::BreakStatement { position });
-        } else if self.accepts(TokenKind::ContinueKeyword).is_some() {
-            self.expect(TokenKind::Semicolon)?;
-            return Some(Statement::ContinueStatement { position });
-        } else if self.accepts(TokenKind::SwitchKeyword).is_some() {
-            self.expect(TokenKind::OpenParen)?;
-            let expression = self.expect_(Self::expr, "expression");
-            self.expect(TokenKind::CloseParen)?;
-            self.expect(TokenKind::OpenBrace)?;
-            let mut cases = Vec::<Case>::new();
-            while let Some(case) = self.case() {
-                cases.push(case);
+                return Some(Statement::WhileStatement {
+                    position,
+                    expression,
+                    statement: Box::new(statement),
+                });
             }
-            self.expect(TokenKind::CloseBrace)?;
-            return Some(Statement::SwitchStatement {
-                position,
-                expression,
-                cases,
-            });
-        } else if self.accepts(TokenKind::ByeKeyword).is_some() {
-            let expression = self.expect_(Self::expr, "expression");
-            self.expect(TokenKind::Semicolon)?;
-            return Some(Statement::ReturnStatement {
-                position,
-                expression,
-            });
-        } else if self.accepts(TokenKind::Semicolon).is_some() {
-            return Some(Statement::EmptyStatement { position });
-        } else if let Some(variable_declaration) = self.var_decl() {
-            return Some(variable_declaration);
-        } else if let Some(block) = self.block() {
-            return Some(Statement::BlockStatement {
-                position,
-                block: Box::new(block),
-            });
-        } else if let Some(expression) = self.expr() {
-            self.expect(TokenKind::Semicolon)?;
-            return Some(Statement::ExpressionStatement {
-                position,
-                expression,
-            });
-        }
-
-        None
+            TokenKind::DoKeyword => {
+                self.expect(TokenKind::DoKeyword)?;
+                let block = self.expect_(Self::block, "block");
+                self.expect(TokenKind::WhileKeyword)?;
+                self.expect(TokenKind::OpenParen)?;
+                let expression = self.expect_(Self::expr, "expression");
+                self.expect(TokenKind::CloseParen)?;
+                self.expect(TokenKind::Semicolon)?;
+                return Some(Statement::DoWhileStatement {
+                    position,
+                    block,
+                    expression,
+                });
+            }
+            TokenKind::LoopKeyword => {
+                self.expect(TokenKind::LoopKeyword)?;
+                let block = self.expect_(Self::block, "block");
+                return Some(Statement::LoopStatement {
+                    position,
+                    block: Box::new(block),
+                });
+            }
+            TokenKind::BreakKeyword => {
+                self.expect(TokenKind::BreakKeyword)?;
+                self.expect(TokenKind::Semicolon)?;
+                return Some(Statement::BreakStatement { position });
+            }
+            TokenKind::ContinueKeyword => {
+                self.expect(TokenKind::ContinueKeyword)?;
+                self.expect(TokenKind::Semicolon)?;
+                return Some(Statement::ContinueStatement { position });
+            }
+            TokenKind::SwitchKeyword => {
+                self.expect(TokenKind::SwitchKeyword)?;
+                self.expect(TokenKind::OpenParen)?;
+                let expression = self.expect_(Self::expr, "expression");
+                self.expect(TokenKind::CloseParen)?;
+                self.expect(TokenKind::OpenBrace)?;
+                let mut cases = Vec::<Case>::new();
+                while let Some(case) = self.case() {
+                    cases.push(case);
+                }
+                self.expect(TokenKind::CloseBrace)?;
+                return Some(Statement::SwitchStatement {
+                    position,
+                    expression,
+                    cases,
+                });
+            }
+            TokenKind::ByeKeyword => {
+                self.expect(TokenKind::ByeKeyword)?;
+                let expression = self.expect_(Self::expr, "expression");
+                self.expect(TokenKind::Semicolon)?;
+                return Some(Statement::ReturnStatement {
+                    position,
+                    expression,
+                });
+            }
+            TokenKind::Semicolon => {
+                self.expect(TokenKind::Semicolon)?;
+                return Some(Statement::EmptyStatement { position });
+            }
+            TokenKind::YemKeyword
+            | TokenKind::NomKeyword
+            | TokenKind::Number
+            | TokenKind::Yarn
+            | TokenKind::OpenParen
+            | TokenKind::Identifier => {
+                let expression = self.expr()?;
+                self.expect(TokenKind::Semicolon)?;
+                return Some(Statement::ExpressionStatement {
+                    position,
+                    expression,
+                });
+            }
+            TokenKind::OpenBrace => {
+                let block = self.block()?;
+                return Some(Statement::BlockStatement {
+                    position,
+                    block: Box::new(block),
+                });
+            }
+            TokenKind::XxlppKeyword
+            | TokenKind::PpKeyword
+            | TokenKind::SppKeyword
+            | TokenKind::XsppKeyword
+            | TokenKind::PKeyword
+            | TokenKind::NoppKeyword
+            | TokenKind::BoobaKeyword
+            | TokenKind::YarnKeyword => {
+                let variable_declaration = self.var_decl()?;
+                return Some(variable_declaration);
+            }
+            _ => {
+                self.add_error("statement");
+                None
+            }
+        };
     }
 
     fn case(&mut self) -> Option<Case> {
@@ -511,12 +592,13 @@ impl Parser {
 
     fn var_decl(&mut self) -> Option<Statement> {
         let position = self.position;
-        let data_type = self.accepts_(Self::data_type)?;
+        let data_type = self.data_type()?;
         self.expect(TokenKind::Arrow)?;
 
         let identifier = self.expect(TokenKind::Identifier)?;
-        let statement = if self.accepts(TokenKind::Equal).is_some() {
-            let expression = self.expect_(Self::expr, "expression");
+        let statement = if self.matches_token_kind(TokenKind::Equal) {
+            self.expect(TokenKind::Equal);
+            let expression = self.expr()?;
             Statement::VariableDeclarationAndAssignment {
                 position,
                 identifier,
@@ -535,38 +617,55 @@ impl Parser {
         Some(statement)
     }
 
+    fn matches_data_type(&self) -> bool {
+        if let Some(token) = self.token() {
+            return match token.kind() {
+                TokenKind::XxlppKeyword
+                | TokenKind::PpKeyword
+                | TokenKind::SppKeyword
+                | TokenKind::XsppKeyword
+                | TokenKind::PKeyword
+                | TokenKind::NoppKeyword
+                | TokenKind::BoobaKeyword
+                | TokenKind::Yarn => true,
+                _ => false,
+            };
+        }
+        false
+    }
+
     fn data_type(&mut self) -> Option<DataType> {
         if let Some(token) = self.token() {
             return match token.kind() {
-                TokenKind::XxlppType => {
+                TokenKind::XxlppKeyword => {
                     self.consume_token();
                     Some(DataType::Xxlpp)
                 }
-                TokenKind::PpType => {
+                TokenKind::PpKeyword => {
                     self.consume_token();
                     Some(DataType::Pp)
                 }
-                TokenKind::SppType => {
+                TokenKind::SppKeyword => {
                     self.consume_token();
                     Some(DataType::Spp)
                 }
-                TokenKind::XsppType => {
+                TokenKind::XsppKeyword => {
                     self.consume_token();
                     Some(DataType::Xspp)
                 }
-                TokenKind::PType => {
+                TokenKind::PKeyword => {
                     self.consume_token();
                     Some(DataType::P)
                 }
-                TokenKind::NoppType => {
+                TokenKind::NoppKeyword => {
                     self.consume_token();
                     Some(DataType::Nopp)
                 }
-                TokenKind::BoobaType => {
+                TokenKind::BoobaKeyword => {
                     self.consume_token();
                     Some(DataType::Booba)
                 }
-                TokenKind::YarnType => {
+                TokenKind::Yarn => {
                     self.consume_token();
                     Some(DataType::Yarn)
                 }
@@ -753,8 +852,8 @@ impl Parser {
                 position,
                 pp: number.parse::<i32>().unwrap(),
             });
-        } else if let Some(fiber) = self.accepts(TokenKind::YarnType) {
-            return Some(Expression::FiberExpression { position, fiber });
+        } else if let Some(yarn) = self.accepts(TokenKind::Yarn) {
+            return Some(Expression::YarnExpression { position, yarn });
         } else if self.accepts(TokenKind::OpenParen).is_some() {
             let expression = self.expect_(Self::expr, "expression");
             self.expect(TokenKind::CloseParen)?;

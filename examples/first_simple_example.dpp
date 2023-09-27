@@ -24,7 +24,7 @@ FUNc test(firstarg: pp, a: pp) -> pp {
         }
     }
 
-    for(i = len() to  10) {
+    for(i = len() to to  10) {
 
     }
 

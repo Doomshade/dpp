@@ -167,16 +167,15 @@ pub enum TokenKind {
     PprintKeyword, // print()
     PpanicKeyword, // panic()
     PpinKeyword,   // read()
-    XxlppType,     // u64
-    PpType,        // u32
-    SppType,       // u16
-    XsppType,      // u8
-    PType,         // char
-    BoobaType,     // bool
-    YarnType,
-    // String
-    NoppType,
-    // void
+    XxlppKeyword,  // u64
+    PpKeyword,     // u32
+    SppKeyword,    // u16
+    XsppKeyword,   // u8
+    PKeyword,      // char
+    BoobaKeyword,  // bool
+    Yarn,          // String
+    NoppKeyword,   // Void
+    YarnKeyword,   // String keyword
     ForKeyword,
     ElseKeyword,
     DoubleQuote,
@@ -196,7 +195,7 @@ impl Display for TokenKind {
         let text_representation = match self {
             Self::Identifier => "identifier",
             Self::Number => "number",
-            Self::YarnType => "yarn",
+            Self::Yarn => "yarn",
             Self::BangEqual => "!=",
             Self::Comment => "",
             Self::Whitespace => "",
@@ -239,13 +238,13 @@ impl Display for TokenKind {
             Self::FUNcKeyword => "FUNc",
             Self::ElseKeyword => "else",
             Self::ForKeyword => "for",
-            Self::XxlppType => "data type \"xxlpp\"",
-            Self::PpType => "data type \"pp\"",
-            Self::SppType => "data type \"spp\"",
-            Self::XsppType => "data type \"xspp\"",
-            Self::PType => "data type \"p\"",
-            Self::BoobaType => "data type \"booba\"",
-            Self::NoppType => "void data type \"nopp\"",
+            Self::XxlppKeyword => "data type \"xxlpp\"",
+            Self::PpKeyword => "data type \"pp\"",
+            Self::SppKeyword => "data type \"spp\"",
+            Self::XsppKeyword => "data type \"xspp\"",
+            Self::PKeyword => "data type \"p\"",
+            Self::BoobaKeyword => "data type \"booba\"",
+            Self::NoppKeyword => "void data type \"nopp\"",
             Self::DoubleQuote => "\"\"\"",
             Self::ToKeyword => "to",
             Self::Arrow => "->",
@@ -256,6 +255,7 @@ impl Display for TokenKind {
             Self::ContinueKeyword => "continue",
             Self::SwitchKeyword => "switch",
             Self::CaseKeyword => "case",
+            Self::YarnKeyword => "yarn",
         };
         write!(f, "{text_representation}")
     }
@@ -424,9 +424,9 @@ pub enum Expression {
         position: (u32, u32),
         booba: bool,
     },
-    FiberExpression {
+    YarnExpression {
         position: (u32, u32),
-        fiber: String,
+        yarn: String,
     },
     UnaryExpression {
         position: (u32, u32),

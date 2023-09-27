@@ -99,7 +99,7 @@ impl Lexer {
 
         // Consume closing quote.
         self.consume();
-        self.new_token_with_value(TokenKind::PType, String::from(c))
+        self.new_token_with_value(TokenKind::PKeyword, String::from(c))
     }
 
     fn handle_unknown(&mut self) -> Token {
@@ -228,7 +228,7 @@ impl Lexer {
             self.consume();
         }
 
-        let token = self.new_token_with_value(TokenKind::YarnType, buf);
+        let token = self.new_token_with_value(TokenKind::Yarn, buf);
         if c != '"' {
             self.error_diag
                 .borrow_mut()
@@ -262,13 +262,13 @@ impl Lexer {
         }
 
         let kind = match buf.as_str() {
-            "xxlpp" => TokenKind::XxlppType,
-            "pp" => TokenKind::PpType,
-            "spp" => TokenKind::SppType,
-            "xspp" => TokenKind::XsppType,
-            "p" => TokenKind::PType,
-            "nopp" => TokenKind::NoppType,
-            "booba" => TokenKind::BoobaType,
+            "xxlpp" => TokenKind::XxlppKeyword,
+            "pp" => TokenKind::PpKeyword,
+            "spp" => TokenKind::SppKeyword,
+            "xspp" => TokenKind::XsppKeyword,
+            "p" => TokenKind::PKeyword,
+            "nopp" => TokenKind::NoppKeyword,
+            "booba" => TokenKind::BoobaKeyword,
             "if" => TokenKind::IfKeyword,
             "while" => TokenKind::WhileKeyword,
             "else" => TokenKind::ElseKeyword,
@@ -288,6 +288,7 @@ impl Lexer {
             "continue" => TokenKind::ContinueKeyword,
             "switch" => TokenKind::SwitchKeyword,
             "case" => TokenKind::CaseKeyword,
+            "yarn" => TokenKind::YarnKeyword,
             _ => TokenKind::Identifier,
         };
 

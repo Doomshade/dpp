@@ -141,7 +141,7 @@ impl SemanticAnalyzer {
         match expression {
             Expression::PpExpression { .. } => &DataType::Pp,
             Expression::BoobaExpression { .. } => &DataType::Booba,
-            Expression::FiberExpression { .. } => &DataType::Yarn,
+            Expression::YarnExpression { .. } => &DataType::Yarn,
             Expression::UnaryExpression { operand, .. } => {
                 self.evaluate_expression_data_type(operand)
             }
