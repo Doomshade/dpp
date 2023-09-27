@@ -21,9 +21,12 @@ impl Lexer {
     pub fn lex(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         let mut token = self.parse_token();
-        // TODO: Rewrite this to "do while" loop  so the EOF token is added.
-        while token.kind() != TokenKind::Eof {
+        loop {
+            let is_eof = token.kind() == TokenKind::Eof;
             tokens.push(token);
+            if is_eof {
+                break;
+            }
             token = self.parse_token();
         }
         tokens

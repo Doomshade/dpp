@@ -267,6 +267,7 @@ pub struct Parser {
     error_diag: Arc<RefCell<ErrorDiagnosis>>,
     curr_token_index: usize,
     position: (u32, u32),
+    error: bool,
 }
 
 #[derive(Debug, Default)]
