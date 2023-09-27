@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::env::var;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -518,13 +517,25 @@ impl Parser {
             TokenKind::SwitchKeyword => {
                 self.expect(TokenKind::SwitchKeyword)?;
                 self.expect(TokenKind::OpenParen)?;
-                let expression = self.expect_(Self::expr, "expression");
+                let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
                 self.expect(TokenKind::OpenBrace)?;
                 let mut cases = Vec::<Case>::new();
-                while let Some(case) = self.case() {
-                    cases.push(case);
+                if self.matches_token_kind(TokenKind::CloseBrace) {
+                    self.expect(TokenKind::CloseBrace)?;
+                    return Some(Statement::SwitchStatement {
+                        position,
+                        expression,
+                        cases,
+                    });
                 }
+
+                cases.push(self.case()?);
+                while !self.matches_token_kind(TokenKind::CloseBrace) {
+                    self.expect(TokenKind::Comma);
+                    cases.push(self.case()?);
+                }
+
                 self.expect(TokenKind::CloseBrace)?;
                 return Some(Statement::SwitchStatement {
                     position,
