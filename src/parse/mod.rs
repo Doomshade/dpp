@@ -427,6 +427,7 @@ pub enum Expression {
         identifier: String,
         expression: Box<Expression>,
     },
+    InvalidExpression,
 }
 
 #[derive(Debug, Eq, PartialEq)]

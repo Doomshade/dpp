@@ -155,6 +155,9 @@ impl SemanticAnalyzer {
                 }
                 panic!("Unknown identifier")
             }
+            Expression::InvalidExpression => {
+                panic!()
+            }
         }
     }
 }

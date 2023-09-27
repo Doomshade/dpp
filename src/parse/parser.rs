@@ -25,13 +25,6 @@ impl Parser {
         }
     }
 
-    fn go_back(&mut self) {
-        self.curr_token_index -= 1;
-        if let Some(token) = self.token() {
-            self.position = token.position();
-        }
-    }
-
     #[must_use]
     fn token(&self) -> Option<&Token> {
         return self.token_offset(0);
@@ -155,7 +148,7 @@ impl Parser {
         }
         self.error = false;
 
-        return true;
+        true
     }
 
     fn add_error(&mut self, error_message: &str) {
@@ -174,11 +167,11 @@ impl Parser {
         loop {
             if self.matches_token_kind(TokenKind::FUNcKeyword) {
                 if let Some(function) = self.function() {
-                    functions.push(function)
+                    functions.push(function);
                 }
             } else if self.matches_data_type() {
                 if let Some(var_decl) = self.var_decl() {
-                    variables.push(var_decl)
+                    variables.push(var_decl);
                 }
             } else if self.curr_token_index == self.tokens.len() {
                 // We reached the end!
@@ -240,16 +233,16 @@ impl Parser {
 
         let mut invalid_params = false;
         while !self.matches_token_kind(TokenKind::CloseParen) {
-            if !invalid_params {
+            if invalid_params {
+                self.add_error("parameter");
+                self.consume_token();
+            } else {
                 invalid_params = invalid_params || self.expect(TokenKind::Comma).is_none();
                 if !invalid_params {
                     let parameter = self.parameter();
                     invalid_params = invalid_params || parameter.is_none();
                     parameters.push(parameter?);
                 }
-            } else {
-                self.add_error("parameter");
-                self.consume_token();
             }
         }
         self.expect(TokenKind::CloseParen)?;
@@ -273,9 +266,8 @@ impl Parser {
         let mut statements = Vec::<Statement>::new();
 
         while !self.matches_token_kind(TokenKind::CloseBrace) {
-            match self.statement() {
-                Some(statement) => statements.push(statement),
-                None => {}
+            if let Some(statement) = self.statement() {
+                statements.push(statement);
             }
         }
         self.expect(TokenKind::CloseBrace)?;
@@ -516,17 +508,17 @@ impl Parser {
 
     fn matches_data_type(&self) -> bool {
         if let Some(token) = self.token() {
-            return match token.kind() {
+            return matches!(
+                token.kind(),
                 TokenKind::XxlppKeyword
-                | TokenKind::PpKeyword
-                | TokenKind::SppKeyword
-                | TokenKind::XsppKeyword
-                | TokenKind::PKeyword
-                | TokenKind::NoppKeyword
-                | TokenKind::BoobaKeyword
-                | TokenKind::YarnKeyword => true,
-                _ => false,
-            };
+                    | TokenKind::PpKeyword
+                    | TokenKind::SppKeyword
+                    | TokenKind::XsppKeyword
+                    | TokenKind::PKeyword
+                    | TokenKind::NoppKeyword
+                    | TokenKind::BoobaKeyword
+                    | TokenKind::YarnKeyword
+            );
         }
         false
     }
@@ -681,9 +673,7 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Option<Expression> {
-        return if self.matches_token_kind(TokenKind::Bang)
-            || self.matches_token_kind(TokenKind::Dash)
-        {
+        if self.matches_token_kind(TokenKind::Bang) || self.matches_token_kind(TokenKind::Dash) {
             let op = match self.token()?.kind() {
                 TokenKind::Bang => UnaryOperator::Not,
                 TokenKind::Dash => UnaryOperator::Negate,
@@ -698,11 +688,11 @@ impl Parser {
             })
         } else {
             self.primary()
-        };
+        }
     }
 
     fn primary(&mut self) -> Option<Expression> {
-        return match self.token()?.kind() {
+        match self.token()?.kind() {
             TokenKind::Identifier => {
                 let identifier = self.expect(TokenKind::Identifier)?;
                 return match self.token()?.kind() {
@@ -765,9 +755,9 @@ impl Parser {
             }
             _ => {
                 self.add_error("expression");
-                None
+                Some(Expression::InvalidExpression)
             }
-        };
+        }
     }
 
     fn args(&mut self) -> Option<Vec<Expression>> {
