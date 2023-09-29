@@ -1,0 +1,6 @@
+pp -> test = 69;
+
+FUNc main(argc: pp, argv: yarn) -> pp {
+    pprint(test);
+    bye 0;
+}

@@ -424,7 +424,23 @@ impl Lexer {
             c = self.peek();
 
             if c == '\\' {
-                buf.push(c);
+                self.consume();
+                let x = match self.peek() {
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    '\\' => '\\',
+                    '0' => '\0',
+                    _ => {
+                        self.error_diag.borrow_mut().invalid_escaped_character(
+                            self.row,
+                            self.col,
+                            self.peek(),
+                        );
+                        self.peek()
+                    }
+                };
+                buf.push(x);
                 self.consume();
                 c = self.peek();
             }

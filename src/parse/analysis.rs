@@ -3,12 +3,34 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::parser::{Block, DataType, Expression, Statement, TranslationUnit};
+use crate::parse::evaluate::{BoundExpression, Evaluator};
+use crate::parse::parser::{DataType, Function, Statement, TranslationUnit};
 
 pub struct SemanticAnalyzer {
-    symbol_table: Vec<HashMap<String, DataType>>,
-    globals: HashMap<String, DataType>,
+    scopes: Vec<HashMap<String, BoundVariable>>,
+    function_scopes: Vec<BoundFunction>,
     error_diag: Arc<RefCell<ErrorDiagnosis>>,
+    evaluator: Evaluator,
+}
+
+#[derive(Debug)]
+pub struct BoundFunction {
+    name: String,
+    return_type: DataType,
+}
+
+#[derive(Debug)]
+pub struct BoundVariable {
+    identifier: String,
+    data_type: DataType,
+    value: Option<BoundExpression>,
+    initialized: bool,
+}
+
+#[derive(Debug)]
+pub struct BoundParameter {
+    pub identifier: String,
+    pub data_type: DataType,
 }
 
 pub struct BoundTranslationUnit {}
@@ -16,9 +38,10 @@ pub struct BoundTranslationUnit {}
 impl SemanticAnalyzer {
     pub fn new(error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
         Self {
-            symbol_table: Vec::default(),
-            globals: HashMap::default(),
+            scopes: Vec::default(),
+            function_scopes: Vec::default(),
             error_diag,
+            evaluator: Evaluator,
         }
     }
 
@@ -29,134 +52,200 @@ impl SemanticAnalyzer {
     pub fn analyze(&mut self, translation_unit: TranslationUnit) {
         let functions = translation_unit.functions;
         let variables = translation_unit.variables;
-        for variable in variables {
-            self.handle_statement(variable);
-        }
 
-        for function in functions {
-            let (identifier, return_type, position, block) = (
-                function.identifier,
-                function.return_type,
-                function.position,
-                function.block,
-            );
-            if self.globals.contains_key(&identifier) {
-                self.error_diag.borrow_mut().variable_already_exists(
-                    position.0,
-                    position.1,
-                    identifier.as_str(),
-                );
-            } else {
-                self.globals.insert(identifier, return_type);
+        self.begin_scope();
+        {
+            for variable in variables {
+                self.handle_statement(variable);
             }
 
-            let statements = block.statements;
-            for statement in statements {
-                self.handle_statement(statement);
-            }
-        }
-    }
-
-    fn handle_scope(&mut self, block: &Block) {
-        let scope = HashMap::new();
-        self.symbol_table.push(scope);
-    }
-
-    fn handle_statement(&mut self, variable: Statement) {
-        match variable {
-            Statement::VariableDeclaration {
-                identifier,
-                data_type,
-                position,
-            } => {
-                for scope in &self.symbol_table {
-                    if scope.get(&identifier).is_some() {
-                        self.error_diag.borrow_mut().variable_already_exists(
-                            position.0,
-                            position.1,
-                            identifier.as_str(),
-                        );
+            for function in functions {
+                self.begin_function(&function);
+                {
+                    for statement in function.block.statements {
+                        self.handle_statement(statement);
                     }
                 }
-                if self.globals.contains_key(&identifier) {
+                self.end_function();
+            }
+        }
+        self.end_scope();
+    }
+
+    fn begin_function(&mut self, function: &Function) {
+        let mut params = Vec::new();
+        for parameter in &function.parameters {
+            params.push(BoundParameter {
+                identifier: parameter.identifier.clone(),
+                data_type: parameter.data_type.clone(),
+            })
+        }
+
+        self.function_scopes.push(BoundFunction {
+            name: function.identifier.clone(),
+            return_type: function.return_type.clone(),
+        });
+        self.begin_scope();
+    }
+    fn end_function(&mut self) {
+        self.end_scope();
+    }
+
+    fn scope_mut(&mut self) -> &mut HashMap<String, BoundVariable> {
+        self.scopes.last_mut().expect("A scope")
+    }
+
+    fn scope(&self) -> &HashMap<String, BoundVariable> {
+        self.scopes.last().expect("A scope")
+    }
+
+    fn begin_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn end_scope(&mut self) {
+        self.scopes.pop().expect("A scope to pop");
+    }
+
+    fn get_variable(&self, identifier: &str) -> Option<&BoundVariable> {
+        for scope in &self.scopes {
+            if let Some(bound_variable) = scope.get(identifier) {
+                return Some(bound_variable);
+            }
+        }
+        None
+    }
+
+    fn handle_statement(&mut self, statement: Statement) {
+        match statement {
+            Statement::VariableDeclaration { variable } => {
+                if self.scope().contains_key(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
-                        position.0,
-                        position.1,
-                        identifier.as_str(),
+                        variable.position.0,
+                        variable.position.1,
+                        variable.identifier.as_str(),
                     );
-                } else {
-                    self.globals.insert(identifier, data_type);
                 }
+
+                let scope = self.scope_mut();
+                let ident = variable.identifier.clone();
+                let bound_var = BoundVariable {
+                    identifier: variable.identifier.clone(),
+                    value: None,
+                    initialized: false,
+                    data_type: variable.data_type.clone(),
+                };
+                dbg!(&bound_var);
+                scope.insert(ident, bound_var);
             }
             Statement::VariableDeclarationAndAssignment {
-                identifier,
-                data_type,
+                variable,
                 expression,
-                position,
             } => {
-                let evaluated_data_type = self.evaluate_expression_data_type(&expression);
-                if evaluated_data_type != &data_type {
+                if let Some(_) = self.scope().get(&variable.identifier) {
+                    self.error_diag.borrow_mut().variable_already_exists(
+                        variable.position.0,
+                        variable.position.1,
+                        variable.identifier.as_str(),
+                    );
+                    return;
+                }
+
+                let expr = self.evaluator.evaluate_expr(&expression);
+                let same_data_type = match &expr {
+                    BoundExpression::PpValue(_) => variable.data_type == DataType::Pp,
+                    BoundExpression::BoobaValue(_) => variable.data_type == DataType::Booba,
+                    BoundExpression::YarnValue(_) => variable.data_type == DataType::Yarn,
+                    BoundExpression::IdentifierValue(identifier) => {
+                        let bound_variable = self.get_variable(identifier).unwrap();
+                        bound_variable.data_type == variable.data_type
+                    }
+                    BoundExpression::EmptyValue => {
+                        panic!()
+                    }
+                };
+
+                if !same_data_type {
                     self.error_diag.borrow_mut().invalid_type(
-                        position.0,
-                        position.1,
-                        identifier.as_str(),
+                        variable.position.0,
+                        variable.position.1,
+                        variable.identifier.as_str(),
                     );
                 }
-                if !self.globals.contains_key(&identifier) {
-                    self.globals.insert(identifier, data_type);
+
+                if !self.scope_mut().contains_key(&variable.identifier) {
+                    let ident = variable.identifier.clone();
+                    let bound_var = BoundVariable {
+                        identifier: variable.identifier.clone(),
+                        data_type: variable.data_type.clone(),
+                        value: Some(expr),
+                        initialized: true,
+                    };
+                    self.scope_mut().insert(ident, bound_var);
                 } else {
                     self.error_diag.borrow_mut().variable_already_exists(
-                        position.0,
-                        position.1,
-                        identifier.as_str(),
+                        variable.position.0,
+                        variable.position.1,
+                        variable.identifier.as_str(),
                     );
+                }
+            }
+            Statement::PprintStatement { expression, .. } => {
+                // TODO: Clean this up.
+                let expr = self.evaluator.evaluate_expr(&expression);
+                if let BoundExpression::YarnValue(yarn_expr) = expr {
+                    print!("{}", yarn_expr);
+                } else if let BoundExpression::IdentifierValue(identifier) = expr {
+                    if let Some(variable) = self.get_variable(&identifier) {
+                        if !&variable.initialized {
+                            panic!("Variable \"{identifier}\" not yet initialized")
+                        }
+                        let expression = &variable
+                            .value
+                            .as_ref()
+                            .expect("Initialized variable has no value");
+                        if let BoundExpression::YarnValue(yarn_expr) = expression {
+                            print!("{}", yarn_expr);
+                        } else if let BoundExpression::PpValue(pp_val) = expression {
+                            print!("{}", pp_val);
+                        } else {
+                            panic!("Invalid type for pprint statement")
+                        }
+                    } else {
+                        panic!("Variable \"{identifier}\" does not exist")
+                    }
+                } else {
+                    panic!("Invalid type for pprint statement")
+                }
+            }
+            Statement::ByeStatement { expression, .. } => {
+                let expr = self.evaluator.evaluate_expr(&expression);
+                if let BoundExpression::IdentifierValue(identifier) = expr {
+                    if let Some(variable) = self.get_variable(&identifier) {
+                        if !&variable.initialized {
+                            panic!("Variable \"{identifier}\" not yet initialized")
+                        }
+                        let expr = &variable
+                            .value
+                            .as_ref()
+                            .expect("Initialized variable has no value");
+
+                        let same_data_type = match &expr {
+                            BoundExpression::PpValue(_) => variable.data_type == DataType::Pp,
+                            BoundExpression::BoobaValue(_) => variable.data_type == DataType::Booba,
+                            BoundExpression::YarnValue(_) => variable.data_type == DataType::Yarn,
+                            BoundExpression::IdentifierValue(identifier) => {
+                                let bound_variable = self.get_variable(identifier).unwrap();
+                                bound_variable.data_type == variable.data_type
+                            }
+                            BoundExpression::EmptyValue => {
+                                panic!()
+                            }
+                        };
+                    }
                 }
             }
             _ => {}
-        }
-    }
-
-    fn evaluate_expression_data_type(&self, expression: &Expression) -> &DataType {
-        match expression {
-            Expression::PpExpression { .. } => &DataType::Pp,
-            Expression::BoobaExpression { .. } => &DataType::Booba,
-            Expression::YarnExpression { .. } => &DataType::Yarn,
-            Expression::UnaryExpression { operand, .. } => {
-                self.evaluate_expression_data_type(operand)
-            }
-            Expression::BinaryExpression { lhs, rhs, .. } => {
-                let left_type = self.evaluate_expression_data_type(lhs);
-                let right_type = self.evaluate_expression_data_type(rhs);
-                assert!(!(left_type != right_type), "invalid binop");
-
-                left_type
-            }
-            Expression::IdentifierExpression { identifier, .. }
-            | Expression::FunctionCall { identifier, .. } => {
-                if let Some(data_type) = self.globals.get(identifier) {
-                    return data_type;
-                }
-                for symbols in &self.symbol_table {
-                    if let Some(data_type) = symbols.get(identifier) {
-                        return data_type;
-                    }
-                }
-                panic!("Unknown identifier {identifier}")
-            }
-            Expression::AssignmentExpression { identifier, .. } => {
-                if let Some(data_type) = self.globals.get(identifier) {
-                    return data_type;
-                }
-                for symbols in &self.symbol_table {
-                    if let Some(data_type) = symbols.get(identifier) {
-                        return data_type;
-                    }
-                }
-                panic!("Unknown identifier")
-            }
-            Expression::InvalidExpression => {
-                panic!()
-            }
         }
     }
 }

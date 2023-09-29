@@ -67,6 +67,10 @@ impl ErrorDiagnosis {
         self.handle_error_at(0, 0, error);
     }
 
+    pub fn invalid_escaped_character(&mut self, row: u32, col: u32, character: char) {
+        self.insert_error_message(row, col, format!("Invalid escaped character: {character}."));
+    }
+
     pub fn invalid_token_error(&mut self, token: &Token) {
         self.insert_error_message(token.row(), token.col(), format!("Unexpected {token}."));
     }

@@ -1,4 +1,4 @@
 pub mod analysis;
-pub mod interpreter;
+pub mod evaluate;
 pub mod lexer;
 pub mod parser;

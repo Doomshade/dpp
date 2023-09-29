@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::analysis::SemanticAnalyzer;
+use crate::parse::evaluate::Evaluator;
 use crate::parse::lexer::{Lexer, Token};
 use crate::parse::parser::{Parser, TranslationUnit};
 
@@ -18,17 +19,18 @@ pub mod parse;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // TODO: Pass this as a command line argument.
-    let path = "examples/first_simple_example.dpp";
+    let path = "examples/simple_expr.dpp";
     // TODO: Make this Arc so that we can use the lines in the error diagnosis.
     let file = fs::read_to_string(path)?;
     let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(path)));
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
-    analyze(
-        dbg!(parse(lex(file, &error_diag)?, &error_diag)?),
-        &error_diag,
-    )?;
+    let tokens = lex(file, &error_diag)?;
+    dbg!(&tokens);
+    let translation_unit = parse(tokens, &error_diag)?;
+    dbg!(&translation_unit);
+    analyze(translation_unit, &error_diag)?;
     Ok(())
 }
 

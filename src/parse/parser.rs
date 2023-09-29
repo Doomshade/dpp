@@ -48,27 +48,30 @@ pub struct Parameters {
 #[derive(Debug)]
 pub struct Parameter {
     position: (u32, u32),
-    identifier: String,
-    data_type: DataType,
+    pub identifier: String,
+    pub data_type: DataType,
 }
 
 #[derive(Debug)]
 pub struct Block {
-    pub position: (u32, u32),
+    position: (u32, u32),
     pub statements: Vec<Statement>,
+}
+
+#[derive(Debug)]
+pub struct Variable {
+    pub position: (u32, u32),
+    pub identifier: String,
+    pub data_type: DataType,
 }
 
 #[derive(Debug)]
 pub enum Statement {
     VariableDeclaration {
-        position: (u32, u32),
-        identifier: String,
-        data_type: DataType,
+        variable: Variable,
     },
     VariableDeclarationAndAssignment {
-        position: (u32, u32),
-        identifier: String,
-        data_type: DataType,
+        variable: Variable,
         expression: Expression,
     },
     IfStatement {
@@ -82,7 +85,11 @@ pub enum Statement {
         statement: Box<Statement>,
         else_statement: Box<Statement>,
     },
-    ReturnStatement {
+    ByeStatement {
+        position: (u32, u32),
+        expression: Expression,
+    },
+    PprintStatement {
         position: (u32, u32),
         expression: Expression,
     },
@@ -184,7 +191,7 @@ pub enum Expression {
     InvalidExpression,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum DataType {
     // u64
     Xxlpp,
@@ -382,7 +389,7 @@ impl Parser {
 
     fn translation_unit(&mut self) -> TranslationUnit {
         let mut functions = Vec::<Function>::new();
-        let mut variables = Vec::<Statement>::new();
+        let mut variable_declarations = Vec::<Statement>::new();
         loop {
             if self.matches_token_kind(TokenKind::FUNcKeyword) {
                 if let Some(function) = self.function() {
@@ -390,7 +397,7 @@ impl Parser {
                 }
             } else if self.matches_data_type() {
                 if let Some(var_decl) = self.var_decl() {
-                    variables.push(var_decl);
+                    variable_declarations.push(var_decl);
                 }
             } else if self.curr_token_index == self.tokens.len() {
                 // We reached the end!
@@ -412,7 +419,7 @@ impl Parser {
         }
         TranslationUnit {
             functions,
-            variables,
+            variables: variable_declarations,
         }
     }
 
@@ -639,7 +646,18 @@ impl Parser {
                 self.expect(TokenKind::ByeKeyword)?;
                 let expression = self.expr()?;
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::ReturnStatement {
+                return Some(Statement::ByeStatement {
+                    position: self.position,
+                    expression,
+                });
+            }
+            TokenKind::PprintKeyword => {
+                self.expect(TokenKind::PprintKeyword)?;
+                self.expect(TokenKind::OpenParen)?;
+                let expression = self.expr()?;
+                self.expect(TokenKind::CloseParen)?;
+                self.expect(TokenKind::Semicolon)?;
+                return Some(Statement::PprintStatement {
                     position: self.position,
                     expression,
                 });
@@ -708,16 +726,20 @@ impl Parser {
             self.expect(TokenKind::Equal);
             let expression = self.expr()?;
             Statement::VariableDeclarationAndAssignment {
-                position: self.position,
-                identifier,
-                data_type,
+                variable: Variable {
+                    position: self.position,
+                    identifier,
+                    data_type,
+                },
                 expression,
             }
         } else {
             Statement::VariableDeclaration {
-                position: self.position,
-                identifier,
-                data_type,
+                variable: Variable {
+                    position: self.position,
+                    identifier,
+                    data_type,
+                },
             }
         };
 
@@ -974,6 +996,7 @@ impl Parser {
             }
             _ => {
                 self.add_error("expression");
+                // Return some here to let the callee handle this.
                 Some(Expression::InvalidExpression)
             }
         }
