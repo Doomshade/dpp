@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::analysis::SemanticAnalyzer;
-use crate::parse::evaluate::Evaluator;
 use crate::parse::lexer::{Lexer, Token};
 use crate::parse::parser::{Parser, TranslationUnit};
 
@@ -21,12 +20,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // TODO: Pass this as a command line argument.
     let path = "examples/simple_expr.dpp";
     // TODO: Make this Arc so that we can use the lines in the error diagnosis.
-    let file = fs::read_to_string(path)?;
+    let file_contents = fs::read_to_string(path)?;
     let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(path)));
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
-    let tokens = lex(file, &error_diag)?;
+    let tokens = lex(file_contents, &error_diag)?;
     dbg!(&tokens);
     let translation_unit = parse(tokens, &error_diag)?;
     dbg!(&translation_unit);
@@ -35,10 +34,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn lex(
-    file: String,
+    input: String,
     error_diag: &Arc<RefCell<ErrorDiagnosis>>,
 ) -> Result<Vec<Token>, Box<dyn Error>> {
-    let mut lexer = Lexer::new(file.as_str(), error_diag.clone());
+    let mut lexer = Lexer::new(input.as_str(), error_diag.clone());
     let tokens = lexer.lex();
     error_diag.borrow().check_errors()?;
     Ok(tokens)
