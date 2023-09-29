@@ -14,7 +14,7 @@ pub struct Lexer<'a> {
     position: usize,
     row: u32,
     col: u32,
-    error_diag: Arc<RefCell<ErrorDiagnosis>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>,
 }
 
 #[derive(Debug)]
@@ -211,7 +211,7 @@ impl Display for TokenKind {
 
 impl<'a> Lexer<'a> {
     #[must_use]
-    pub fn new(input: &'a str, error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
+    pub fn new(input: &'a str, error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>) -> Self {
         // Create a vector of characters from the input string. This is so that we can access the
         // characters by index. Unfortunately this will take up more memory than necessary as we
         // will pass in the Token struct a String instead of a string slice.

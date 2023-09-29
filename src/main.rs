@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = "examples/simple_expr.dpp";
     // TODO: Make this Arc so that we can use the lines in the error diagnosis.
     let file_contents = fs::read_to_string(path)?;
-    let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(path)));
+    let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(path, &file_contents)));
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn lex<'a>(
     input: &'a str,
-    error_diag: &Arc<RefCell<ErrorDiagnosis>>,
+    error_diag: &Arc<RefCell<ErrorDiagnosis<'a>>>,
 ) -> Result<Vec<Token<'a>>, Box<dyn Error>> {
     let mut lexer = Lexer::new(input, error_diag.clone());
     let tokens = lexer.lex();
@@ -45,7 +45,7 @@ fn lex<'a>(
 
 fn parse<'a>(
     tokens: Vec<Token<'a>>,
-    error_diag: &Arc<RefCell<ErrorDiagnosis>>,
+    error_diag: &Arc<RefCell<ErrorDiagnosis<'a>>>,
 ) -> Result<TranslationUnit<'a>, Box<dyn Error>> {
     let mut parser = Parser::new(Arc::new(tokens), error_diag.clone());
     let result = parser.parse();
@@ -55,7 +55,7 @@ fn parse<'a>(
 
 fn analyze<'a>(
     translation_unit: TranslationUnit<'a>,
-    error_diag: &Arc<RefCell<ErrorDiagnosis>>,
+    error_diag: &Arc<RefCell<ErrorDiagnosis<'a>>>,
 ) -> Result<(), Box<dyn Error>> {
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
     analyzer.analyze(translation_unit);

@@ -10,7 +10,7 @@ use crate::parse::parser::{DataType, Function, Statement, TranslationUnit};
 pub struct SemanticAnalyzer<'a> {
     scopes: Vec<HashMap<&'a str, BoundVariable<'a>>>,
     function_scopes: Vec<BoundFunction<'a>>,
-    error_diag: Arc<RefCell<ErrorDiagnosis>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>,
     evaluator: Evaluator<'a>,
 }
 
@@ -37,7 +37,7 @@ pub struct BoundParameter<'a> {
 pub struct BoundTranslationUnit {}
 
 impl<'a> SemanticAnalyzer<'a> {
-    pub fn new(error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
+    pub fn new(error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>) -> Self {
         Self {
             scopes: Vec::default(),
             function_scopes: Vec::default(),
