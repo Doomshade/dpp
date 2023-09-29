@@ -87,7 +87,7 @@ impl ErrorDiagnosis {
         self.insert_error_message(
             token.row(),
             token.col(),
-            format!("Expected \"{expected_token_kind}\"."),
+            format!("Expected {expected_token_kind}."),
         );
     }
 

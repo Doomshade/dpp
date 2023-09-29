@@ -317,8 +317,9 @@ impl Parser {
             }
 
             // Check if this is the second error in a row.
-            // If it is, enter panic mode.
-            if self.go_into_panic_mode() {
+            // If it is, return None. This will signal that we should go into panic mode.
+            // We let the callee handle this.
+            if self.error {
                 return None;
             }
 
@@ -340,11 +341,7 @@ impl Parser {
         Some(String::new())
     }
 
-    fn go_into_panic_mode(&mut self) -> bool {
-        if !self.error {
-            return false;
-        }
-
+    fn go_into_panic_mode(&mut self) {
         // Consume tokens until we find a synchronizing token.
         while let Some(token) = self.token() {
             match token.kind() {
@@ -356,6 +353,7 @@ impl Parser {
                 | TokenKind::LoopKeyword
                 | TokenKind::BreakKeyword
                 | TokenKind::ContinueKeyword
+                | TokenKind::FUNcKeyword
                 | TokenKind::SwitchKeyword
                 | TokenKind::ByeKeyword
                 | TokenKind::Semicolon => {
@@ -367,9 +365,9 @@ impl Parser {
                 }
             }
         }
-        self.error = false;
 
-        true
+        // Reset the error flag as we expect the next expect call to be valid.
+        self.error = false;
     }
 
     fn add_error(&mut self, error_message: &str) {
