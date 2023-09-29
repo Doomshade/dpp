@@ -71,7 +71,7 @@ impl ErrorDiagnosis {
         self.insert_error_message(row, col, format!("Invalid escaped character: {character}."));
     }
 
-    pub fn invalid_token_error(&mut self, token: &Token) {
+    pub fn unexpected_token_error(&mut self, token: &Token) {
         self.insert_error_message(token.row(), token.col(), format!("Unexpected {token}."));
     }
 

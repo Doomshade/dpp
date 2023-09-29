@@ -47,11 +47,8 @@ impl Display for Token<'_> {
 
 impl<'a> Token<'a> {
     #[must_use]
-    pub fn value(&self) -> Option<String> {
-        if let Some(val) = self.value {
-            return Some(String::from(val));
-        }
-        None
+    pub fn value(&self) -> Option<&'a str> {
+        self.value
     }
 
     #[must_use]
@@ -78,6 +75,7 @@ impl<'a> Token<'a> {
 pub enum TokenKind {
     Identifier,
     Number,
+    Yarn,
     BangEqual,
     Comment,
     Whitespace,
@@ -111,23 +109,21 @@ pub enum TokenKind {
     Ampersand,
     Pipe,
     Comma,
-    IfKeyword,  // if
-    LetKeyword, // let
-    ByeKeyword, // return
-    FUNcKeyword,
-    // func
+    IfKeyword,     // if
+    LetKeyword,    // let
+    ByeKeyword,    // return
+    FUNcKeyword,   // function
     PprintKeyword, // print()
     PpanicKeyword, // panic()
     PpinKeyword,   // read()
-    XxlppKeyword,  // u64
-    PpKeyword,     // u32
-    SppKeyword,    // u16
-    XsppKeyword,   // u8
+    XxlppKeyword,  // i64
+    PpKeyword,     // i32
+    SppKeyword,    // i16
+    XsppKeyword,   // i8
     PKeyword,      // char
     BoobaKeyword,  // bool
-    Yarn,          // String
-    NoppKeyword,   // Void
-    YarnKeyword,   // String keyword
+    NoppKeyword,   // void
+    YarnKeyword,   // String
     ForKeyword,
     ElseKeyword,
     DoubleQuote,
@@ -244,7 +240,7 @@ impl<'a> Lexer<'a> {
         tokens
     }
 
-    fn new_token_with_value(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
+    fn new_token(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
         Token {
             kind,
             position: (self.row, self.col),
@@ -252,17 +248,9 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn new_token(&self, kind: TokenKind) -> Token<'a> {
-        Token {
-            kind,
-            position: (self.row, self.col),
-            value: None,
-        }
-    }
-
     fn parse_token(&mut self) -> Token<'a> {
         let token = match self.peek() {
-            '\0' => self.new_token(TokenKind::Eof),
+            '\0' => self.new_token(TokenKind::Eof, "EOF"),
             'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
             '0'..='9' => self.handle_number(),
             '"' => self.handle_yarn(),
@@ -315,16 +303,17 @@ impl<'a> Lexer<'a> {
 
         // Consume closing quote.
         self.consume();
-        self.new_token_with_value(TokenKind::PKeyword, self.str_slice(1))
+        self.new_token(TokenKind::PKeyword, self.str_slice(1))
     }
 
     fn handle_unknown(&mut self) -> Token<'a> {
         self.consume();
 
-        self.new_token_with_value(TokenKind::Unknown, self.str_slice(1))
+        self.new_token(TokenKind::Unknown, self.str_slice(1))
     }
 
     fn handle_comment(&mut self) -> Token<'a> {
+        let start = self.position;
         // Consume the comment tag
         self.consume();
 
@@ -334,10 +323,11 @@ impl<'a> Lexer<'a> {
             c = self.peek();
         }
 
-        self.new_token(TokenKind::Comment)
+        self.new_token(TokenKind::Comment, &self.raw_input[start..self.position])
     }
 
     fn handle_operator(&mut self) -> Token<'a> {
+        let operator_start = self.position;
         let mut buf = String::with_capacity(2);
         let operator = self.peek();
         buf.push(operator);
@@ -383,10 +373,11 @@ impl<'a> Lexer<'a> {
             _ => panic!("Unknown operator: {buf}"),
         };
 
-        self.new_token(kind)
+        self.new_token(kind, &self.raw_input[operator_start..self.position])
     }
 
     fn handle_punctuation(&mut self) -> Token<'a> {
+        let punctuation_start = self.position;
         let c = self.peek();
 
         let kind = match c {
@@ -403,7 +394,7 @@ impl<'a> Lexer<'a> {
         };
         self.consume();
 
-        self.new_token(kind)
+        self.new_token(kind, &self.raw_input[punctuation_start..self.position])
     }
 
     fn handle_whitespace(&mut self) -> Token<'a> {
@@ -417,7 +408,7 @@ impl<'a> Lexer<'a> {
             c = self.peek();
         }
 
-        self.new_token(TokenKind::Whitespace)
+        self.new_token(TokenKind::Whitespace, "")
     }
 
     fn handle_yarn(&mut self) -> Token<'a> {
@@ -464,7 +455,7 @@ impl<'a> Lexer<'a> {
             self.consume();
         }
 
-        let token = self.new_token_with_value(
+        let token = self.new_token(
             TokenKind::Yarn,
             &self.raw_input[yarn_start..self.position - 1],
         );
@@ -487,7 +478,7 @@ impl<'a> Lexer<'a> {
             c = self.peek();
         }
 
-        self.new_token_with_value(
+        self.new_token(
             TokenKind::Number,
             &self.raw_input[number_start..self.position],
         )
@@ -535,10 +526,6 @@ impl<'a> Lexer<'a> {
             _ => TokenKind::Identifier,
         };
 
-        if kind == TokenKind::Identifier {
-            self.new_token_with_value(kind, &self.raw_input[identifier_start..self.position])
-        } else {
-            self.new_token(kind)
-        }
+        self.new_token(kind, &self.raw_input[identifier_start..self.position])
     }
 }

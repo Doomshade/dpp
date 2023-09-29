@@ -25,110 +25,110 @@ pub struct Parser<'a> {
 }
 
 #[derive(Debug)]
-pub struct TranslationUnit {
-    pub functions: Vec<Function>,
-    pub variables: Vec<Statement>,
+pub struct TranslationUnit<'a> {
+    pub functions: Vec<Function<'a>>,
+    pub variables: Vec<Statement<'a>>,
 }
 
 #[derive(Debug)]
-pub struct Function {
+pub struct Function<'a> {
     pub position: (u32, u32),
-    pub identifier: String,
-    pub return_type: DataType,
-    pub parameters: Vec<Parameter>,
-    pub block: Block,
+    pub identifier: &'a str,
+    pub return_type: DataType<'a>,
+    pub parameters: Vec<Parameter<'a>>,
+    pub block: Block<'a>,
 }
 
 #[derive(Debug)]
-pub struct Parameters {
+pub struct Parameters<'a> {
     position: (u32, u32),
-    parameters: Vec<Parameter>,
+    parameters: Vec<Parameter<'a>>,
 }
 
 #[derive(Debug)]
-pub struct Parameter {
+pub struct Parameter<'a> {
     position: (u32, u32),
-    pub identifier: String,
-    pub data_type: DataType,
+    pub identifier: &'a str,
+    pub data_type: DataType<'a>,
 }
 
 #[derive(Debug)]
-pub struct Block {
+pub struct Block<'a> {
     position: (u32, u32),
-    pub statements: Vec<Statement>,
+    pub statements: Vec<Statement<'a>>,
 }
 
 #[derive(Debug)]
-pub struct Variable {
+pub struct Variable<'a> {
     pub position: (u32, u32),
-    pub identifier: String,
-    pub data_type: DataType,
+    pub identifier: &'a str,
+    pub data_type: DataType<'a>,
 }
 
 #[derive(Debug)]
-pub enum Statement {
+pub enum Statement<'a> {
     VariableDeclaration {
-        variable: Variable,
+        variable: Variable<'a>,
     },
     VariableDeclarationAndAssignment {
-        variable: Variable,
-        expression: Expression,
+        variable: Variable<'a>,
+        expression: Expression<'a>,
     },
     IfStatement {
         position: (u32, u32),
-        expression: Expression,
-        statement: Box<Statement>,
+        expression: Expression<'a>,
+        statement: Box<Statement<'a>>,
     },
     IfElseStatement {
         position: (u32, u32),
-        expression: Expression,
-        statement: Box<Statement>,
-        else_statement: Box<Statement>,
+        expression: Expression<'a>,
+        statement: Box<Statement<'a>>,
+        else_statement: Box<Statement<'a>>,
     },
     ByeStatement {
         position: (u32, u32),
-        expression: Expression,
+        expression: Expression<'a>,
     },
     PprintStatement {
         position: (u32, u32),
-        expression: Expression,
+        expression: Expression<'a>,
     },
     BlockStatement {
         position: (u32, u32),
-        block: Box<Block>,
+        block: Box<Block<'a>>,
     },
     ExpressionStatement {
         position: (u32, u32),
-        expression: Expression,
+        expression: Expression<'a>,
     },
     EmptyStatement {
         position: (u32, u32),
     },
     ForStatement {
         position: (u32, u32),
-        index_ident: String,
-        length_expression: Expression,
-        statement: Box<Statement>,
+        index_ident: &'a str,
+        length_expression: Expression<'a>,
+        statement: Box<Statement<'a>>,
     },
     ForStatementWithIdentExpression {
         position: (u32, u32),
-        ident: Expression,
-        length_expression: Expression,
-        statement: Box<Statement>,
+        ident: Expression<'a>,
+        length_expression: Expression<'a>,
+        statement: Box<Statement<'a>>,
     },
     WhileStatement {
         position: (u32, u32),
-        expression: Expression,
-        statement: Box<Statement>,
+        expression: Expression<'a>,
+        statement: Box<Statement<'a>>,
     },
     DoWhileStatement {
         position: (u32, u32),
-        block: Block,
-        expression: Expression,
+        block: Block<'a>,
+        expression: Expression<'a>,
     },
     LoopStatement {
         position: (u32, u32),
-        block: Box<Block>,
+        block: Box<Block<'a>>,
     },
     BreakStatement {
         position: (u32, u32),
@@ -138,19 +138,19 @@ pub enum Statement {
     },
     SwitchStatement {
         position: (u32, u32),
-        expression: Expression,
-        cases: Vec<Case>,
+        expression: Expression<'a>,
+        cases: Vec<Case<'a>>,
     },
 }
 
 #[derive(Debug)]
-pub struct Case {
-    expression: Expression,
-    block: Box<Block>,
+pub struct Case<'a> {
+    expression: Expression<'a>,
+    block: Box<Block<'a>>,
 }
 
 #[derive(Debug)]
-pub enum Expression {
+pub enum Expression<'a> {
     PpExpression {
         position: (u32, u32),
         pp: i32,
@@ -161,38 +161,38 @@ pub enum Expression {
     },
     YarnExpression {
         position: (u32, u32),
-        yarn: String,
+        yarn: &'a str,
     },
     UnaryExpression {
         position: (u32, u32),
         op: UnaryOperator,
-        operand: Box<Expression>,
+        operand: Box<Expression<'a>>,
     },
     BinaryExpression {
         position: (u32, u32),
-        lhs: Box<Expression>,
+        lhs: Box<Expression<'a>>,
         op: BinaryOperator,
-        rhs: Box<Expression>,
+        rhs: Box<Expression<'a>>,
     },
     IdentifierExpression {
         position: (u32, u32),
-        identifier: String,
+        identifier: &'a str,
     },
     FunctionCall {
         position: (u32, u32),
-        identifier: String,
-        arguments: Vec<Expression>,
+        identifier: &'a str,
+        arguments: Vec<Expression<'a>>,
     },
     AssignmentExpression {
         position: (u32, u32),
-        identifier: String,
-        expression: Box<Expression>,
+        identifier: &'a str,
+        expression: Box<Expression<'a>>,
     },
     InvalidExpression,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum DataType {
+pub enum DataType<'a> {
     // u64
     Xxlpp,
     // u32
@@ -209,7 +209,7 @@ pub enum DataType {
     Booba,
     // void
     Nopp,
-    Struct { name: String },
+    Struct { name: &'a str },
 }
 
 #[derive(Debug)]
@@ -254,12 +254,12 @@ impl<'a> Parser<'a> {
     }
 
     #[must_use]
-    fn token(&self) -> Option<&Token> {
+    fn token(&self) -> Option<&Token<'a>> {
         return self.token_offset(0);
     }
 
     #[must_use]
-    fn token_offset(&self, offset: i32) -> Option<&Token> {
+    fn token_offset(&self, offset: i32) -> Option<&Token<'a>> {
         if self.curr_token_index as i32 + offset >= self.tokens.len() as i32
             || self.curr_token_index as i32 + offset < 0
         {
@@ -311,16 +311,14 @@ impl<'a> Parser<'a> {
     /// let identifier = self.expect(TokenKind::Identifier)?;
     ///
     /// ```
-    fn expect(&mut self, token_kind: TokenKind) -> Option<String> {
+    fn expect(&mut self, token_kind: TokenKind) -> Option<&'a str> {
         if let Some(token) = self.token() {
+            let token_value = token.value();
             if token.kind() == token_kind {
-                let token_value = token.value();
                 self.error = false;
                 self.consume_token();
-                if let Some(token_value) = token_value {
-                    return Some(token_value);
-                }
-                return Some(String::new());
+
+                return token_value;
             }
 
             // Check if this is the second error in a row.
@@ -340,12 +338,12 @@ impl<'a> Parser<'a> {
                 self.error_diag.borrow_mut().handle("No token found");
                 self.error = true;
             }
-            return Some(String::new());
+            return token_value;
         }
 
         self.error_diag.borrow_mut().handle("No token found");
         self.error = true;
-        Some(String::new())
+        None
     }
 
     fn go_into_panic_mode(&mut self) {
@@ -383,11 +381,11 @@ impl<'a> Parser<'a> {
             .expected_something_error(error_message, self.token_offset(-1));
     }
 
-    pub fn parse(&mut self) -> TranslationUnit {
+    pub fn parse(&mut self) -> TranslationUnit<'a> {
         self.translation_unit()
     }
 
-    fn translation_unit(&mut self) -> TranslationUnit {
+    fn translation_unit(&mut self) -> TranslationUnit<'a> {
         let mut functions = Vec::<Function>::new();
         let mut variable_declarations = Vec::<Statement>::new();
         loop {
@@ -409,7 +407,7 @@ impl<'a> Parser<'a> {
                 }
                 // No rewrite function accepted this token in ANY state. Just
                 // throw an error, consume the token, and continue parsing.
-                self.error_diag.borrow_mut().invalid_token_error(token);
+                self.error_diag.borrow_mut().unexpected_token_error(token);
                 self.consume_token();
                 self.error = true;
                 self.go_into_panic_mode();
@@ -423,7 +421,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn function(&mut self) -> Option<Function> {
+    fn function(&mut self) -> Option<Function<'a>> {
         self.expect(TokenKind::FUNcKeyword)?;
 
         let identifier = self.expect(TokenKind::Identifier)?;
@@ -441,7 +439,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn params(&mut self) -> Option<Vec<Parameter>> {
+    fn params(&mut self) -> Option<Vec<Parameter<'a>>> {
         self.expect(TokenKind::OpenParen)?;
         let mut parameters = Vec::<Parameter>::new();
 
@@ -476,7 +474,7 @@ impl<'a> Parser<'a> {
         Some(parameters)
     }
 
-    fn parameter(&mut self) -> Option<Parameter> {
+    fn parameter(&mut self) -> Option<Parameter<'a>> {
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
         let data_type = self.data_type()?;
@@ -487,7 +485,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn block(&mut self) -> Option<Block> {
+    fn block(&mut self) -> Option<Block<'a>> {
         self.expect(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement>::new();
 
@@ -504,7 +502,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn statement(&mut self) -> Option<Statement> {
+    fn statement(&mut self) -> Option<Statement<'a>> {
         let token_kind = self.token()?.kind();
 
         return match token_kind {
@@ -707,7 +705,7 @@ impl<'a> Parser<'a> {
         };
     }
 
-    fn case(&mut self) -> Option<Case> {
+    fn case(&mut self) -> Option<Case<'a>> {
         self.expect(TokenKind::CaseKeyword)?;
         let expression = self.expr()?;
         let block = self.block()?;
@@ -717,7 +715,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn var_decl(&mut self) -> Option<Statement> {
+    fn var_decl(&mut self) -> Option<Statement<'a>> {
         let data_type = self.data_type()?;
         self.expect(TokenKind::Arrow)?;
 
@@ -764,7 +762,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn data_type(&mut self) -> Option<DataType> {
+    fn data_type(&mut self) -> Option<DataType<'a>> {
         if let Some(token) = self.token() {
             return match token.kind() {
                 TokenKind::XxlppKeyword => {
@@ -805,15 +803,15 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn _struct_(&mut self) -> DataType {
+    fn _struct_(&mut self) -> DataType<'a> {
         todo!()
     }
 
-    fn expr(&mut self) -> Option<Expression> {
+    fn expr(&mut self) -> Option<Expression<'a>> {
         self.equ()
     }
 
-    fn equ(&mut self) -> Option<Expression> {
+    fn equ(&mut self) -> Option<Expression<'a>> {
         let mut expr = self.comp()?;
 
         while self.matches_token_kind(TokenKind::BangEqual)
@@ -838,7 +836,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn comp(&mut self) -> Option<Expression> {
+    fn comp(&mut self) -> Option<Expression<'a>> {
         let mut expr = self.term()?;
 
         while self.matches_token_kind(TokenKind::Greater)
@@ -867,7 +865,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn term(&mut self) -> Option<Expression> {
+    fn term(&mut self) -> Option<Expression<'a>> {
         let mut expr = self.factor()?;
 
         while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
@@ -890,7 +888,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn factor(&mut self) -> Option<Expression> {
+    fn factor(&mut self) -> Option<Expression<'a>> {
         let mut expr = self.unary()?;
 
         while self.matches_token_kind(TokenKind::ForwardSlash)
@@ -913,7 +911,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn unary(&mut self) -> Option<Expression> {
+    fn unary(&mut self) -> Option<Expression<'a>> {
         if self.matches_token_kind(TokenKind::Bang) || self.matches_token_kind(TokenKind::Dash) {
             let op = match self.token()?.kind() {
                 TokenKind::Bang => UnaryOperator::Not,
@@ -932,7 +930,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn primary(&mut self) -> Option<Expression> {
+    fn primary(&mut self) -> Option<Expression<'a>> {
         match self.token()?.kind() {
             TokenKind::Identifier => {
                 let identifier = self.expect(TokenKind::Identifier)?;
@@ -1002,7 +1000,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn args(&mut self) -> Option<Vec<Expression>> {
+    fn args(&mut self) -> Option<Vec<Expression<'a>>> {
         self.expect(TokenKind::OpenParen)?;
         let mut args = Vec::<Expression>::new();
 

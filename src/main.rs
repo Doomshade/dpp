@@ -43,18 +43,18 @@ fn lex<'a>(
     Ok(tokens)
 }
 
-fn parse(
-    tokens: Vec<Token>,
+fn parse<'a>(
+    tokens: Vec<Token<'a>>,
     error_diag: &Arc<RefCell<ErrorDiagnosis>>,
-) -> Result<TranslationUnit, Box<dyn Error>> {
+) -> Result<TranslationUnit<'a>, Box<dyn Error>> {
     let mut parser = Parser::new(Arc::new(tokens), error_diag.clone());
     let result = parser.parse();
     error_diag.borrow().check_errors()?;
     Ok(result)
 }
 
-fn analyze(
-    translation_unit: TranslationUnit,
+fn analyze<'a>(
+    translation_unit: TranslationUnit<'a>,
     error_diag: &Arc<RefCell<ErrorDiagnosis>>,
 ) -> Result<(), Box<dyn Error>> {
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());

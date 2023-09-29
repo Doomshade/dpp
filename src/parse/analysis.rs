@@ -1,55 +1,61 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::evaluate::{BoundExpression, Evaluator};
 use crate::parse::parser::{DataType, Function, Statement, TranslationUnit};
 
-pub struct SemanticAnalyzer {
-    scopes: Vec<HashMap<String, BoundVariable>>,
-    function_scopes: Vec<BoundFunction>,
+pub struct SemanticAnalyzer<'a> {
+    scopes: Vec<HashMap<&'a str, BoundVariable<'a>>>,
+    function_scopes: Vec<BoundFunction<'a>>,
     error_diag: Arc<RefCell<ErrorDiagnosis>>,
-    evaluator: Evaluator,
+    evaluator: Evaluator<'a>,
 }
 
 #[derive(Debug)]
-pub struct BoundFunction {
-    name: String,
-    return_type: DataType,
+pub struct BoundFunction<'a> {
+    name: &'a str,
+    return_type: DataType<'a>,
 }
 
 #[derive(Debug)]
-pub struct BoundVariable {
-    identifier: String,
-    data_type: DataType,
-    value: Option<BoundExpression>,
+pub struct BoundVariable<'a> {
+    identifier: &'a str,
+    data_type: DataType<'a>,
+    value: Option<BoundExpression<'a>>,
     initialized: bool,
 }
 
 #[derive(Debug)]
-pub struct BoundParameter {
-    pub identifier: String,
-    pub data_type: DataType,
+pub struct BoundParameter<'a> {
+    pub identifier: &'a str,
+    pub data_type: DataType<'a>,
 }
 
 pub struct BoundTranslationUnit {}
 
-impl SemanticAnalyzer {
+impl<'a> SemanticAnalyzer<'a> {
     pub fn new(error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
         Self {
             scopes: Vec::default(),
             function_scopes: Vec::default(),
             error_diag,
-            evaluator: Evaluator,
+            evaluator: Evaluator {
+                none: PhantomData::default(),
+            },
         }
     }
 
-    pub fn build_sym_table(&mut self, translation_unit: TranslationUnit) -> BoundTranslationUnit {
+    pub fn build_sym_table(
+        &mut self,
+        translation_unit: TranslationUnit<'a>,
+    ) -> BoundTranslationUnit {
         BoundTranslationUnit {}
     }
 
-    pub fn analyze(&mut self, translation_unit: TranslationUnit) {
+    pub fn analyze(&mut self, translation_unit: TranslationUnit<'a>) {
         let functions = translation_unit.functions;
         let variables = translation_unit.variables;
 
@@ -72,7 +78,7 @@ impl SemanticAnalyzer {
         self.end_scope();
     }
 
-    fn begin_function(&mut self, function: &Function) {
+    fn begin_function(&mut self, function: &Function<'a>) {
         let mut params = Vec::new();
         for parameter in &function.parameters {
             params.push(BoundParameter {
@@ -91,11 +97,11 @@ impl SemanticAnalyzer {
         self.end_scope();
     }
 
-    fn scope_mut(&mut self) -> &mut HashMap<String, BoundVariable> {
+    fn scope_mut(&mut self) -> &mut HashMap<&'a str, BoundVariable<'a>> {
         self.scopes.last_mut().expect("A scope")
     }
 
-    fn scope(&self) -> &HashMap<String, BoundVariable> {
+    fn scope(&self) -> &HashMap<&'a str, BoundVariable<'a>> {
         self.scopes.last().expect("A scope")
     }
 
@@ -116,27 +122,26 @@ impl SemanticAnalyzer {
         None
     }
 
-    fn handle_statement(&mut self, statement: Statement) {
+    fn handle_statement(&mut self, statement: Statement<'a>) {
         match statement {
             Statement::VariableDeclaration { variable } => {
                 if self.scope().contains_key(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
-                        variable.identifier.as_str(),
+                        variable.identifier,
                     );
                 }
 
                 let scope = self.scope_mut();
-                let ident = variable.identifier.clone();
                 let bound_var = BoundVariable {
-                    identifier: variable.identifier.clone(),
+                    identifier: variable.identifier,
                     value: None,
                     initialized: false,
-                    data_type: variable.data_type.clone(),
+                    data_type: variable.data_type,
                 };
                 dbg!(&bound_var);
-                scope.insert(ident, bound_var);
+                scope.insert(variable.identifier, bound_var);
             }
             Statement::VariableDeclarationAndAssignment {
                 variable,
@@ -146,7 +151,7 @@ impl SemanticAnalyzer {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
-                        variable.identifier.as_str(),
+                        variable.identifier,
                     );
                     return;
                 }
@@ -169,7 +174,7 @@ impl SemanticAnalyzer {
                     self.error_diag.borrow_mut().invalid_type(
                         variable.position.0,
                         variable.position.1,
-                        variable.identifier.as_str(),
+                        variable.identifier,
                     );
                 }
 
@@ -186,7 +191,7 @@ impl SemanticAnalyzer {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
-                        variable.identifier.as_str(),
+                        variable.identifier,
                     );
                 }
             }

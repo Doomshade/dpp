@@ -1,31 +1,34 @@
 use crate::parse::parser::{BinaryOperator, Expression, Statement, UnaryOperator};
+use std::marker::PhantomData;
 
-pub struct Evaluator;
+pub struct Evaluator<'a> {
+    pub none: PhantomData<&'a ()>,
+}
 
 #[derive(Debug)]
-pub enum BoundExpression {
+pub enum BoundExpression<'a> {
     PpValue(i32),
     BoobaValue(bool),
     YarnValue(String),
-    IdentifierValue(String),
+    IdentifierValue(&'a str),
     EmptyValue,
 }
 
 #[derive(Debug)]
-pub enum BoundVariable {
+pub enum BoundVariable<'a> {
     PpVariable(i32),
     BoobaVariable(bool),
-    YarnVariable(String),
+    YarnVariable(&'a str),
 }
 
 #[derive(Debug)]
-pub enum BoundFunctionCall {
+pub enum BoundFunctionCall<'a> {
     PpFunctionCall(i32),
     BoobaFunctionCall(bool),
-    YarnFunctionCall(String),
+    YarnFunctionCall(&'a str),
 }
 
-impl Evaluator {
+impl<'a> Evaluator<'a> {
     pub fn evaluate(&self, statement: &Statement) {
         let value = match statement {
             Statement::VariableDeclarationAndAssignment { expression, .. } => {
@@ -45,11 +48,13 @@ impl Evaluator {
     }
 
     // TODO: Rewrite this
-    pub fn evaluate_expr(&self, expr: &Expression) -> BoundExpression {
+    pub fn evaluate_expr(&self, expr: &Expression<'a>) -> BoundExpression<'a> {
         match expr {
             Expression::PpExpression { pp, .. } => BoundExpression::PpValue(*pp),
             Expression::BoobaExpression { booba, .. } => BoundExpression::BoobaValue(*booba),
-            Expression::YarnExpression { yarn, .. } => BoundExpression::YarnValue(yarn.clone()),
+            Expression::YarnExpression { yarn, .. } => {
+                BoundExpression::YarnValue(String::from(*yarn))
+            }
             Expression::UnaryExpression { operand, op, .. } => {
                 let expr_value = self.evaluate_expr(operand);
                 match op {
@@ -82,7 +87,7 @@ impl Evaluator {
                             }
                         } else if let BoundExpression::YarnValue(lhs_yarn) = lhs_value {
                             if let BoundExpression::YarnValue(rhs_yarn) = rhs_value {
-                                BoundExpression::YarnValue(lhs_yarn + rhs_yarn.as_str())
+                                BoundExpression::YarnValue(lhs_yarn + &rhs_yarn)
                             } else {
                                 panic!("Invalid type for binary operator")
                             }
