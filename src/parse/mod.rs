@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Lexer {
+    // TODO: This could be a string slice.
     chars: Vec<char>,
     position: usize,
     row: u32,
