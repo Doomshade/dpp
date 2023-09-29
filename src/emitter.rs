@@ -1,4 +1,4 @@
-use crate::semantic_analyzer::SemanticAnalyzer;
+use crate::parse::analysis::SemanticAnalyzer;
 
 pub struct Emitter {
     /// The number of bytes remaining on the stack. Each function will have its stack var

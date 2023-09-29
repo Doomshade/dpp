@@ -1,4 +1,4 @@
-use crate::parse::{Token, TokenKind};
+use crate::parse::lexer::{Token, TokenKind};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;

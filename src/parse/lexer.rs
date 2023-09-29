@@ -1,8 +1,213 @@
+use crate::error_diagnosis::ErrorDiagnosis;
 use std::cell::RefCell;
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::{Lexer, Token, TokenKind};
+#[derive(Debug)]
+pub struct Lexer {
+    // TODO: This could be a string slice.
+    chars: Vec<char>,
+    position: usize,
+    row: u32,
+    col: u32,
+    error_diag: Arc<RefCell<ErrorDiagnosis>>,
+}
+
+#[derive(Debug)]
+pub struct Token {
+    kind: TokenKind,
+    /// Row, Column
+    position: (u32, u32),
+    value: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Keyword {
+    Let,
+    Bye,
+    Pprint,
+    Ppanic,
+    Ppin,
+    Func,
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(value) = &self.value {
+            write!(f, "{} ({})", value, self.kind)
+        } else {
+            write!(f, "\"{}\"", self.kind)
+        }
+    }
+}
+
+impl Token {
+    #[must_use]
+    pub fn value(&self) -> Option<String> {
+        if let Some(val) = &self.value {
+            return Some(String::from(val));
+        }
+        None
+    }
+
+    #[must_use]
+    pub const fn row(&self) -> u32 {
+        self.position.0
+    }
+    #[must_use]
+    pub const fn col(&self) -> u32 {
+        self.position.1
+    }
+
+    #[must_use]
+    pub const fn position(&self) -> (u32, u32) {
+        self.position
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> TokenKind {
+        self.kind
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum TokenKind {
+    Identifier,
+    Number,
+    BangEqual,
+    Comment,
+    Whitespace,
+    Eof,
+    Unknown,
+    EqualEqual,
+    Equal,
+    Bang,
+    Star,
+    ForwardSlash,
+    BackSlash,
+    Plus,
+    MinusEqual,
+    PlusEqual,
+    PlusDash,
+    Dash,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    NomKeyword,
+    YemKeyword,
+    OpenParen,
+    CloseParen,
+    OpenBrace,
+    CloseBrace,
+    OpenBracket,
+    CloseBracket,
+    Colon,
+    Semicolon,
+    Ampersand,
+    Pipe,
+    Comma,
+    IfKeyword,  // if
+    LetKeyword, // let
+    ByeKeyword, // return
+    FUNcKeyword,
+    // func
+    PprintKeyword, // print()
+    PpanicKeyword, // panic()
+    PpinKeyword,   // read()
+    XxlppKeyword,  // u64
+    PpKeyword,     // u32
+    SppKeyword,    // u16
+    XsppKeyword,   // u8
+    PKeyword,      // char
+    BoobaKeyword,  // bool
+    Yarn,          // String
+    NoppKeyword,   // Void
+    YarnKeyword,   // String keyword
+    ForKeyword,
+    ElseKeyword,
+    DoubleQuote,
+    ToKeyword,
+    Arrow,
+    WhileKeyword,
+    DoKeyword,
+    LoopKeyword,
+    BreakKeyword,
+    ContinueKeyword,
+    CaseKeyword,
+    SwitchKeyword,
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let text_representation = match self {
+            Self::Identifier => "identifier",
+            Self::Number => "number",
+            Self::Yarn => "yarn",
+            Self::BangEqual => "!=",
+            Self::Comment => "",
+            Self::Whitespace => "",
+            Self::Eof => "",
+            Self::Unknown => "",
+            Self::EqualEqual => "==",
+            Self::Equal => "=",
+            Self::Bang => "!",
+            Self::Star => "*",
+            Self::ForwardSlash => "/",
+            Self::BackSlash => "\\",
+            Self::Plus => "+",
+            Self::MinusEqual => "-=",
+            Self::PlusEqual => "+=",
+            Self::PlusDash => "+-",
+            Self::Dash => "-",
+            Self::Greater => ">",
+            Self::GreaterEqual => ">=",
+            Self::Less => "<",
+            Self::LessEqual => "<=",
+            Self::NomKeyword => "nom",
+            Self::YemKeyword => "yem",
+            Self::OpenParen => "(",
+            Self::CloseParen => ")",
+            Self::OpenBrace => "{",
+            Self::CloseBrace => "}",
+            Self::OpenBracket => "[",
+            Self::CloseBracket => "]",
+            Self::Colon => ":",
+            Self::Semicolon => ";",
+            Self::Ampersand => "&",
+            Self::Pipe => "|",
+            Self::Comma => ",",
+            Self::IfKeyword => "if",
+            Self::LetKeyword => "let",
+            Self::ByeKeyword => "bye",
+            Self::PprintKeyword => "pprint",
+            Self::PpanicKeyword => "ppanic",
+            Self::PpinKeyword => "ppin",
+            Self::FUNcKeyword => "FUNc",
+            Self::ElseKeyword => "else",
+            Self::ForKeyword => "for",
+            Self::XxlppKeyword => "data type \"xxlpp\"",
+            Self::PpKeyword => "data type \"pp\"",
+            Self::SppKeyword => "data type \"spp\"",
+            Self::XsppKeyword => "data type \"xspp\"",
+            Self::PKeyword => "data type \"p\"",
+            Self::BoobaKeyword => "data type \"booba\"",
+            Self::NoppKeyword => "void data type \"nopp\"",
+            Self::DoubleQuote => "\"\"\"",
+            Self::ToKeyword => "to",
+            Self::Arrow => "->",
+            Self::WhileKeyword => "while",
+            Self::DoKeyword => "do",
+            Self::LoopKeyword => "loop",
+            Self::BreakKeyword => "break",
+            Self::ContinueKeyword => "continue",
+            Self::SwitchKeyword => "switch",
+            Self::CaseKeyword => "case",
+            Self::YarnKeyword => "yarn",
+        };
+        write!(f, "{text_representation}")
+    }
+}
 
 impl Lexer {
     #[must_use]

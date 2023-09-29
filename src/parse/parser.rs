@@ -1,11 +1,232 @@
+//! For each declaration in grammar we declare an enum and a function that parses that declaration.
+//!
+//! Each enum always consists of a default variant, usually prefixed by "Invalid" that allows us to
+//! continue parsing even though an error occurred. That way we are able to insert a placeholder
+//! in the AST and continue parsing. This is useful for error recovery.
+//!
+//! Each enum also contains a variant for each possible production in the grammar,
+//! usually defaulting to one variant with the same name (e.g. Function::Function). This adds a
+//! little bit of boilerplate, but it allows us to easily add new productions to the grammar.
+//!
+//! Each enum also derives Debug that lets us print the tree structure of the AST.
+
+use crate::error_diagnosis::ErrorDiagnosis;
+use crate::parse::lexer::{Token, TokenKind};
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::{
-    BinaryOperator, Block, Case, DataType, Expression, Function, Parameter, Parser, Statement,
-    Token, TokenKind, TranslationUnit, UnaryOperator,
-};
+#[derive(Debug)]
+pub struct Parser {
+    tokens: Arc<Vec<Token>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis>>,
+    curr_token_index: usize,
+    position: (u32, u32),
+    error: bool,
+}
+
+#[derive(Debug)]
+pub struct TranslationUnit {
+    pub functions: Vec<Function>,
+    pub variables: Vec<Statement>,
+}
+
+#[derive(Debug)]
+pub struct Function {
+    pub position: (u32, u32),
+    pub identifier: String,
+    pub return_type: DataType,
+    pub parameters: Vec<Parameter>,
+    pub block: Block,
+}
+
+#[derive(Debug)]
+pub struct Parameters {
+    position: (u32, u32),
+    parameters: Vec<Parameter>,
+}
+
+#[derive(Debug)]
+pub struct Parameter {
+    position: (u32, u32),
+    identifier: String,
+    data_type: DataType,
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub position: (u32, u32),
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug)]
+pub enum Statement {
+    VariableDeclaration {
+        position: (u32, u32),
+        identifier: String,
+        data_type: DataType,
+    },
+    VariableDeclarationAndAssignment {
+        position: (u32, u32),
+        identifier: String,
+        data_type: DataType,
+        expression: Expression,
+    },
+    IfStatement {
+        position: (u32, u32),
+        expression: Expression,
+        statement: Box<Statement>,
+    },
+    IfElseStatement {
+        position: (u32, u32),
+        expression: Expression,
+        statement: Box<Statement>,
+        else_statement: Box<Statement>,
+    },
+    ReturnStatement {
+        position: (u32, u32),
+        expression: Expression,
+    },
+    BlockStatement {
+        position: (u32, u32),
+        block: Box<Block>,
+    },
+    ExpressionStatement {
+        position: (u32, u32),
+        expression: Expression,
+    },
+    EmptyStatement {
+        position: (u32, u32),
+    },
+    ForStatement {
+        position: (u32, u32),
+        index_ident: String,
+        length_expression: Expression,
+        statement: Box<Statement>,
+    },
+    ForStatementWithIdentExpression {
+        position: (u32, u32),
+        ident: Expression,
+        length_expression: Expression,
+        statement: Box<Statement>,
+    },
+    WhileStatement {
+        position: (u32, u32),
+        expression: Expression,
+        statement: Box<Statement>,
+    },
+    DoWhileStatement {
+        position: (u32, u32),
+        block: Block,
+        expression: Expression,
+    },
+    LoopStatement {
+        position: (u32, u32),
+        block: Box<Block>,
+    },
+    BreakStatement {
+        position: (u32, u32),
+    },
+    ContinueStatement {
+        position: (u32, u32),
+    },
+    SwitchStatement {
+        position: (u32, u32),
+        expression: Expression,
+        cases: Vec<Case>,
+    },
+}
+
+#[derive(Debug)]
+pub struct Case {
+    expression: Expression,
+    block: Box<Block>,
+}
+
+#[derive(Debug)]
+pub enum Expression {
+    PpExpression {
+        position: (u32, u32),
+        pp: i32,
+    },
+    BoobaExpression {
+        position: (u32, u32),
+        booba: bool,
+    },
+    YarnExpression {
+        position: (u32, u32),
+        yarn: String,
+    },
+    UnaryExpression {
+        position: (u32, u32),
+        op: UnaryOperator,
+        operand: Box<Expression>,
+    },
+    BinaryExpression {
+        position: (u32, u32),
+        lhs: Box<Expression>,
+        op: BinaryOperator,
+        rhs: Box<Expression>,
+    },
+    IdentifierExpression {
+        position: (u32, u32),
+        identifier: String,
+    },
+    FunctionCall {
+        position: (u32, u32),
+        identifier: String,
+        arguments: Vec<Expression>,
+    },
+    AssignmentExpression {
+        position: (u32, u32),
+        identifier: String,
+        expression: Box<Expression>,
+    },
+    InvalidExpression,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum DataType {
+    // u64
+    Xxlpp,
+    // u32
+    Pp,
+    // u16
+    Spp,
+    // u8
+    Xspp,
+    // char
+    P,
+    // string
+    Yarn,
+    // bool
+    Booba,
+    // void
+    Nopp,
+    Struct { name: String },
+}
+
+#[derive(Debug)]
+pub struct Struct {}
+
+#[derive(Debug)]
+pub enum BinaryOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    NotEqual,
+    Equal,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+}
+
+#[derive(Debug)]
+pub enum UnaryOperator {
+    Not,
+    Negate,
+}
 
 impl Parser {
     pub fn new(tokens: Arc<Vec<Token>>, error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {

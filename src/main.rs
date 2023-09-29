@@ -8,13 +8,13 @@ use std::fs;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::{Lexer, Parser, Token, TranslationUnit};
-use crate::semantic_analyzer::SemanticAnalyzer;
+use crate::parse::analysis::SemanticAnalyzer;
+use crate::parse::lexer::{Lexer, Token};
+use crate::parse::parser::{Parser, TranslationUnit};
 
 pub mod emitter;
 pub mod error_diagnosis;
 pub mod parse;
-pub mod semantic_analyzer;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // TODO: Pass this as a command line argument.
