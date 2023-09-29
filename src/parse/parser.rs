@@ -321,7 +321,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.error = false;
                 self.consume_token();
 
-                return token_value;
+                return Some(token_value);
             }
 
             // Check if this is the second error in a row.
@@ -341,7 +341,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.error_diag.borrow_mut().handle("No token found");
                 self.error = true;
             }
-            return token_value;
+            return Some(token_value);
         }
 
         self.error_diag.borrow_mut().handle("No token found");

@@ -8,10 +8,12 @@ use crate::error_diagnosis::ErrorDiagnosis;
 
 #[derive(Debug)]
 pub struct Lexer<'a, 'b> {
-    // TODO: This could be a string slice.
+    /// The raw translation unit input.
     raw_input: &'a str,
+    /// The input as a vector of characters because we want to index into it.
     chars: Vec<char>,
-    position: usize,
+    /// The cursor to the chars vector.
+    cursor: usize,
     row: u32,
     col: u32,
     error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
@@ -19,35 +21,27 @@ pub struct Lexer<'a, 'b> {
 
 #[derive(Debug)]
 pub struct Token<'a> {
+    /// The kind of the token.
     kind: TokenKind,
     /// Row, Column
     position: (u32, u32),
-    value: Option<&'a str>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Keyword {
-    Let,
-    Bye,
-    Pprint,
-    Ppanic,
-    Ppin,
-    Func,
+    /// The value of the token. The reason we don't use Option here is because
+    /// inside the parser in the method `expect` we return an Option on the value.
+    /// If the value is None that means the parser panics - the parsing is stopped,
+    /// tokens are consumed until it's synchronized. Note that it does not matter we
+    /// use Option there, there could be Result as well.
+    value: &'a str,
 }
 
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(value) = &self.value {
-            write!(f, "{} ({})", value, self.kind)
-        } else {
-            write!(f, "\"{}\"", self.kind)
-        }
+        write!(f, "{} ({})", self.value, self.kind)
     }
 }
 
 impl<'a> Token<'a> {
     #[must_use]
-    pub fn value(&self) -> Option<&'a str> {
+    pub fn value(&self) -> &'a str {
         self.value
     }
 
@@ -113,7 +107,7 @@ pub enum TokenKind {
     LetKeyword,    // let
     ByeKeyword,    // return
     FUNcKeyword,   // function
-    PprintKeyword, // print()
+    PprintKeyword, // write()
     PpanicKeyword, // panic()
     PpinKeyword,   // read()
     XxlppKeyword,  // i64
@@ -210,22 +204,50 @@ impl Display for TokenKind {
 }
 
 impl<'a, 'b> Lexer<'a, 'b> {
+    /// # Arguments
+    ///
+    /// * `input`: The translation unit input.
+    /// * `error_diag`: The error diagnostics.
+    ///
+    /// returns: Lexer
     #[must_use]
     pub fn new(input: &'a str, error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         // Create a vector of characters from the input string. This is so that we can access the
-        // characters by index. Unfortunately this will take up more memory than necessary as we
-        // will pass in the Token struct a String instead of a string slice.
+        // characters by index. Unfortunately this will take up more memory, but as soon as the
+        // lexer goes out of scope, the vector will be dropped.
+
+        // NOTE: We would normally use an iterator here, but the problem is that we need to
+        // be able to peek inside the iterator. The Peekable trait allows it, HOWEVER: the trait
+        // consumes the iterator, which means that we can't use it anymore. So we have to use a
+        // vector instead.
         let chars = input.chars().collect();
         Self {
             raw_input: input,
             chars,
-            position: 0,
+            cursor: 0,
             row: 1,
             col: 1,
             error_diag,
         }
     }
-
+    ///
+    /// Lexes the input into a vector of Tokens.
+    ///
+    /// # Arguments
+    ///
+    ///
+    /// returns: Vector of Tokens.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let input: &str = "let x = 5;";
+    /// let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new("test.dpp", input)));
+    /// let mut lexer = Lexer::new(input, error_diag.clone());
+    /// let tokens = lexer.lex();
+    /// // ...
+    /// // The tokens then can be used for parsing.
+    /// ```
     pub fn lex(&mut self) -> Vec<Token<'a>> {
         let mut tokens = Vec::new();
         let mut token = self.parse_token();
@@ -244,11 +266,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
         Token {
             kind,
             position: (self.row, self.col),
-            value: Some(value),
+            value,
         }
     }
 
     fn parse_token(&mut self) -> Token<'a> {
+        // Parse the token based on the first character prefix.
         let token = match self.peek() {
             '\0' => self.new_token(TokenKind::Eof, "EOF"),
             'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
@@ -264,6 +287,9 @@ impl<'a, 'b> Lexer<'a, 'b> {
             _ => self.handle_unknown(),
         };
 
+        // If it's a whitespace or a comment, try to parse the next token as this one is useless
+        // to the parser. The Comment token could be useful for error handling later on,
+        // but we don't need it for now.
         if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
             return self.parse_token();
         }
@@ -275,84 +301,81 @@ impl<'a, 'b> Lexer<'a, 'b> {
     }
 
     fn peek_ahead(&self, ahead: usize) -> char {
-        if self.position + ahead >= self.chars.len() {
+        if self.cursor + ahead >= self.chars.len() {
             return char::default();
         }
 
-        self.chars[self.position + ahead]
+        self.chars[self.cursor + ahead]
     }
 
-    fn consume(&mut self) {
+    fn advance(&mut self) {
         self.col += 1;
-        self.position += 1;
-    }
-
-    fn str_slice(&self, len: usize) -> &'a str {
-        &self.raw_input[self.position..self.position + len]
+        self.cursor += 1;
     }
 
     fn handle_p(&mut self) -> Token<'a> {
-        // Consume opening quote.
-        self.consume();
-        let mut c = self.peek();
-        self.consume();
-        if c == '\\' {
-            c = self.peek();
-            self.consume();
+        let start = self.cursor;
+
+        self.advance(); // Consume opening quote.
+        self.advance(); // Consume the character.
+        if self.peek() == '\\' {
+            // TODO: Handle escaped characters.
+            self.advance(); // Consume the escaped character.
         }
 
-        // Consume closing quote.
-        self.consume();
-        self.new_token(TokenKind::PKeyword, self.str_slice(1))
+        self.advance(); // Consume closing quote.
+        self.new_token(
+            TokenKind::PKeyword,
+            &self.raw_input[start + 1..self.cursor - 1],
+        )
     }
 
     fn handle_unknown(&mut self) -> Token<'a> {
-        self.consume();
+        self.advance();
 
-        self.new_token(TokenKind::Unknown, self.str_slice(1))
+        self.new_token(
+            TokenKind::Unknown,
+            &self.raw_input[self.cursor - 1..self.cursor],
+        )
     }
 
     fn handle_comment(&mut self) -> Token<'a> {
-        let start = self.position;
-        // Consume the comment tag
-        self.consume();
+        let start = self.cursor;
 
-        let mut c = self.peek();
-        while c != '\n' {
-            self.consume();
-            c = self.peek();
+        self.advance(); // Consume the '#' comment tag.
+
+        while self.peek() != '\n' {
+            self.advance();
         }
 
-        self.new_token(TokenKind::Comment, &self.raw_input[start..self.position])
+        self.new_token(TokenKind::Comment, &self.raw_input[start..self.cursor])
     }
 
     fn handle_operator(&mut self) -> Token<'a> {
-        let operator_start = self.position;
-        let mut buf = String::with_capacity(2);
-        let operator = self.peek();
-        buf.push(operator);
-        self.consume();
+        let start = self.cursor;
 
-        match operator {
+        match self.peek() {
             '-' => {
+                self.advance();
                 if self.peek() == '=' {
-                    buf.push(self.peek());
-                    self.consume();
+                    self.advance();
                 } else if self.peek() == '>' {
-                    buf.push(self.peek());
-                    self.consume();
+                    self.advance();
                 }
             }
             '>' | '<' | '!' | '=' | '+' | '*' | '/' | '%' => {
+                self.advance();
                 if self.peek() == '=' {
-                    buf.push(self.peek());
-                    self.consume();
+                    self.advance();
                 }
             }
-            _ => {}
+            _ => {
+                self.advance();
+            }
         }
 
-        let kind: TokenKind = match buf.as_str() {
+        let op = &self.raw_input[start..self.cursor];
+        let kind: TokenKind = match op {
             "->" => TokenKind::Arrow,
             ">" => TokenKind::Greater,
             ">=" => TokenKind::GreaterEqual,
@@ -370,17 +393,14 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "+-" => TokenKind::PlusDash,
             "+=" => TokenKind::PlusEqual,
             "-=" => TokenKind::MinusEqual,
-            _ => panic!("Unknown operator: {buf}"),
+            _ => panic!("Unknown operator: {op}"),
         };
 
-        self.new_token(kind, &self.raw_input[operator_start..self.position])
+        self.new_token(kind, op)
     }
 
     fn handle_punctuation(&mut self) -> Token<'a> {
-        let punctuation_start = self.position;
-        let c = self.peek();
-
-        let kind = match c {
+        let kind = match self.peek() {
             '(' => TokenKind::OpenParen,
             ')' => TokenKind::CloseParen,
             '{' => TokenKind::OpenBrace,
@@ -390,45 +410,35 @@ impl<'a, 'b> Lexer<'a, 'b> {
             ',' => TokenKind::Comma,
             ':' => TokenKind::Colon,
             ';' => TokenKind::Semicolon,
-            _ => unreachable!("Unknown punctuation: {c}"),
+            _ => unreachable!("Unknown punctuation: {}", self.peek()),
         };
-        self.consume();
+        self.advance();
 
-        self.new_token(kind, &self.raw_input[punctuation_start..self.position])
+        self.new_token(kind, &self.raw_input[self.cursor - 1..self.cursor])
     }
 
     fn handle_whitespace(&mut self) -> Token<'a> {
-        let mut c = self.peek();
-        while c.is_whitespace() {
-            self.consume();
-            if c == '\n' {
+        while self.peek().is_whitespace() {
+            if self.peek() == '\n' {
                 self.row += 1;
                 self.col = 1;
             }
-            c = self.peek();
+            self.advance();
         }
 
         self.new_token(TokenKind::Whitespace, "")
     }
 
     fn handle_yarn(&mut self) -> Token<'a> {
+        let start = self.cursor;
         const MAX_YARN_LEN: usize = 256;
-        let mut buf = String::with_capacity(256);
+        self.advance(); // Consume the opening quote.
 
-        // Consume the opening quote.
-        self.consume();
+        while self.peek() != char::default() && self.peek() != '"' && self.peek() != '\n' {
+            self.advance(); // Add the character.
 
-        // Set the start of the yarn (String) to right after the opening quote.
-        let yarn_start = self.position;
-
-        let mut c = self.peek();
-        while c != char::default() && c != '"' && c != '\n' {
-            buf.push(c);
-            self.consume();
-            c = self.peek();
-
-            if c == '\\' {
-                self.consume();
+            if self.peek() == '\\' {
+                self.advance();
                 let x = match self.peek() {
                     'n' => '\n',
                     'r' => '\r',
@@ -444,23 +454,14 @@ impl<'a, 'b> Lexer<'a, 'b> {
                         self.peek()
                     }
                 };
-                buf.push(x);
-                self.consume();
-                c = self.peek();
+                self.advance();
             }
         }
 
-        if c == '"' {
-            // Consume the closing quote.
-            self.consume();
-        }
-
-        let token = self.new_token(
-            TokenKind::Yarn,
-            &self.raw_input[yarn_start..self.position - 1],
-        );
-
-        if c != '"' {
+        let token = self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..self.cursor]);
+        if self.peek() == '"' {
+            self.advance(); // Consume the closing quote.
+        } else {
             self.error_diag
                 .borrow_mut()
                 .expected_different_token_error(&token, TokenKind::DoubleQuote);
@@ -470,32 +471,24 @@ impl<'a, 'b> Lexer<'a, 'b> {
     }
 
     fn handle_number(&mut self) -> Token<'a> {
-        let number_start = self.position;
+        let start = self.cursor;
 
-        let mut c = self.peek();
-        while c.is_ascii_digit() {
-            self.consume();
-            c = self.peek();
+        while self.peek().is_ascii_digit() {
+            self.advance();
         }
 
-        self.new_token(
-            TokenKind::Number,
-            &self.raw_input[number_start..self.position],
-        )
+        self.new_token(TokenKind::Number, &self.raw_input[start..self.cursor])
     }
 
     fn handle_identifier(&mut self) -> Token<'a> {
-        let identifier_start = self.position;
-        let mut buf = String::with_capacity(256);
+        let start = self.cursor;
 
-        let mut c = self.peek();
-        while c.is_alphabetic() || c == '_' && !c.is_whitespace() {
-            buf.push(c);
-            self.consume();
-            c = self.peek();
+        while self.peek().is_alphabetic() || self.peek() == '_' && !self.peek().is_whitespace() {
+            self.advance();
         }
 
-        let kind = match buf.as_str() {
+        let ident_value = &self.raw_input[start..self.cursor];
+        let kind = match ident_value {
             "xxlpp" => TokenKind::XxlppKeyword,
             "pp" => TokenKind::PpKeyword,
             "spp" => TokenKind::SppKeyword,
@@ -526,6 +519,6 @@ impl<'a, 'b> Lexer<'a, 'b> {
             _ => TokenKind::Identifier,
         };
 
-        self.new_token(kind, &self.raw_input[identifier_start..self.position])
+        self.new_token(kind, ident_value)
     }
 }
