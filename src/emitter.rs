@@ -1,11 +1,11 @@
 use crate::parse::analysis::SemanticAnalyzer;
 
-pub struct Emitter<'a> {
+pub struct Emitter<'a, 'b> {
     /// The number of bytes remaining on the stack. Each function will have its stack var
     /// eventually.
     _stack: u32,
     _label_count: usize,
-    _semantic_analyzer: SemanticAnalyzer<'a>,
+    _semantic_analyzer: SemanticAnalyzer<'a, 'b>,
 }
 //
 // impl Emitter {

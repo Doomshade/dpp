@@ -16,9 +16,9 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct Parser<'a> {
+pub struct Parser<'a, 'b> {
     tokens: Arc<Vec<Token<'a>>>,
-    error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
     curr_token_index: usize,
     position: (u32, u32),
     error: bool,
@@ -235,8 +235,11 @@ pub enum UnaryOperator {
     Negate,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(tokens: Arc<Vec<Token<'a>>>, error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>) -> Self {
+impl<'a, 'b> Parser<'a, 'b> {
+    pub fn new(
+        tokens: Arc<Vec<Token<'a>>>,
+        error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
+    ) -> Self {
         Self {
             position: (1, 1),
             tokens,

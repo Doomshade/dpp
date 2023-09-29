@@ -4,8 +4,8 @@
 
 use std::cell::RefCell;
 use std::error::Error;
-use std::fs;
 use std::sync::Arc;
+use std::{env, fs};
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::analysis::SemanticAnalyzer;
@@ -18,10 +18,9 @@ pub mod parse;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // TODO: Pass this as a command line argument.
-    let path = "examples/simple_expr.dpp";
-    // TODO: Make this Arc so that we can use the lines in the error diagnosis.
-    let file_contents = fs::read_to_string(path)?;
-    let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(path, &file_contents)));
+    const FILE_PATH: &'static str = "examples/simple_expr.dpp";
+    let file_contents = fs::read_to_string(FILE_PATH)?;
+    let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(FILE_PATH, &file_contents)));
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
@@ -33,9 +32,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn lex<'a>(
+fn lex<'a, 'b>(
     input: &'a str,
-    error_diag: &Arc<RefCell<ErrorDiagnosis<'a>>>,
+    error_diag: &Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
 ) -> Result<Vec<Token<'a>>, Box<dyn Error>> {
     let mut lexer = Lexer::new(input, error_diag.clone());
     let tokens = lexer.lex();
@@ -43,9 +42,9 @@ fn lex<'a>(
     Ok(tokens)
 }
 
-fn parse<'a>(
+fn parse<'a, 'b>(
     tokens: Vec<Token<'a>>,
-    error_diag: &Arc<RefCell<ErrorDiagnosis<'a>>>,
+    error_diag: &Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
 ) -> Result<TranslationUnit<'a>, Box<dyn Error>> {
     let mut parser = Parser::new(Arc::new(tokens), error_diag.clone());
     let result = parser.parse();
@@ -53,9 +52,9 @@ fn parse<'a>(
     Ok(result)
 }
 
-fn analyze<'a>(
+fn analyze<'a, 'b>(
     translation_unit: TranslationUnit<'a>,
-    error_diag: &Arc<RefCell<ErrorDiagnosis<'a>>>,
+    error_diag: &Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
 ) -> Result<(), Box<dyn Error>> {
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
     analyzer.analyze(translation_unit);

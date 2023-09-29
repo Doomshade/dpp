@@ -48,18 +48,18 @@ impl PartialOrd for ErrorMessage {
 }
 
 #[derive(Debug)]
-pub struct ErrorDiagnosis<'a> {
-    file_name: String,
+pub struct ErrorDiagnosis<'a, 'b> {
+    file_name: &'b str,
     file_contents: &'a str,
     /// Using hash map to remove duplicate messages
     error_messages: HashMap<String, ErrorMessage>,
 }
 
-impl<'a> ErrorDiagnosis<'a> {
+impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     #[must_use]
-    pub fn new(file_name: &str, file_contents: &'a str) -> Self {
+    pub fn new(file_name: &'b str, file_contents: &'a str) -> Self {
         Self {
-            file_name: String::from(file_name),
+            file_name,
             file_contents,
             error_messages: HashMap::new(),
         }

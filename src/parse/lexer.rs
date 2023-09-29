@@ -7,14 +7,14 @@ use std::sync::Arc;
 use crate::error_diagnosis::ErrorDiagnosis;
 
 #[derive(Debug)]
-pub struct Lexer<'a> {
+pub struct Lexer<'a, 'b> {
     // TODO: This could be a string slice.
     raw_input: &'a str,
     chars: Vec<char>,
     position: usize,
     row: u32,
     col: u32,
-    error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>,
+    error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 #[derive(Debug)]
@@ -209,9 +209,9 @@ impl Display for TokenKind {
     }
 }
 
-impl<'a> Lexer<'a> {
+impl<'a, 'b> Lexer<'a, 'b> {
     #[must_use]
-    pub fn new(input: &'a str, error_diag: Arc<RefCell<ErrorDiagnosis<'a>>>) -> Self {
+    pub fn new(input: &'a str, error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         // Create a vector of characters from the input string. This is so that we can access the
         // characters by index. Unfortunately this will take up more memory than necessary as we
         // will pass in the Token struct a String instead of a string slice.
