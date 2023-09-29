@@ -7,8 +7,9 @@ use std::sync::Arc;
 use crate::error_diagnosis::ErrorDiagnosis;
 
 #[derive(Debug)]
-pub struct Lexer {
+pub struct Lexer<'a> {
     // TODO: This could be a string slice.
+    raw_input: &'a str,
     chars: Vec<char>,
     position: usize,
     row: u32,
@@ -17,11 +18,11 @@ pub struct Lexer {
 }
 
 #[derive(Debug)]
-pub struct Token {
+pub struct Token<'a> {
     kind: TokenKind,
     /// Row, Column
     position: (u32, u32),
-    value: Option<String>,
+    value: Option<&'a str>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -34,7 +35,7 @@ pub enum Keyword {
     Func,
 }
 
-impl Display for Token {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(value) = &self.value {
             write!(f, "{} ({})", value, self.kind)
@@ -44,10 +45,10 @@ impl Display for Token {
     }
 }
 
-impl Token {
+impl<'a> Token<'a> {
     #[must_use]
     pub fn value(&self) -> Option<String> {
-        if let Some(val) = &self.value {
+        if let Some(val) = self.value {
             return Some(String::from(val));
         }
         None
@@ -212,11 +213,15 @@ impl Display for TokenKind {
     }
 }
 
-impl Lexer {
+impl<'a> Lexer<'a> {
     #[must_use]
-    pub fn new(input: &str, error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
+    pub fn new(input: &'a str, error_diag: Arc<RefCell<ErrorDiagnosis>>) -> Self {
+        // Create a vector of characters from the input string. This is so that we can access the
+        // characters by index. Unfortunately this will take up more memory than necessary as we
+        // will pass in the Token struct a String instead of a string slice.
         let chars = input.chars().collect();
         Self {
+            raw_input: input,
             chars,
             position: 0,
             row: 1,
@@ -225,7 +230,7 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self) -> Vec<Token> {
+    pub fn lex(&mut self) -> Vec<Token<'a>> {
         let mut tokens = Vec::new();
         let mut token = self.parse_token();
         loop {
@@ -239,7 +244,7 @@ impl Lexer {
         tokens
     }
 
-    fn new_token_with_value(&self, kind: TokenKind, value: String) -> Token {
+    fn new_token_with_value(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
         Token {
             kind,
             position: (self.row, self.col),
@@ -247,7 +252,7 @@ impl Lexer {
         }
     }
 
-    fn new_token(&self, kind: TokenKind) -> Token {
+    fn new_token(&self, kind: TokenKind) -> Token<'a> {
         Token {
             kind,
             position: (self.row, self.col),
@@ -255,7 +260,7 @@ impl Lexer {
         }
     }
 
-    fn parse_token(&mut self) -> Token {
+    fn parse_token(&mut self) -> Token<'a> {
         let token = match self.peek() {
             '\0' => self.new_token(TokenKind::Eof),
             'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
@@ -294,7 +299,11 @@ impl Lexer {
         self.position += 1;
     }
 
-    fn handle_p(&mut self) -> Token {
+    fn str_slice(&self, len: usize) -> &'a str {
+        &self.raw_input[self.position..self.position + len]
+    }
+
+    fn handle_p(&mut self) -> Token<'a> {
         // Consume opening quote.
         self.consume();
         let mut c = self.peek();
@@ -306,17 +315,16 @@ impl Lexer {
 
         // Consume closing quote.
         self.consume();
-        self.new_token_with_value(TokenKind::PKeyword, String::from(c))
+        self.new_token_with_value(TokenKind::PKeyword, self.str_slice(1))
     }
 
-    fn handle_unknown(&mut self) -> Token {
-        let c = self.peek();
+    fn handle_unknown(&mut self) -> Token<'a> {
         self.consume();
 
-        self.new_token_with_value(TokenKind::Unknown, String::from(c))
+        self.new_token_with_value(TokenKind::Unknown, self.str_slice(1))
     }
 
-    fn handle_comment(&mut self) -> Token {
+    fn handle_comment(&mut self) -> Token<'a> {
         // Consume the comment tag
         self.consume();
 
@@ -329,7 +337,7 @@ impl Lexer {
         self.new_token(TokenKind::Comment)
     }
 
-    fn handle_operator(&mut self) -> Token {
+    fn handle_operator(&mut self) -> Token<'a> {
         let mut buf = String::with_capacity(2);
         let operator = self.peek();
         buf.push(operator);
@@ -378,7 +386,7 @@ impl Lexer {
         self.new_token(kind)
     }
 
-    fn handle_punctuation(&mut self) -> Token {
+    fn handle_punctuation(&mut self) -> Token<'a> {
         let c = self.peek();
 
         let kind = match c {
@@ -398,7 +406,7 @@ impl Lexer {
         self.new_token(kind)
     }
 
-    fn handle_whitespace(&mut self) -> Token {
+    fn handle_whitespace(&mut self) -> Token<'a> {
         let mut c = self.peek();
         while c.is_whitespace() {
             self.consume();
@@ -412,10 +420,15 @@ impl Lexer {
         self.new_token(TokenKind::Whitespace)
     }
 
-    fn handle_yarn(&mut self) -> Token {
+    fn handle_yarn(&mut self) -> Token<'a> {
+        const MAX_YARN_LEN: usize = 256;
         let mut buf = String::with_capacity(256);
+
         // Consume the opening quote.
         self.consume();
+
+        // Set the start of the yarn (String) to right after the opening quote.
+        let yarn_start = self.position;
 
         let mut c = self.peek();
         while c != char::default() && c != '"' && c != '\n' {
@@ -451,7 +464,11 @@ impl Lexer {
             self.consume();
         }
 
-        let token = self.new_token_with_value(TokenKind::Yarn, buf);
+        let token = self.new_token_with_value(
+            TokenKind::Yarn,
+            &self.raw_input[yarn_start..self.position - 1],
+        );
+
         if c != '"' {
             self.error_diag
                 .borrow_mut()
@@ -461,20 +478,23 @@ impl Lexer {
         token
     }
 
-    fn handle_number(&mut self) -> Token {
-        let mut buf = String::with_capacity(256);
+    fn handle_number(&mut self) -> Token<'a> {
+        let number_start = self.position;
 
         let mut c = self.peek();
         while c.is_ascii_digit() {
-            buf.push(c);
             self.consume();
             c = self.peek();
         }
 
-        self.new_token_with_value(TokenKind::Number, buf)
+        self.new_token_with_value(
+            TokenKind::Number,
+            &self.raw_input[number_start..self.position],
+        )
     }
 
-    fn handle_identifier(&mut self) -> Token {
+    fn handle_identifier(&mut self) -> Token<'a> {
+        let identifier_start = self.position;
         let mut buf = String::with_capacity(256);
 
         let mut c = self.peek();
@@ -516,7 +536,7 @@ impl Lexer {
         };
 
         if kind == TokenKind::Identifier {
-            self.new_token_with_value(kind, buf)
+            self.new_token_with_value(kind, &self.raw_input[identifier_start..self.position])
         } else {
             self.new_token(kind)
         }

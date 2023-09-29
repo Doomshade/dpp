@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
-    let tokens = lex(file_contents, &error_diag)?;
+    let tokens = lex(&file_contents, &error_diag)?;
     dbg!(&tokens);
     let translation_unit = parse(tokens, &error_diag)?;
     dbg!(&translation_unit);
@@ -33,11 +33,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn lex(
-    input: String,
+fn lex<'a>(
+    input: &'a str,
     error_diag: &Arc<RefCell<ErrorDiagnosis>>,
-) -> Result<Vec<Token>, Box<dyn Error>> {
-    let mut lexer = Lexer::new(input.as_str(), error_diag.clone());
+) -> Result<Vec<Token<'a>>, Box<dyn Error>> {
+    let mut lexer = Lexer::new(input, error_diag.clone());
     let tokens = lexer.lex();
     error_diag.borrow().check_errors()?;
     Ok(tokens)
