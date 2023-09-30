@@ -36,7 +36,7 @@ impl<'a> Evaluator<'a> {
             }
             Statement::PprintStatement { expression, .. } => {
                 if let BoundExpression::YarnValue(yarn_expr) = self.evaluate_expr(expression) {
-                    print!("{}", yarn_expr);
+                    print!("{yarn_expr}");
                     BoundExpression::EmptyValue
                 } else {
                     panic!("Invalid type for pprint statement")
@@ -44,10 +44,11 @@ impl<'a> Evaluator<'a> {
             }
             _ => todo!("Not yet implemented"),
         };
-        println!("Evaluated: {:?}", value);
+        println!("Evaluated: {value:?}");
     }
 
     // TODO: Rewrite this
+    #[must_use]
     pub fn evaluate_expr(&self, expr: &Expression<'a>) -> BoundExpression<'a> {
         match expr {
             Expression::PpExpression { pp, .. } => BoundExpression::PpValue(*pp),
@@ -211,18 +212,10 @@ impl<'a> Evaluator<'a> {
             Expression::IdentifierExpression { identifier, .. } => {
                 BoundExpression::IdentifierValue(identifier.clone())
             }
-            Expression::FunctionCall {
-                identifier,
-                arguments,
-                ..
-            } => {
+            Expression::FunctionCall { .. } => {
                 todo!("Implement function calls")
             }
-            Expression::AssignmentExpression {
-                identifier,
-                expression,
-                ..
-            } => {
+            Expression::AssignmentExpression { expression, .. } => {
                 // TODO: Assign the value.
                 self.evaluate_expr(expression)
             }

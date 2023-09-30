@@ -42,15 +42,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             scopes: Vec::default(),
             function_scopes: Vec::default(),
             error_diag,
-            evaluator: Evaluator {
-                none: PhantomData::default(),
-            },
+            evaluator: Evaluator { none: PhantomData },
         }
     }
 
     pub fn build_sym_table(
         &mut self,
-        translation_unit: TranslationUnit<'a>,
+        _translation_unit: TranslationUnit<'a>,
     ) -> BoundTranslationUnit {
         BoundTranslationUnit {}
     }
@@ -84,7 +82,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             params.push(BoundParameter {
                 identifier: parameter.identifier.clone(),
                 data_type: parameter.data_type.clone(),
-            })
+            });
         }
 
         self.function_scopes.push(BoundFunction {
@@ -147,7 +145,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 variable,
                 expression,
             } => {
-                if let Some(_) = self.scope().get(&variable.identifier) {
+                if self.scope().get(&variable.identifier).is_some() {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -199,20 +197,21 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // TODO: Clean this up.
                 let expr = self.evaluator.evaluate_expr(&expression);
                 if let BoundExpression::YarnValue(yarn_expr) = expr {
-                    print!("{}", yarn_expr);
+                    print!("{yarn_expr}");
                 } else if let BoundExpression::IdentifierValue(identifier) = expr {
-                    if let Some(variable) = self.get_variable(&identifier) {
-                        if !&variable.initialized {
-                            panic!("Variable \"{identifier}\" not yet initialized")
-                        }
+                    if let Some(variable) = self.get_variable(identifier) {
+                        assert!(
+                            &variable.initialized,
+                            "Variable \"{identifier}\" not yet initialized"
+                        );
                         let expression = &variable
                             .value
                             .as_ref()
                             .expect("Initialized variable has no value");
                         if let BoundExpression::YarnValue(yarn_expr) = expression {
-                            print!("{}", yarn_expr);
+                            print!("{yarn_expr}");
                         } else if let BoundExpression::PpValue(pp_val) = expression {
-                            print!("{}", pp_val);
+                            print!("{pp_val}");
                         } else {
                             panic!("Invalid type for pprint statement")
                         }
@@ -226,16 +225,17 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::ByeStatement { expression, .. } => {
                 let expr = self.evaluator.evaluate_expr(&expression);
                 if let BoundExpression::IdentifierValue(identifier) = expr {
-                    if let Some(variable) = self.get_variable(&identifier) {
-                        if !&variable.initialized {
-                            panic!("Variable \"{identifier}\" not yet initialized")
-                        }
+                    if let Some(variable) = self.get_variable(identifier) {
+                        assert!(
+                            (&variable.initialized),
+                            "Variable \"{identifier}\" not yet initialized"
+                        );
                         let expr = &variable
                             .value
                             .as_ref()
                             .expect("Initialized variable has no value");
 
-                        let same_data_type = match &expr {
+                        let _same_data_type = match &expr {
                             BoundExpression::PpValue(_) => variable.data_type == DataType::Pp,
                             BoundExpression::BoobaValue(_) => variable.data_type == DataType::Booba,
                             BoundExpression::YarnValue(_) => variable.data_type == DataType::Yarn,

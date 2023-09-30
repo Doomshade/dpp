@@ -437,7 +437,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
             if self.peek() == '\\' {
                 self.advance();
-                let x = match self.peek() {
+                let _x = match self.peek() {
                     'n' => '\n',
                     'r' => '\r',
                     't' => '\t',

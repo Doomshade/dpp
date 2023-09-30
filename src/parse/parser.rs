@@ -5,7 +5,7 @@
 //! in the AST and continue parsing. This is useful for error recovery.
 //!
 //! Each enum also contains a variant for each possible production in the grammar,
-//! usually defaulting to one variant with the same name (e.g. Function::Function). This adds a
+//! usually defaulting to one variant with the same name (e.g. `Function::Function`). This adds a
 //! little bit of boilerplate, but it allows us to easily add new productions to the grammar.
 //!
 //! Each enum also derives Debug that lets us print the tree structure of the AST.
