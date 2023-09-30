@@ -210,7 +210,7 @@ impl<'a> Evaluator<'a> {
                 }
             }
             Expression::IdentifierExpression { identifier, .. } => {
-                BoundExpression::IdentifierValue(identifier.clone())
+                BoundExpression::IdentifierValue(identifier)
             }
             Expression::FunctionCall { .. } => {
                 todo!("Implement function calls")

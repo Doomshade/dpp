@@ -86,12 +86,24 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     }
 
     pub fn expected_one_of_token_error(&mut self, token: &Token, expected_one_of: &[TokenKind]) {
+        if expected_one_of.len() == 0 {
+            panic!("uhh");
+        }
+        if expected_one_of.len() == 1 {
+            self.insert_error_message(
+                token.row(),
+                token.col(),
+                format!("Expected {}.", expected_one_of[0]),
+            );
+            return;
+        }
         let mut w = String::with_capacity(256);
         w.push_str("Expected one of: ");
         expected_one_of
             .iter()
-            .for_each(|token_kind| w.push_str(format!("{token_kind} ").as_str()));
+            .for_each(|token_kind| w.push_str(format!("{token_kind}, ").as_str()));
 
+        w.replace_range(w.len() - 2.., ".");
         self.insert_error_message(token.row(), token.col(), w);
     }
 

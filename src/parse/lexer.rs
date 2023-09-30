@@ -265,7 +265,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     fn new_token(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
         Token {
             kind,
-            position: (self.row, self.col),
+            position: (self.row, self.col - 1),
             value,
         }
     }

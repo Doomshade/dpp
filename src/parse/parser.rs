@@ -22,6 +22,8 @@ pub struct Parser<'a, 'b> {
     curr_token_index: usize,
     position: (u32, u32),
     error: bool,
+    // TODO: rename this
+    fixing_parsing: bool,
 }
 
 #[derive(Debug)]
@@ -246,6 +248,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             curr_token_index: 0,
             error_diag,
             error: false,
+            fixing_parsing: false,
+        }
+    }
+
+    fn go_back(&mut self) {
+        self.curr_token_index -= 1;
+        if let Some(token) = self.token() {
+            self.position = token.position();
         }
     }
 
@@ -285,12 +295,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         if let Some(token) = self.token() {
             let token_kind = token.kind();
             let token_value = token.value();
-            self.consume_token();
 
             if expected_token_kinds
                 .iter()
                 .any(|expected_token_kind| expected_token_kind == &token_kind)
             {
+                self.consume_token();
                 self.error = false;
             } else {
                 // Check if this is the second error in a row.
@@ -299,17 +309,31 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if self.error {
                     return None;
                 }
-                self.error = true;
 
                 // Log the error at the previous token as we expected something else there.
-                if let Some(prev_token) = self.token_offset(-1) {
-                    self.error_diag
-                        .borrow_mut()
-                        .expected_one_of_token_error(prev_token, expected_token_kinds);
-                } else {
-                    self.error_diag.borrow_mut().handle("No token found");
+                if !self.fixing_parsing {
+                    self.fixing_parsing = true;
+                    if let Some(prev_token) = self.token_offset(-1) {
+                        self.error_diag
+                            .borrow_mut()
+                            .expected_one_of_token_error(prev_token, expected_token_kinds);
+                        self.consume_token();
+                        let call_me_again = self.expect_one_from(expected_token_kinds);
+                        self.fixing_parsing = false;
+                        if let Some((a, b)) = call_me_again {
+                            if self.error {
+                                self.go_back();
+                            } else {
+                                return Some((a, b));
+                            }
+                        } else {
+                            self.go_back();
+                        }
+                    } else {
+                        unreachable!("No token found");
+                    }
                 }
-                return self.expect_one_from(expected_token_kinds);
+                self.error = true;
             }
 
             return Some((token_value, token_kind));
@@ -490,7 +514,9 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn parameter(&mut self) -> Option<Parameter<'a>> {
         let identifier = self.expect(TokenKind::Identifier)?;
+        dbg!(self.token());
         self.expect(TokenKind::Colon)?;
+        dbg!(self.token());
         let data_type = self.data_type()?;
         Some(Parameter {
             position: self.position,
