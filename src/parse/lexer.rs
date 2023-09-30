@@ -187,6 +187,7 @@ impl Display for TokenKind {
             Self::PKeyword => "data type \"p\"",
             Self::BoobaKeyword => "data type \"booba\"",
             Self::NoppKeyword => "void data type \"nopp\"",
+            Self::YarnKeyword => "data type \"yarn\"",
             Self::DoubleQuote => "\"\"\"",
             Self::ToKeyword => "\"to\"",
             Self::Arrow => "\"->\"",
@@ -197,7 +198,6 @@ impl Display for TokenKind {
             Self::ContinueKeyword => "\"continue\"",
             Self::SwitchKeyword => "\"switch\"",
             Self::CaseKeyword => "\"case\"",
-            Self::YarnKeyword => "\"yarn\"",
         };
         write!(f, "{text_representation}")
     }
@@ -357,9 +357,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         match self.peek() {
             '-' => {
                 self.advance();
-                if self.peek() == '=' {
-                    self.advance();
-                } else if self.peek() == '>' {
+                if self.peek() == '=' || self.peek() == '>' {
                     self.advance();
                 }
             }

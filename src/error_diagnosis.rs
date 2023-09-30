@@ -85,6 +85,16 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
+    pub fn expected_one_of_token_error(&mut self, token: &Token, expected_one_of: &[TokenKind]) {
+        let mut w = String::with_capacity(256);
+        w.push_str("Expected one of: ");
+        expected_one_of
+            .iter()
+            .for_each(|token_kind| w.push_str(format!("{token_kind} ").as_str()));
+
+        self.insert_error_message(token.row(), token.col(), w);
+    }
+
     pub fn expected_different_token_error(
         &mut self,
         token: &Token,

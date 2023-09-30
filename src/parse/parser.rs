@@ -278,6 +278,45 @@ impl<'a, 'b> Parser<'a, 'b> {
         false
     }
 
+    fn expect_one_from(
+        &mut self,
+        expected_token_kinds: &[TokenKind],
+    ) -> Option<(&'a str, TokenKind)> {
+        if let Some(token) = self.token() {
+            let token_kind = token.kind();
+            let token_value = token.value();
+            self.consume_token();
+
+            if expected_token_kinds
+                .iter()
+                .any(|expected_token_kind| expected_token_kind == &token_kind)
+            {
+                self.error = false;
+            } else {
+                // Check if this is the second error in a row.
+                // If it is, return None. This will signal that we should go into panic mode.
+                // We let the callee handle this.
+                if self.error {
+                    return None;
+                }
+                self.error = true;
+
+                // Log the error at the previous token as we expected something else there.
+                if let Some(prev_token) = self.token_offset(-1) {
+                    self.error_diag
+                        .borrow_mut()
+                        .expected_one_of_token_error(prev_token, expected_token_kinds);
+                } else {
+                    self.error_diag.borrow_mut().handle("No token found");
+                }
+                return self.expect_one_from(expected_token_kinds);
+            }
+
+            return Some((token_value, token_kind));
+        }
+        None
+    }
+
     /// Expects a **token** of a certain kind. If the token is not present an error is added to the
     /// error diagnostics. If the token is present, it is consumed and the value of the token is
     /// returned. If the token has no value, an empty string is returned.
@@ -314,39 +353,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// let identifier = self.expect(TokenKind::Identifier)?;
     ///
     /// ```
-    fn expect(&mut self, token_kind: TokenKind) -> Option<&'a str> {
-        if let Some(token) = self.token() {
-            let token_value = token.value();
-            if token.kind() == token_kind {
-                self.error = false;
-                self.consume_token();
-
-                return Some(token_value);
-            }
-
-            // Check if this is the second error in a row.
-            // If it is, return None. This will signal that we should go into panic mode.
-            // We let the callee handle this.
-            if self.error {
-                return None;
-            }
-
-            // Log the error at the previous token as we expected something else there.
-            if let Some(prev_token) = self.token_offset(-1) {
-                self.error_diag
-                    .borrow_mut()
-                    .expected_different_token_error(prev_token, token_kind);
-                self.error = true;
-            } else {
-                self.error_diag.borrow_mut().handle("No token found");
-                self.error = true;
-            }
-            return Some(token_value);
+    fn expect(&mut self, expected_token_kind: TokenKind) -> Option<&'a str> {
+        match self.expect_one_from(&[expected_token_kind]) {
+            Some((value, _)) => Some(value),
+            None => None,
         }
-
-        self.error_diag.borrow_mut().handle("No token found");
-        self.error = true;
-        None
     }
 
     fn go_into_panic_mode(&mut self) {
@@ -766,44 +777,28 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn data_type(&mut self) -> Option<DataType<'a>> {
-        if let Some(token) = self.token() {
-            return match token.kind() {
-                TokenKind::XxlppKeyword => {
-                    self.consume_token();
-                    Some(DataType::Xxlpp)
-                }
-                TokenKind::PpKeyword => {
-                    self.consume_token();
-                    Some(DataType::Pp)
-                }
-                TokenKind::SppKeyword => {
-                    self.consume_token();
-                    Some(DataType::Spp)
-                }
-                TokenKind::XsppKeyword => {
-                    self.consume_token();
-                    Some(DataType::Xspp)
-                }
-                TokenKind::PKeyword => {
-                    self.consume_token();
-                    Some(DataType::P)
-                }
-                TokenKind::NoppKeyword => {
-                    self.consume_token();
-                    Some(DataType::Nopp)
-                }
-                TokenKind::BoobaKeyword => {
-                    self.consume_token();
-                    Some(DataType::Booba)
-                }
-                TokenKind::YarnKeyword => {
-                    self.consume_token();
-                    Some(DataType::Yarn)
-                }
-                _ => None,
-            };
+        let token = self.expect_one_from(&[
+            TokenKind::XxlppKeyword,
+            TokenKind::PpKeyword,
+            TokenKind::SppKeyword,
+            TokenKind::XsppKeyword,
+            TokenKind::PKeyword,
+            TokenKind::NoppKeyword,
+            TokenKind::BoobaKeyword,
+            TokenKind::YarnKeyword,
+        ])?;
+
+        match token.1 {
+            TokenKind::XxlppKeyword => Some(DataType::Xxlpp),
+            TokenKind::PpKeyword => Some(DataType::Pp),
+            TokenKind::SppKeyword => Some(DataType::Spp),
+            TokenKind::XsppKeyword => Some(DataType::Xspp),
+            TokenKind::PKeyword => Some(DataType::P),
+            TokenKind::NoppKeyword => Some(DataType::Nopp),
+            TokenKind::BoobaKeyword => Some(DataType::Booba),
+            TokenKind::YarnKeyword => Some(DataType::Yarn),
+            _ => None,
         }
-        None
     }
 
     fn _struct_(&mut self) -> DataType<'a> {
@@ -937,7 +932,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         match self.token()?.kind() {
             TokenKind::Identifier => {
                 let identifier = self.expect(TokenKind::Identifier)?;
-                return match self.token()?.kind() {
+                match self.token()?.kind() {
                     TokenKind::OpenParen => {
                         let arguments = self.args()?;
                         Some(Expression::FunctionCall {
@@ -959,7 +954,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         position: self.position,
                         identifier,
                     }),
-                };
+                }
             }
             TokenKind::YemKeyword => {
                 self.expect(TokenKind::YemKeyword)?;
