@@ -10,10 +10,12 @@
 //!
 //! Each enum also derives Debug that lets us print the tree structure of the AST.
 
+use std::cell::RefCell;
+use std::fmt::Debug;
+use std::sync::Arc;
+
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};
-use std::cell::RefCell;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Parser<'a, 'b> {
@@ -91,8 +93,9 @@ pub enum Statement<'a> {
         position: (u32, u32),
         expression: Expression<'a>,
     },
-    PprintStatement {
+    PrintStatement {
         position: (u32, u32),
+        print_function: fn(&str),
         expression: Expression<'a>,
     },
     BlockStatement {
@@ -542,6 +545,15 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
+    // Wrappers for print! and println! macros to use
+    // inside the Statement::PrintStatement.
+    fn print(str: &str) {
+        print!("{str}")
+    }
+    fn println(str: &str) {
+        println!("{str}")
+    }
+
     fn statement(&mut self) -> Option<Statement<'a>> {
         let token_kind = self.token()?.kind();
 
@@ -689,14 +701,21 @@ impl<'a, 'b> Parser<'a, 'b> {
                     expression,
                 });
             }
-            TokenKind::PprintKeyword => {
-                self.expect(TokenKind::PprintKeyword)?;
+            TokenKind::PprintlnKeyword | TokenKind::PprintKeyword => {
+                self.expect_one_from(&[TokenKind::PprintKeyword, TokenKind::PprintlnKeyword])?;
                 self.expect(TokenKind::OpenParen)?;
                 let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::PprintStatement {
+
+                return Some(Statement::PrintStatement {
                     position: self.position,
+                    print_function: match token_kind {
+                        TokenKind::PprintKeyword =>
+                            Self::print,
+                        TokenKind::PprintlnKeyword => Self::println,
+                        _ => unreachable!()
+                    },
                     expression,
                 });
             }

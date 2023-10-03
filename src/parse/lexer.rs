@@ -108,6 +108,7 @@ pub enum TokenKind {
     ByeKeyword,    // return
     FUNcKeyword,   // function
     PprintKeyword, // write()
+    PprintlnKeyword, // writeln()
     PpanicKeyword, // panic()
     PpinKeyword,   // read()
     XxlppKeyword,  // i64
@@ -175,6 +176,7 @@ impl Display for TokenKind {
             Self::LetKeyword => "\"let\"",
             Self::ByeKeyword => "\"bye\"",
             Self::PprintKeyword => "\"pprint\"",
+            Self::PprintlnKeyword => "\"pprintln\"",
             Self::PpanicKeyword => "\"ppanic\"",
             Self::PpinKeyword => "\"ppin\"",
             Self::FUNcKeyword => "\"FUNc\"",
@@ -502,6 +504,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "let" => TokenKind::LetKeyword,
             "bye" => TokenKind::ByeKeyword,
             "pprint" => TokenKind::PprintKeyword,
+            "pprintln" => TokenKind::PprintlnKeyword,
             "ppanic" => TokenKind::PpanicKeyword,
             "ppin" => TokenKind::PpinKeyword,
             "FUNc" => TokenKind::FUNcKeyword,

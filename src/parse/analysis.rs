@@ -193,11 +193,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     );
                 }
             }
-            Statement::PprintStatement { expression, .. } => {
+            Statement::PrintStatement { expression, print_function, .. } => {
                 // TODO: Clean this up.
                 let expr = self.evaluator.evaluate_expr(&expression);
                 if let BoundExpression::YarnValue(yarn_expr) = expr {
-                    print!("{yarn_expr}");
+                    (print_function)(&*yarn_expr);
                 } else if let BoundExpression::IdentifierValue(identifier) = expr {
                     if let Some(variable) = self.get_variable(identifier) {
                         assert!(
@@ -209,9 +209,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             .as_ref()
                             .expect("Initialized variable has no value");
                         if let BoundExpression::YarnValue(yarn_expr) = expression {
-                            print!("{yarn_expr}");
+                            (print_function)(&*yarn_expr);
                         } else if let BoundExpression::PpValue(pp_val) = expression {
-                            print!("{pp_val}");
+                            (print_function)(&*pp_val.to_string());
                         } else {
                             panic!("Invalid type for pprint statement")
                         }

@@ -86,9 +86,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     }
 
     pub fn expected_one_of_token_error(&mut self, token: &Token, expected_one_of: &[TokenKind]) {
-        if expected_one_of.len() == 0 {
-            panic!("uhh");
-        }
+        assert!(!expected_one_of.is_empty(), "Expected at least one token kind");
         if expected_one_of.len() == 1 {
             self.insert_error_message(
                 token.row(),

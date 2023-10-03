@@ -1,5 +1,6 @@
-use crate::parse::parser::{BinaryOperator, Expression, Statement, UnaryOperator};
 use std::marker::PhantomData;
+
+use crate::parse::parser::{BinaryOperator, Expression, Statement, UnaryOperator};
 
 pub struct Evaluator<'a> {
     pub none: PhantomData<&'a ()>,
@@ -34,9 +35,9 @@ impl<'a> Evaluator<'a> {
             Statement::VariableDeclarationAndAssignment { expression, .. } => {
                 self.evaluate_expr(expression)
             }
-            Statement::PprintStatement { expression, .. } => {
+            Statement::PrintStatement { expression, print_function, .. } => {
                 if let BoundExpression::YarnValue(yarn_expr) = self.evaluate_expr(expression) {
-                    print!("{yarn_expr}");
+                    (print_function)(&*yarn_expr);
                     BoundExpression::EmptyValue
                 } else {
                     panic!("Invalid type for pprint statement")
