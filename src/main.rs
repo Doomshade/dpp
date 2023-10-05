@@ -132,7 +132,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let writer = BufWriter::new(file);
     let emitter = Emitter::new(writer);
 
-    analyze(translation_unit, &error_diag, emitter)?;
+    analyze_and_emit(translation_unit, &error_diag, emitter)?;
     let mut child = Command::new("resources/pl0_interpret.exe")
         .args(["-a", "+d", "+l", "+i", "+t", "+s", OUTPUT])
         .stdout(Stdio::piped())
@@ -164,7 +164,7 @@ fn parse<'a>(
     Ok(result)
 }
 
-fn analyze<'a, T: Write>(
+fn analyze_and_emit<'a, T: Write>(
     translation_unit: TranslationUnit<'a>,
     error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
     emitter: Emitter<T>,

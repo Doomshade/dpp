@@ -84,6 +84,15 @@ pub enum Operation {
     LessThanOrEqualTo = 13,
 }
 
+pub enum DebugKeyword {
+    REGS,
+    STK,
+    STKA,
+    STKRG { start: u32, end: u32 },
+    STKN { amount: u32 },
+    ECHO { message: &'static str },
+}
+
 pub struct Emitter<T>
 where
     T: Write,
@@ -98,6 +107,34 @@ impl<T: Write> Emitter<T> {
 
     pub fn new(writer: BufWriter<T>) -> Self {
         Self { writer }
+    }
+
+    pub fn emit_debug_info(&mut self, debug: DebugKeyword) -> io::Result<()> {
+        match debug {
+            DebugKeyword::REGS => {
+                self.writer.write(b"&REGS\r\n")?;
+            }
+            DebugKeyword::STK => {
+                self.writer.write(b"&STK\r\n")?;
+            }
+            DebugKeyword::STKA => {
+                self.writer.write(b"&STKA\r\n")?;
+            }
+            DebugKeyword::STKRG { start, end } => {
+                self.writer
+                    .write(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+            }
+            DebugKeyword::STKN { amount } => {
+                self.writer
+                    .write(format!("&STKN {amount}\r\n").as_bytes())?;
+            }
+            DebugKeyword::ECHO { message } => {
+                self.writer
+                    .write(format!("&ECHO {message}\r\n").as_bytes())?;
+            }
+        };
+
+        Ok(())
     }
 
     pub fn emit_expression(&mut self, expression: &Expression) -> io::Result<()> {
@@ -174,7 +211,6 @@ impl<T: Write> Emitter<T> {
             Instruction::OPR { operation } => {
                 self.writer
                     .write(format!("OPR 0 {}\r\n", operation as u32).as_bytes())?;
-                self.writer.write(format!("&STKN 1\r\n").as_bytes())?;
             }
             Instruction::RET => {
                 self.writer.write(format!("RET 0 0\r\n").as_bytes())?;
@@ -184,6 +220,7 @@ impl<T: Write> Emitter<T> {
                     .write(format!("INT 0 {}\r\n", size).as_bytes())?;
             }
         }
+        self.emit_debug_info(DebugKeyword::REGS)?;
 
         Ok(())
     }

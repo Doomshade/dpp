@@ -244,6 +244,12 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     );
                 } else {
                     self.emitter.emit_expression(&expression).expect("asd");
+                    self.emitter
+                        .emit_instruction(Instruction::STO {
+                            level: 0,
+                            offset: 1000,
+                        })
+                        .expect("asd");
                     let ident = variable.identifier.clone();
                     let bound_var = BoundVariable {
                         position: variable.position,

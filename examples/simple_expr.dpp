@@ -1,3 +1,4 @@
+pp -> testt = 1 + 2 + 3*2;
 pp -> test = 1 + 2 + 3*200000;
 # TODO: Add an expression for this.
 # p -> a = 'a';
