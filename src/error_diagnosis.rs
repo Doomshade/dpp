@@ -73,11 +73,11 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(row, col, format!("Invalid escaped character: {character}."));
     }
 
-    pub fn unexpected_token_error(&mut self, token: &Token) {
+    pub fn unexpected_token_error(&mut self, token: &Token<'a>) {
         self.insert_error_message(token.row(), token.col(), format!("Unexpected {token}."));
     }
 
-    pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token>) {
+    pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token<'a>>) {
         self.insert_error_message(
             optional_token.map_or(0, Token::row),
             optional_token.map_or(0, Token::col),
@@ -85,7 +85,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn expected_one_of_token_error(&mut self, token: &Token, expected_one_of: &[TokenKind]) {
+    pub fn expected_one_of_token_error(&mut self, token: &Token<'a>, expected_one_of:
+    &[TokenKind]) {
         assert!(!expected_one_of.is_empty(), "Expected at least one token kind");
         if expected_one_of.len() == 1 {
             self.insert_error_message(
@@ -107,7 +108,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
 
     pub fn expected_different_token_error(
         &mut self,
-        token: &Token,
+        token: &Token<'a>,
         expected_token_kind: TokenKind,
     ) {
         self.insert_error_message(
@@ -153,7 +154,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         }
         let mut priority_queue: BinaryHeap<ErrorMessage> = BinaryHeap::new();
 
-        for (_, error_message) in error_messages {
+        for error_message in error_messages.values() {
             priority_queue.push(error_message.clone());
         }
         let vec = priority_queue

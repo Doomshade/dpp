@@ -111,7 +111,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.scopes.pop().expect("A scope to pop");
     }
 
-    fn get_variable(&self, identifier: &str) -> Option<&BoundVariable> {
+    fn get_variable(&self, identifier: &str) -> Option<&BoundVariable<'a>> {
         for scope in &self.scopes {
             if let Some(bound_variable) = scope.get(identifier) {
                 return Some(bound_variable);
@@ -197,7 +197,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // TODO: Clean this up.
                 let expr = self.evaluator.evaluate_expr(&expression);
                 if let BoundExpression::YarnValue(yarn_expr) = expr {
-                    (print_function)(&*yarn_expr);
+                    (print_function)(&yarn_expr);
                 } else if let BoundExpression::IdentifierValue(identifier) = expr {
                     if let Some(variable) = self.get_variable(identifier) {
                         assert!(
@@ -209,9 +209,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             .as_ref()
                             .expect("Initialized variable has no value");
                         if let BoundExpression::YarnValue(yarn_expr) = expression {
-                            (print_function)(&*yarn_expr);
+                            (print_function)(yarn_expr);
                         } else if let BoundExpression::PpValue(pp_val) = expression {
-                            (print_function)(&*pp_val.to_string());
+                            (print_function)(&pp_val.to_string());
                         } else {
                             panic!("Invalid type for pprint statement")
                         }

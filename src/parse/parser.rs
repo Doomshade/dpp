@@ -427,8 +427,8 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn translation_unit(&mut self) -> TranslationUnit<'a> {
-        let mut functions = Vec::<Function>::new();
-        let mut variable_declarations = Vec::<Statement>::new();
+        let mut functions = Vec::<Function<'a>>::new();
+        let mut variable_declarations = Vec::<Statement<'a>>::new();
         loop {
             if self.matches_token_kind(TokenKind::FUNcKeyword) {
                 if let Some(function) = self.function() {
@@ -482,7 +482,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn params(&mut self) -> Option<Vec<Parameter<'a>>> {
         self.expect(TokenKind::OpenParen)?;
-        let mut parameters = Vec::<Parameter>::new();
+        let mut parameters = Vec::<Parameter<'a>>::new();
 
         // Check if the close parenthesis is present first,
         // then try to parse a parameter. If a parameter is present,
@@ -530,7 +530,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn block(&mut self) -> Option<Block<'a>> {
         self.expect(TokenKind::OpenBrace)?;
-        let mut statements = Vec::<Statement>::new();
+        let mut statements = Vec::<Statement<'a>>::new();
 
         while !self.matches_token_kind(TokenKind::CloseBrace) {
             if let Some(statement) = self.statement() {
@@ -548,10 +548,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     // Wrappers for print! and println! macros to use
     // inside the Statement::PrintStatement.
     fn print(str: &str) {
-        print!("{str}")
+        print!("{str}");
     }
     fn println(str: &str) {
-        println!("{str}")
+        println!("{str}");
     }
 
     fn statement(&mut self) -> Option<Statement<'a>> {
@@ -586,13 +586,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::ForKeyword)?;
                 self.expect(TokenKind::OpenParen)?;
                 let ident = self.expect(TokenKind::Identifier)?;
-                let ident_expression: Option<Expression>;
-                if self.matches_token_kind(TokenKind::Equal) {
+                let ident_expression = if self.matches_token_kind(TokenKind::Equal) {
                     self.expect(TokenKind::Equal)?;
-                    ident_expression = Some(self.expr()?);
+                    Some(self.expr()?)
                 } else {
-                    ident_expression = None;
-                }
+                    None
+                };
                 self.expect(TokenKind::ToKeyword)?;
                 let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
@@ -669,7 +668,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
                 self.expect(TokenKind::OpenBrace)?;
-                let mut cases = Vec::<Case>::new();
+                let mut cases = Vec::<Case<'a>>::new();
                 if self.matches_token_kind(TokenKind::CloseBrace) {
                     self.expect(TokenKind::CloseBrace)?;
                     return Some(Statement::SwitchStatement {
@@ -1045,7 +1044,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn args(&mut self) -> Option<Vec<Expression<'a>>> {
         self.expect(TokenKind::OpenParen)?;
-        let mut args = Vec::<Expression>::new();
+        let mut args = Vec::<Expression<'a>>::new();
 
         if self.matches_token_kind(TokenKind::CloseParen) {
             self.expect(TokenKind::CloseParen)?;

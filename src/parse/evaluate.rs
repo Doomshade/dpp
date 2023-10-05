@@ -30,14 +30,14 @@ pub enum BoundFunctionCall<'a> {
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn evaluate(&self, statement: &Statement) {
+    pub fn evaluate(&self, statement: &Statement<'a>) {
         let value = match statement {
             Statement::VariableDeclarationAndAssignment { expression, .. } => {
                 self.evaluate_expr(expression)
             }
             Statement::PrintStatement { expression, print_function, .. } => {
                 if let BoundExpression::YarnValue(yarn_expr) = self.evaluate_expr(expression) {
-                    (print_function)(&*yarn_expr);
+                    (print_function)(&yarn_expr);
                     BoundExpression::EmptyValue
                 } else {
                     panic!("Invalid type for pprint statement")
@@ -50,7 +50,7 @@ impl<'a> Evaluator<'a> {
 
     // TODO: Rewrite this
     #[must_use]
-    pub fn evaluate_expr(expr: &Expression<'a>) -> BoundExpression<'a> {
+    pub fn evaluate_expr(&self, expr: &Expression<'a>) -> BoundExpression<'a> {
         return match expr {
             Expression::PpExpression { pp, .. } => BoundExpression::PpValue(*pp),
             Expression::BoobaExpression { booba, .. } => BoundExpression::BoobaValue(*booba),
@@ -58,7 +58,7 @@ impl<'a> Evaluator<'a> {
                 BoundExpression::YarnValue(String::from(*yarn))
             }
             Expression::UnaryExpression { operand, op, .. } => {
-                let expr_value = Self::evaluate_expr(operand);
+                let expr_value = self.evaluate_expr(operand);
                 match op {
                     UnaryOperator::Not => {
                         if let BoundExpression::BoobaValue(booba) = expr_value {
@@ -77,8 +77,8 @@ impl<'a> Evaluator<'a> {
                 }
             }
             Expression::BinaryExpression { lhs, rhs, op, .. } => {
-                let lhs_value = Self::evaluate_expr(lhs);
-                let rhs_value = Self::evaluate_expr(rhs);
+                let lhs_value = self.evaluate_expr(lhs);
+                let rhs_value = self.evaluate_expr(rhs);
                 match op {
                     BinaryOperator::Add => {
                         if let BoundExpression::PpValue(lhs_pp) = lhs_value {
@@ -218,7 +218,7 @@ impl<'a> Evaluator<'a> {
             }
             Expression::AssignmentExpression { expression, .. } => {
                 // TODO: Assign the value.
-                Self::evaluate_expr(expression)
+                self.evaluate_expr(expression)
             }
             Expression::InvalidExpression => {
                 panic!("Invalid expression")
