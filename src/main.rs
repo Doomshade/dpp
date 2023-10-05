@@ -74,9 +74,10 @@
     rust_2018_idioms
 )]
 
+use std::{env, fs};
 use std::cell::RefCell;
 use std::error::Error;
-use std::fs;
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -88,11 +89,32 @@ mod emit;
 pub mod error_diagnosis;
 mod parse;
 
+#[derive(Debug)]
+struct ArgsError {
+    args: Vec<String>,
+}
+
+impl Display for ArgsError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Usage: ./{} <file.dpp>", self.args[0])
+    }
+}
+
+impl Error for ArgsError {}
+
 fn main() -> Result<(), Box<dyn Error>> {
     // TODO: Pass this as a command line argument.
-    const FILE_PATH: &str = "examples/simple_expr.dpp";
-    let file_contents = fs::read_to_string(FILE_PATH)?;
-    let error_diag = Rc::new(RefCell::new(ErrorDiagnosis::new(FILE_PATH, &file_contents)));
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        let error = ArgsError { args };
+        eprintln!("{}", &error);
+        return Err(Box::new(error));
+    }
+
+    let file_path = &args[1];
+
+    let file_contents = fs::read_to_string(file_path)?;
+    let error_diag = Rc::new(RefCell::new(ErrorDiagnosis::new(file_path, &file_contents)));
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
