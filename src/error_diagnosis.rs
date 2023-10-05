@@ -1,8 +1,8 @@
 use crate::parse::lexer::{Token, TokenKind};
 use core::cmp::Ordering;
+use core::fmt::{Debug, Display, Formatter};
 use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;
-use core::fmt::{Debug, Display, Formatter};
 
 pub struct SyntaxError {
     error_messages: Vec<String>,
@@ -85,9 +85,23 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn expected_one_of_token_error(&mut self, token: &Token<'a>, expected_one_of:
-    &[TokenKind]) {
-        assert!(!expected_one_of.is_empty(), "Expected at least one token kind");
+    pub fn function_already_exists(&mut self, row: u32, col: u32, function_name: &'a str) {
+        self.insert_error_message(
+            row,
+            col,
+            format!("Function \"{function_name}\" already exists."),
+        );
+    }
+
+    pub fn expected_one_of_token_error(
+        &mut self,
+        token: &Token<'a>,
+        expected_one_of: &[TokenKind],
+    ) {
+        assert!(
+            !expected_one_of.is_empty(),
+            "Expected at least one token kind"
+        );
         if expected_one_of.len() == 1 {
             self.insert_error_message(
                 token.row(),

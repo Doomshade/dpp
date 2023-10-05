@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::env::var;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -14,14 +15,20 @@ pub struct SemanticAnalyzer<'a, 'b> {
     evaluator: Evaluator<'a>,
 }
 
-#[derive(Debug)]
+pub struct BoundAST<'a> {
+    pub scopes: Vec<HashMap<&'a str, BoundVariable<'a>>>,
+    pub function_scopes: Vec<BoundFunction<'a>>,
+}
+
+#[derive(Clone, Debug)]
 pub struct BoundFunction<'a> {
     name: &'a str,
     return_type: DataType<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BoundVariable<'a> {
+    position: (u32, u32),
     identifier: &'a str,
     data_type: DataType<'a>,
     value: Option<BoundExpression<'a>>,
@@ -46,24 +53,82 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
     }
 
-    pub fn build_sym_table(
-        &mut self,
-        _translation_unit: TranslationUnit<'a>,
-    ) -> BoundTranslationUnit {
-        BoundTranslationUnit {}
+    fn statement_to_variable(&self, statement: &Statement<'a>) -> Option<&BoundVariable<'a>> {
+        return match statement {
+            Statement::VariableDeclaration { variable } => self.get_variable(variable.identifier),
+            Statement::VariableDeclarationAndAssignment { variable, .. } => {
+                self.get_variable(variable.identifier)
+            }
+            _ => {
+                panic!("Invalid statement type")
+            }
+        };
     }
 
-    pub fn analyze(&mut self, translation_unit: TranslationUnit<'a>) {
-        let functions = translation_unit.functions;
-        let variables = translation_unit.variables;
-
+    fn begin_global_scope(&mut self, translation_unit: &TranslationUnit<'a>) {
         self.begin_scope();
-        {
-            for variable in variables {
-                self.handle_statement(variable);
+        let functions = &translation_unit.functions;
+        let statements = &translation_unit.global_statements;
+
+        for statement in statements {
+            if let Some(variable) = self.statement_to_variable(statement) {
+                let identifier = variable.identifier;
+                if self.scope().contains_key(&identifier) {
+                    self.error_diag.borrow_mut().variable_already_exists(
+                        variable.position.0,
+                        variable.position.1,
+                        identifier,
+                    );
+                }
+
+                let bound_var = BoundVariable {
+                    position: variable.position,
+                    identifier,
+                    value: None,
+                    initialized: false,
+                    data_type: variable.data_type.clone(),
+                };
+                dbg!(&bound_var);
+                let scope = self.scope_mut();
+                scope.insert(identifier, bound_var);
+            }
+        }
+
+        for function in functions {
+            if self.scope().contains_key(&function.identifier) {
+                self.error_diag.borrow_mut().function_already_exists(
+                    function.position.0,
+                    function.position.1,
+                    function.identifier,
+                );
             }
 
-            for function in functions {
+            let scope = self.scope_mut();
+            let bound_var = BoundVariable {
+                position: function.position,
+                identifier: function.identifier,
+                value: None,
+                initialized: false,
+                data_type: function.return_type.clone(),
+            };
+            dbg!(&bound_var);
+            scope.insert(function.identifier, bound_var);
+        }
+    }
+
+    fn end_global_scope(&mut self) {
+        self.end_scope();
+    }
+
+    pub fn analyze(&mut self, translation_unit: TranslationUnit<'a>) -> BoundAST<'a> {
+        self.begin_global_scope(&translation_unit);
+        {
+            // Analyze global statements and functions.
+            for statement in translation_unit.global_statements {
+                self.handle_global_statement(statement);
+            }
+
+            for function in translation_unit.functions {
                 self.begin_function(&function);
                 {
                     for statement in function.block.statements {
@@ -73,7 +138,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.end_function();
             }
         }
-        self.end_scope();
+        self.end_global_scope();
+
+        // TODO: Move this instead of cloning someday.
+        let scopes = self.scopes.clone();
+        let function_scopes = self.function_scopes.clone();
+
+        self.scopes.clear();
+        self.function_scopes.clear();
+        BoundAST {
+            scopes,
+            function_scopes,
+        }
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
@@ -120,6 +196,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         None
     }
 
+    fn handle_global_statement(&mut self, statement: Statement<'a>) {
+        // TODO: Handle only a number of statements.
+        self.handle_statement(statement);
+    }
+
     fn handle_statement(&mut self, statement: Statement<'a>) {
         match statement {
             Statement::VariableDeclaration { variable } => {
@@ -133,6 +214,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 let scope = self.scope_mut();
                 let bound_var = BoundVariable {
+                    position: variable.position,
                     identifier: variable.identifier,
                     value: None,
                     initialized: false,
@@ -179,6 +261,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 if !self.scope_mut().contains_key(&variable.identifier) {
                     let ident = variable.identifier.clone();
                     let bound_var = BoundVariable {
+                        position: variable.position,
                         identifier: variable.identifier.clone(),
                         data_type: variable.data_type.clone(),
                         value: Some(expr),
@@ -193,7 +276,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     );
                 }
             }
-            Statement::PrintStatement { expression, print_function, .. } => {
+            Statement::PrintStatement {
+                expression,
+                print_function,
+                ..
+            } => {
                 // TODO: Clean this up.
                 let expr = self.evaluator.evaluate_expr(&expression);
                 if let BoundExpression::YarnValue(yarn_expr) = expr {

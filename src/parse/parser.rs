@@ -32,7 +32,7 @@ pub struct Parser<'a, 'b> {
 #[derive(Debug)]
 pub struct TranslationUnit<'a> {
     pub functions: Vec<Function<'a>>,
-    pub variables: Vec<Statement<'a>>,
+    pub global_statements: Vec<Statement<'a>>,
 }
 
 #[derive(Debug)]
@@ -459,7 +459,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         TranslationUnit {
             functions,
-            variables: variable_declarations,
+            global_statements: variable_declarations,
         }
     }
 
@@ -711,10 +711,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                 return Some(Statement::PrintStatement {
                     position: self.position,
                     print_function: match token_kind {
-                        TokenKind::PprintKeyword =>
-                            Self::print,
+                        TokenKind::PprintKeyword => Self::print,
                         TokenKind::PprintlnKeyword => Self::println,
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     },
                     expression,
                 });

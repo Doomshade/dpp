@@ -6,7 +6,7 @@ pub struct Evaluator<'a> {
     pub none: PhantomData<&'a ()>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum BoundExpression<'a> {
     PpValue(i32),
     BoobaValue(bool),
@@ -35,7 +35,11 @@ impl<'a> Evaluator<'a> {
             Statement::VariableDeclarationAndAssignment { expression, .. } => {
                 self.evaluate_expr(expression)
             }
-            Statement::PrintStatement { expression, print_function, .. } => {
+            Statement::PrintStatement {
+                expression,
+                print_function,
+                ..
+            } => {
                 if let BoundExpression::YarnValue(yarn_expr) = self.evaluate_expr(expression) {
                     (print_function)(&yarn_expr);
                     BoundExpression::EmptyValue
@@ -223,6 +227,6 @@ impl<'a> Evaluator<'a> {
             Expression::InvalidExpression => {
                 panic!("Invalid expression")
             }
-        }
+        };
     }
 }

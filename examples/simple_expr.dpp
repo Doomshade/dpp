@@ -1,10 +1,10 @@
-pp -> test = 69;
+pp -> test = 69 + 420;
 # TODO: Add an expression for this.
 # p -> a = 'a';
 yarn -> asd = "asdf";
 
-FUNc main(argc: pp, argv: yarn) -> pp {
-    pprintln(test);
-    pprintln(asd);
-    bye 0;
-}
+# FUNc main(argc: pp, argv: yarn) -> pp {
+#     pprintln(test);
+#     pprintln(asd);
+#     bye 0;
+# }
