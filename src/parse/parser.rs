@@ -17,7 +17,7 @@ use std::rc::Rc;
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Parser<'a, 'b> {
     tokens: Rc<Vec<Token<'a>>>,
     error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
@@ -28,13 +28,13 @@ pub struct Parser<'a, 'b> {
     fixing_parsing: bool,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TranslationUnit<'a> {
     pub functions: Vec<Function<'a>>,
     pub global_statements: Vec<Statement<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Function<'a> {
     pub position: (u32, u32),
     pub identifier: &'a str,
@@ -43,33 +43,33 @@ pub struct Function<'a> {
     pub block: Block<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Parameters<'a> {
     position: (u32, u32),
     parameters: Vec<Parameter<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Parameter<'a> {
     position: (u32, u32),
     pub identifier: &'a str,
     pub data_type: DataType<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Block<'a> {
     position: (u32, u32),
     pub statements: Vec<Statement<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Variable<'a> {
     pub position: (u32, u32),
     pub identifier: &'a str,
     pub data_type: DataType<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Statement<'a> {
     VariableDeclaration {
         variable: Variable<'a>,
@@ -148,13 +148,13 @@ pub enum Statement<'a> {
     },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Case<'a> {
     expression: Expression<'a>,
     block: Box<Block<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Expression<'a> {
     PpExpression {
         position: (u32, u32),
@@ -217,10 +217,10 @@ pub enum DataType<'a> {
     Struct { name: &'a str },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Struct {}
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -234,7 +234,7 @@ pub enum BinaryOperator {
     LessThanOrEqual,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum UnaryOperator {
     Not,
     Negate,

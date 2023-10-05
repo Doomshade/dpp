@@ -84,7 +84,7 @@ use std::rc::Rc;
 use std::{env, fs};
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::analysis::{BoundAST, SemanticAnalyzer};
+use crate::parse::analysis::SemanticAnalyzer;
 use crate::parse::lexer::{Lexer, Token};
 use crate::parse::parser::{Parser, TranslationUnit};
 
@@ -126,35 +126,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let translation_unit = parse(tokens, &error_diag)?;
     dbg!(&translation_unit);
 
-    let mut file = fs::File::create("out/dpp/test.pl0")?;
-    file.write_all(
-        b"#pokusny vstupni soubor ukazuje vsechny moznosti programu refint_pl0
-       INT 0  4
-&REGS
-&STKA
-       LIT 0  1
-       STO 0  3
-@loop  LOD 0  3
-&STKRG 3 4
-       LIT 0  3
-       OPR 0 10
-       JMC 0  @konec
-       LOD 0  3
-       LIT 0  1
-       OPR 0  2
-&ECHO hodnota a je na vrcholu zasobniku:
-&STKN 1
-       STO 0  3
-       JMP 0  @loop
-&STK
-@konec RET 0 0\r\n",
-    )?;
-    let ast = analyze(translation_unit, &error_diag)?;
+    const OUTPUT: &'static str = "out/dpp/test.pl0";
+
+    let file = fs::File::create(OUTPUT)?;
     let writer = BufWriter::new(file);
-    let mut emitter = Emitter::new(writer);
-    // TODO: Emit
+    let emitter = Emitter::new(writer);
+
+    analyze(translation_unit, &error_diag, emitter)?;
     let mut child = Command::new("resources/pl0_interpret.exe")
-        .args(["-a", "+d", "+l", "+i", "+t", "+s", "out/dpp/test.pl0"])
+        .args(["-a", "+d", "+l", "+i", "+t", "+s", OUTPUT])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -184,14 +164,15 @@ fn parse<'a>(
     Ok(result)
 }
 
-fn analyze<'a>(
+fn analyze<'a, T: Write>(
     translation_unit: TranslationUnit<'a>,
     error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
-) -> Result<BoundAST<'a>, Box<dyn Error>> {
-    let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
-    let ast = analyzer.analyze(translation_unit);
+    emitter: Emitter<T>,
+) -> Result<(), Box<dyn Error>> {
+    let mut analyzer = SemanticAnalyzer::new(error_diag.clone(), emitter);
+    analyzer.analyze(translation_unit);
     error_diag.borrow().check_errors()?;
-    Ok(ast)
+    Ok(())
 }
 
 #[cfg(test)]

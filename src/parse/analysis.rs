@@ -1,23 +1,23 @@
+use crate::emit::emitter::{Emitter, Instruction};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::Write;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::evaluate::{BoundExpression, Evaluator};
-use crate::parse::parser::{DataType, Function, Statement, TranslationUnit};
+use crate::parse::parser::{DataType, Expression, Function, Statement, TranslationUnit};
 
-pub struct SemanticAnalyzer<'a, 'b> {
+pub struct SemanticAnalyzer<'a, 'b, T>
+where
+    T: Write,
+{
     scopes: Vec<HashMap<&'a str, BoundVariable<'a>>>,
     function_scopes: Vec<BoundFunction<'a>>,
     error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
     evaluator: Evaluator<'a>,
-}
-
-#[derive(Clone, Debug)]
-pub struct BoundAST<'a> {
-    pub scopes: Vec<HashMap<&'a str, BoundVariable<'a>>>,
-    pub function_scopes: Vec<BoundFunction<'a>>,
+    emitter: Emitter<T>,
 }
 
 #[derive(Clone, Debug)]
@@ -31,7 +31,7 @@ pub struct BoundVariable<'a> {
     position: (u32, u32),
     identifier: &'a str,
     data_type: DataType<'a>,
-    value: Option<BoundExpression<'a>>,
+    value: Option<Expression<'a>>,
     initialized: bool,
 }
 
@@ -41,15 +41,14 @@ pub struct BoundParameter<'a> {
     pub data_type: DataType<'a>,
 }
 
-pub struct BoundTranslationUnit {}
-
-impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
-    pub fn new(error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
+impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
+    pub fn new(error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>, emitter: Emitter<T>) -> Self {
         Self {
             scopes: Vec::default(),
             function_scopes: Vec::default(),
             error_diag,
             evaluator: Evaluator { none: PhantomData },
+            emitter,
         }
     }
 
@@ -120,7 +119,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.end_scope();
     }
 
-    pub fn analyze(&mut self, translation_unit: TranslationUnit<'a>) -> BoundAST<'a> {
+    pub fn analyze(&mut self, translation_unit: TranslationUnit<'a>) {
         self.begin_global_scope(&translation_unit);
         {
             // Analyze global statements and functions.
@@ -139,17 +138,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
         }
         self.end_global_scope();
-
-        // TODO: Move this instead of cloning someday.
-        let scopes = self.scopes.clone();
-        let function_scopes = self.function_scopes.clone();
-
-        self.scopes.clear();
-        self.function_scopes.clear();
-        BoundAST {
-            scopes,
-            function_scopes,
-        }
+        self.emitter
+            .emit_instruction(Instruction::JMP { address: 0 })
+            .expect("asd");
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
@@ -236,107 +227,40 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     return;
                 }
 
-                let expr = self.evaluator.evaluate_expr(&expression);
-                let same_data_type = match &expr {
-                    BoundExpression::PpValue(_) => variable.data_type == DataType::Pp,
-                    BoundExpression::BoobaValue(_) => variable.data_type == DataType::Booba,
-                    BoundExpression::YarnValue(_) => variable.data_type == DataType::Yarn,
-                    BoundExpression::IdentifierValue(identifier) => {
-                        let bound_variable = self.get_variable(identifier).unwrap();
-                        bound_variable.data_type == variable.data_type
-                    }
-                    BoundExpression::EmptyValue => {
-                        panic!()
-                    }
-                };
-
-                if !same_data_type {
+                if self.evaluator.eval(&expression) != variable.data_type {
                     self.error_diag.borrow_mut().invalid_type(
                         variable.position.0,
                         variable.position.1,
                         variable.identifier,
                     );
                 }
+                dbg!(&expression);
 
-                if !self.scope_mut().contains_key(&variable.identifier) {
-                    let ident = variable.identifier.clone();
-                    let bound_var = BoundVariable {
-                        position: variable.position,
-                        identifier: variable.identifier.clone(),
-                        data_type: variable.data_type.clone(),
-                        value: Some(expr),
-                        initialized: true,
-                    };
-                    self.scope_mut().insert(ident, bound_var);
-                } else {
+                if self.scope_mut().contains_key(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
                         variable.identifier,
                     );
+                } else {
+                    self.emitter.emit_expression(&expression).expect("asd");
+                    let ident = variable.identifier.clone();
+                    let bound_var = BoundVariable {
+                        position: variable.position,
+                        identifier: variable.identifier.clone(),
+                        data_type: variable.data_type.clone(),
+                        value: Some(expression),
+                        initialized: true,
+                    };
+                    self.scope_mut().insert(ident, bound_var);
                 }
             }
             Statement::PrintStatement {
                 expression,
                 print_function,
                 ..
-            } => {
-                // TODO: Clean this up.
-                let expr = self.evaluator.evaluate_expr(&expression);
-                if let BoundExpression::YarnValue(yarn_expr) = expr {
-                    (print_function)(&yarn_expr);
-                } else if let BoundExpression::IdentifierValue(identifier) = expr {
-                    if let Some(variable) = self.get_variable(identifier) {
-                        assert!(
-                            &variable.initialized,
-                            "Variable \"{identifier}\" not yet initialized"
-                        );
-                        let expression = &variable
-                            .value
-                            .as_ref()
-                            .expect("Initialized variable has no value");
-                        if let BoundExpression::YarnValue(yarn_expr) = expression {
-                            (print_function)(yarn_expr);
-                        } else if let BoundExpression::PpValue(pp_val) = expression {
-                            (print_function)(&pp_val.to_string());
-                        } else {
-                            panic!("Invalid type for pprint statement")
-                        }
-                    } else {
-                        panic!("Variable \"{identifier}\" does not exist")
-                    }
-                } else {
-                    panic!("Invalid type for pprint statement")
-                }
-            }
-            Statement::ByeStatement { expression, .. } => {
-                let expr = self.evaluator.evaluate_expr(&expression);
-                if let BoundExpression::IdentifierValue(identifier) = expr {
-                    if let Some(variable) = self.get_variable(identifier) {
-                        assert!(
-                            (&variable.initialized),
-                            "Variable \"{identifier}\" not yet initialized"
-                        );
-                        let expr = &variable
-                            .value
-                            .as_ref()
-                            .expect("Initialized variable has no value");
-
-                        let _same_data_type = match &expr {
-                            BoundExpression::PpValue(_) => variable.data_type == DataType::Pp,
-                            BoundExpression::BoobaValue(_) => variable.data_type == DataType::Booba,
-                            BoundExpression::YarnValue(_) => variable.data_type == DataType::Yarn,
-                            BoundExpression::IdentifierValue(identifier) => {
-                                let bound_variable = self.get_variable(identifier).unwrap();
-                                bound_variable.data_type == variable.data_type
-                            }
-                            BoundExpression::EmptyValue => {
-                                panic!()
-                            }
-                        };
-                    }
-                }
-            }
+            } => {}
+            Statement::ByeStatement { expression, .. } => {}
             _ => {}
         }
     }

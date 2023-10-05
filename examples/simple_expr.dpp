@@ -1,7 +1,7 @@
-pp -> test = 69 + 420;
+pp -> test = 1 + 2 + 3*200000;
 # TODO: Add an expression for this.
 # p -> a = 'a';
-yarn -> asd = "asdf";
+# yarn -> asd = "asdf";
 
 # FUNc main(argc: pp, argv: yarn) -> pp {
 #     pprintln(test);
