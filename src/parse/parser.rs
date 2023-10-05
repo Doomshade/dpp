@@ -12,6 +12,7 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -19,8 +20,8 @@ use crate::parse::lexer::{Token, TokenKind};
 
 #[derive(Debug)]
 pub struct Parser<'a, 'b> {
-    tokens: Arc<Vec<Token<'a>>>,
-    error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
+    tokens: Rc<Vec<Token<'a>>>,
+    error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
     curr_token_index: usize,
     position: (u32, u32),
     error: bool,
@@ -242,8 +243,8 @@ pub enum UnaryOperator {
 
 impl<'a, 'b> Parser<'a, 'b> {
     pub fn new(
-        tokens: Arc<Vec<Token<'a>>>,
-        error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
+        tokens: Rc<Vec<Token<'a>>>,
+        error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
     ) -> Self {
         Self {
             position: (1, 1),

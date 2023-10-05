@@ -77,7 +77,7 @@ rust_2018_idioms
 use std::cell::RefCell;
 use std::error::Error;
 use std::fs;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::analysis::SemanticAnalyzer;
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // TODO: Pass this as a command line argument.
     const FILE_PATH: &str = "examples/simple_expr.dpp";
     let file_contents = fs::read_to_string(FILE_PATH)?;
-    let error_diag = Arc::new(RefCell::new(ErrorDiagnosis::new(FILE_PATH, &file_contents)));
+    let error_diag = Rc::new(RefCell::new(ErrorDiagnosis::new(FILE_PATH, &file_contents)));
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn lex<'a>(
     input: &'a str,
-    error_diag: &Arc<RefCell<ErrorDiagnosis<'a, '_>>>,
+    error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
 ) -> Result<Vec<Token<'a>>, Box<dyn Error>> {
     let mut lexer = Lexer::new(input, error_diag.clone());
     let tokens = lexer.lex();
@@ -116,9 +116,9 @@ fn lex<'a>(
 
 fn parse<'a>(
     tokens: Vec<Token<'a>>,
-    error_diag: &Arc<RefCell<ErrorDiagnosis<'a, '_>>>,
+    error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
 ) -> Result<TranslationUnit<'a>, Box<dyn Error>> {
-    let mut parser = Parser::new(Arc::new(tokens), error_diag.clone());
+    let mut parser = Parser::new(Rc::new(tokens), error_diag.clone());
     let result = parser.parse();
     error_diag.borrow().check_errors()?;
     Ok(result)
@@ -126,7 +126,7 @@ fn parse<'a>(
 
 fn analyze<'a>(
     translation_unit: TranslationUnit<'a>,
-    error_diag: &Arc<RefCell<ErrorDiagnosis<'a, '_>>>,
+    error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
 ) -> Result<(), Box<dyn Error>> {
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
     analyzer.analyze(translation_unit);

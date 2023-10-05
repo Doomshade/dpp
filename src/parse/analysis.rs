@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::evaluate::{BoundExpression, Evaluator};
@@ -10,7 +10,7 @@ use crate::parse::parser::{DataType, Function, Statement, TranslationUnit};
 pub struct SemanticAnalyzer<'a, 'b> {
     scopes: Vec<HashMap<&'a str, BoundVariable<'a>>>,
     function_scopes: Vec<BoundFunction<'a>>,
-    error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
+    error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
     evaluator: Evaluator<'a>,
 }
 
@@ -37,7 +37,7 @@ pub struct BoundParameter<'a> {
 pub struct BoundTranslationUnit {}
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
-    pub fn new(error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
+    pub fn new(error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         Self {
             scopes: Vec::default(),
             function_scopes: Vec::default(),

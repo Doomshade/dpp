@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 
@@ -16,7 +16,7 @@ pub struct Lexer<'a, 'b> {
     cursor: usize,
     row: u32,
     col: u32,
-    error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>,
+    error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 #[derive(Debug)]
@@ -210,7 +210,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     ///
     /// returns: Lexer
     #[must_use]
-    pub fn new(input: &'a str, error_diag: Arc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
+    pub fn new(input: &'a str, error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         // Create a vector of characters from the input string. This is so that we can access the
         // characters by index. Unfortunately this will take up more memory, but as soon as the
         // lexer goes out of scope, the vector will be dropped.
