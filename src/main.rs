@@ -74,10 +74,11 @@
     rust_2018_idioms
 )]
 
+use crate::emit::emitter::Emitter;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::{env, fs};
@@ -149,6 +150,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 @konec RET 0 0\r\n",
     )?;
     let ast = analyze(translation_unit, &error_diag)?;
+    let writer = BufWriter::new(file);
+    let mut emitter = Emitter::new(writer);
+    // TODO: Emit
     let mut child = Command::new("resources/pl0_interpret.exe")
         .args(["-a", "+d", "+l", "+i", "+t", "+s", "out/dpp/test.pl0"])
         .stdout(Stdio::piped())
