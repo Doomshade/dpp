@@ -1,6 +1,7 @@
 //! The compiler for the dpp language.
 
-#![warn(clippy::pedantic, clippy::cargo)]
+#![warn(clippy::pedantic, clippy::cargo, clippy::complexity, clippy::suspicious,
+clippy::restriction, clippy::style, bare_trait_objects)]
 
 use std::cell::RefCell;
 use std::error::Error;

@@ -431,7 +431,6 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
     fn handle_yarn(&mut self) -> Token<'a> {
         let start = self.cursor;
-        const MAX_YARN_LEN: usize = 256;
         self.advance(); // Consume the opening quote.
 
         while self.peek() != char::default() && self.peek() != '"' && self.peek() != '\n' {

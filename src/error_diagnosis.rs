@@ -1,8 +1,8 @@
 use crate::parse::lexer::{Token, TokenKind};
-use std::cmp::Ordering;
+use core::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 
 pub struct SyntaxError {
     error_messages: Vec<String>,
