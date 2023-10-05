@@ -1,6 +1,7 @@
 use crate::parse::analysis::{BoundAST, SemanticAnalyzer};
 
 enum Instruction {
+    /// Load (i.e. push onto the stack) the value of the cell identified by level and offset. A level value of 0 means the variable is in the currently executing procedure; 1 means it's in the immediately enclosing region of the program. 2 means it's the region outside that (in PL/0 as in Pascal procedures can nest indefinitely). The offset distinguishes among the variables declared at that level.
     LOD { level: u32, offset: u32 },
     STO { level: u32, offset: u32 },
     LIT { value: u32 },
@@ -26,26 +27,14 @@ enum Operation {
     LessThanOrEqualTo = 13,
 }
 
-pub struct Emitter<'a> {
-    /// The number of bytes remaining on the stack. Each function will have its stack var
-    /// eventually.
-    _stack: u32,
-    _label_count: usize,
-    ast: BoundAST<'a>,
-}
+#[derive(Default)]
+pub struct Emitter;
 
-impl<'a> Emitter<'a> {
-    pub fn new(ast: BoundAST<'a>) -> Self {
-        Self {
-            _stack: 0,
-            _label_count: 0,
-            ast,
-        }
-    }
-
-    pub fn emit(&self) {}
-
+impl Emitter {
     pub fn test() {
         let x = Operation::GreaterThan as u32;
+    }
+    pub fn emit_instruction(instruction: Instruction) {
+
     }
 }

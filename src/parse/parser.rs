@@ -13,7 +13,6 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};

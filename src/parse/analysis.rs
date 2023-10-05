@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::env::var;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use crate::emit::emitter::Emitter;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::evaluate::{BoundExpression, Evaluator};
@@ -15,6 +15,7 @@ pub struct SemanticAnalyzer<'a, 'b> {
     evaluator: Evaluator<'a>,
 }
 
+#[derive(Clone, Debug)]
 pub struct BoundAST<'a> {
     pub scopes: Vec<HashMap<&'a str, BoundVariable<'a>>>,
     pub function_scopes: Vec<BoundFunction<'a>>,

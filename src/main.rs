@@ -81,7 +81,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::analysis::SemanticAnalyzer;
+use crate::parse::analysis::{BoundAST, SemanticAnalyzer};
 use crate::parse::lexer::{Lexer, Token};
 use crate::parse::parser::{Parser, TranslationUnit};
 
@@ -122,7 +122,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     dbg!(&tokens);
     let translation_unit = parse(tokens, &error_diag)?;
     dbg!(&translation_unit);
-    analyze(translation_unit, &error_diag)?;
+    let ast = analyze(translation_unit, &error_diag)?;
+    dbg!(&ast);
     Ok(())
 }
 
@@ -149,11 +150,11 @@ fn parse<'a>(
 fn analyze<'a>(
     translation_unit: TranslationUnit<'a>,
     error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<BoundAST<'a>, Box<dyn Error>> {
     let mut analyzer = SemanticAnalyzer::new(error_diag.clone());
-    analyzer.analyze(translation_unit);
+    let ast = analyzer.analyze(translation_unit);
     error_diag.borrow().check_errors()?;
-    Ok(())
+    Ok(ast)
 }
 
 #[cfg(test)]
