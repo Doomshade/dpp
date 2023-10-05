@@ -74,11 +74,13 @@
     rust_2018_idioms
 )]
 
-use std::{env, fs};
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::rc::Rc;
+use std::{env, fs};
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::analysis::{BoundAST, SemanticAnalyzer};
@@ -122,8 +124,39 @@ fn main() -> Result<(), Box<dyn Error>> {
     dbg!(&tokens);
     let translation_unit = parse(tokens, &error_diag)?;
     dbg!(&translation_unit);
+
+    let mut file = fs::File::create("out/dpp/test.pl0")?;
+    file.write_all(
+        b"#pokusny vstupni soubor ukazuje vsechny moznosti programu refint_pl0
+       INT 0  4
+&REGS
+&STKA
+       LIT 0  1
+       STO 0  3
+@loop  LOD 0  3
+&STKRG 3 4
+       LIT 0  3
+       OPR 0 10
+       JMC 0  @konec
+       LOD 0  3
+       LIT 0  1
+       OPR 0  2
+&ECHO hodnota a je na vrcholu zasobniku:
+&STKN 1
+       STO 0  3
+       JMP 0  @loop
+&STK
+@konec RET 0 0\r\n",
+    )?;
     let ast = analyze(translation_unit, &error_diag)?;
-    dbg!(&ast);
+    let mut child = Command::new("resources/pl0_interpret.exe")
+        .args(["-a", "+d", "+l", "+i", "+t", "+s", "out/dpp/test.pl0"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let output = String::from_utf8(child.wait_with_output()?.stdout)?;
+    println!("{}", output);
     Ok(())
 }
 
