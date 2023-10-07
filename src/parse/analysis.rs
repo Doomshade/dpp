@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::evaluate::{BoundExpression, Evaluator};
+use crate::parse::evaluate::Evaluator;
 use crate::parse::parser::{DataType, Expression, Function, Statement, TranslationUnit};
 
 pub struct SemanticAnalyzer<'a, 'b, T>

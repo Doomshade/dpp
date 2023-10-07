@@ -91,7 +91,7 @@ pub enum Statement<'a> {
     },
     ByeStatement {
         position: (u32, u32),
-        expression: Expression<'a>,
+        expression: Option<Expression<'a>>,
     },
     PrintStatement {
         position: (u32, u32),
@@ -693,11 +693,19 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::ByeKeyword => {
                 self.expect(TokenKind::ByeKeyword)?;
-                let expression = self.expr()?;
+                if let Some(expression) = self.expr() {
+                    let ret = Statement::ByeStatement {
+                        position: self.position,
+                        expression: Some(expression),
+                    };
+                    self.expect(TokenKind::Semicolon)?;
+                    return Some(ret);
+                }
+
                 self.expect(TokenKind::Semicolon)?;
                 return Some(Statement::ByeStatement {
                     position: self.position,
-                    expression,
+                    expression: None,
                 });
             }
             TokenKind::PprintlnKeyword | TokenKind::PprintKeyword => {
