@@ -98,18 +98,25 @@ where
     T: Write,
 {
     writer: BufWriter<T>,
+    should_emit: bool,
 }
 
 impl<T: Write> Emitter<T> {
-    pub fn test() {
-        let x = Operation::GreaterThan as u32;
+    pub fn new(writer: BufWriter<T>) -> Self {
+        Self {
+            writer,
+            should_emit: true,
+        }
     }
 
-    pub fn new(writer: BufWriter<T>) -> Self {
-        Self { writer }
+    pub fn stop_emitting(&mut self) {
+        self.should_emit = false;
     }
 
     pub fn emit_debug_info(&mut self, debug: DebugKeyword) -> io::Result<()> {
+        if !self.should_emit {
+            return Ok(());
+        }
         match debug {
             DebugKeyword::REGS => {
                 self.writer.write(b"&REGS\r\n")?;
@@ -137,7 +144,7 @@ impl<T: Write> Emitter<T> {
         Ok(())
     }
 
-    pub fn emit_expression(&mut self, expression: &Expression) -> io::Result<()> {
+    pub fn emit_expression<'a>(&mut self, expression: &Expression<'a>) -> io::Result<()> {
         match expression {
             Expression::PpExpression { pp, .. } => {
                 self.emit_instruction(Instruction::LIT { value: *pp })?;
