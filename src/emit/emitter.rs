@@ -145,12 +145,29 @@ impl<T: Write> Emitter<T> {
     }
 
     pub fn emit_expression<'a>(&mut self, expression: &Expression<'a>) -> io::Result<()> {
+        if !self.should_emit {
+            return Ok(());
+        }
         match expression {
             Expression::PpExpression { pp, .. } => {
                 self.emit_instruction(Instruction::LIT { value: *pp })?;
             }
-            Expression::BoobaExpression { .. } => {}
-            Expression::YarnExpression { .. } => {}
+            Expression::BoobaExpression { booba, .. } => {
+                self.emit_instruction(Instruction::LIT {
+                    value: *booba as i32,
+                })?;
+            }
+            Expression::YarnExpression { yarn, .. } => {
+                self.emit_instruction(Instruction::LIT {
+                    value: yarn.len() as i32,
+                })?;
+                let vec = Self::pack_yarn(yarn);
+                for four_packed_chars in vec {
+                    self.emit_instruction(Instruction::LIT {
+                        value: four_packed_chars,
+                    })?;
+                }
+            }
             Expression::UnaryExpression { .. } => {}
             Expression::BinaryExpression { lhs, rhs, op, .. } => {
                 self.emit_expression(lhs)?;
@@ -189,7 +206,33 @@ impl<T: Write> Emitter<T> {
         Ok(())
     }
 
+    fn pack_yarn(yarn: &str) -> Vec<i32> {
+        let mut vec: Vec<i32> = Vec::with_capacity((yarn.len() / 4) + 1);
+        // 6386532
+        for chunk in yarn.as_bytes().chunks(4) {
+            let packed_chars = match chunk.len() {
+                1 => chunk[0] as i32,
+                2 => (chunk[1] as i32) << 8 | (chunk[0] as i32),
+                3 => (chunk[2] as i32) << 16 | (chunk[1] as i32) << 8 | (chunk[0] as i32),
+                4 => {
+                    (chunk[3] as i32) << 24
+                        | (chunk[2] as i32) << 16
+                        | (chunk[1] as i32) << 8
+                        | (chunk[0] as i32)
+                }
+                _ => unreachable!(),
+            };
+            println!("{:#010x}", &packed_chars);
+
+            vec.push(packed_chars);
+        }
+        vec
+    }
+
     pub fn emit_instruction(&mut self, instruction: Instruction) -> io::Result<()> {
+        if !self.should_emit {
+            return Ok(());
+        }
         match instruction {
             Instruction::LOD { level, offset } => {
                 self.writer

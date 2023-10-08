@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
 use std::marker::PhantomData;
+use std::mem::size_of;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -64,6 +65,19 @@ pub struct BoundVariable<'a> {
     data_type: DataType<'a>,
     value: Option<Expression<'a>>,
     initialized: bool,
+}
+
+impl<'a> BoundVariable<'a> {
+    pub fn size(&self) -> usize {
+        match self.data_type {
+            DataType::Xxlpp => size_of::<i64>(),
+            DataType::Pp => size_of::<i32>(),
+            DataType::Spp => size_of::<i16>(),
+            DataType::Xspp => size_of::<i8>(),
+            DataType::P => size_of::<char>(),
+            _ => panic!(""),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -162,7 +176,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 self.emitter
                     .emit_instruction(Instruction::STO {
                         level: 0,
-                        offset: 1000,
+                        offset: 1000, // TODO: Store this offset somewhere.
                     })
                     .expect("asd");
                 let bound_var = BoundVariable {
@@ -190,7 +204,17 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         let statements = &translation_unit.global_statements;
 
         for statement in statements {
-            if let Some(variable) = self.statement_to_variable(statement) {
+            if let Some(variable) = match statement {
+                Statement::VariableDeclaration { variable } => {
+                    self.global_scope().get_variable(variable.identifier)
+                }
+                Statement::VariableDeclarationAndAssignment { variable, .. } => {
+                    self.global_scope().get_variable(variable.identifier)
+                }
+                _ => {
+                    panic!("Invalid statement type")
+                }
+            } {
                 let identifier = variable.identifier;
                 if self.global_scope().has_variable(&identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
@@ -208,8 +232,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     data_type: variable.data_type.clone(),
                 };
                 dbg!(&bound_var);
-                let scope = self.global_scope_mut();
-                scope.push_variable(bound_var);
+                self.global_scope_mut().push_variable(bound_var);
             }
         }
 
@@ -277,19 +300,5 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
 
     fn global_scope(&self) -> &Scope<'a> {
         self.scopes.first().expect("Global scope")
-    }
-
-    fn statement_to_variable(&self, statement: &Statement<'a>) -> Option<&BoundVariable<'a>> {
-        return match statement {
-            Statement::VariableDeclaration { variable } => {
-                self.scope().get_variable(variable.identifier)
-            }
-            Statement::VariableDeclarationAndAssignment { variable, .. } => {
-                self.scope().get_variable(variable.identifier)
-            }
-            _ => {
-                panic!("Invalid statement type")
-            }
-        };
     }
 }

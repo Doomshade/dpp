@@ -70,18 +70,26 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     }
 
     pub fn invalid_escaped_character(&mut self, row: u32, col: u32, character: char) {
-        self.insert_error_message(row, col, format!("Invalid escaped character: {character}."));
+        self.insert_error_message(
+            row,
+            col,
+            format!("Invalid escaped character: {character}.").as_str(),
+        );
     }
 
     pub fn unexpected_token_error(&mut self, token: &Token<'a>) {
-        self.insert_error_message(token.row(), token.col(), format!("Unexpected {token}."));
+        self.insert_error_message(
+            token.row(),
+            token.col(),
+            format!("Unexpected {token}.").as_str(),
+        );
     }
 
     pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token<'a>>) {
         self.insert_error_message(
             optional_token.map_or(0, Token::row),
             optional_token.map_or(0, Token::col),
-            format!("Expected {error}."),
+            format!("Expected {error}.").as_str(),
         );
     }
 
@@ -89,8 +97,12 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(
             row,
             col,
-            format!("Function \"{function_name}\" already exists."),
+            format!("Function \"{function_name}\" already exists.").as_str(),
         );
+    }
+
+    pub fn invalid_number(&mut self, row: u32, col: u32) {
+        self.insert_error_message(row, col, "Invalid number.");
     }
 
     pub fn expected_one_of_token_error(
@@ -106,7 +118,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             self.insert_error_message(
                 token.row(),
                 token.col(),
-                format!("Expected {}.", expected_one_of[0]),
+                format!("Expected {}.", expected_one_of[0]).as_str(),
             );
             return;
         }
@@ -117,7 +129,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             .for_each(|token_kind| w.push_str(format!("{token_kind}, ").as_str()));
 
         w.replace_range(w.len() - 2.., ".");
-        self.insert_error_message(token.row(), token.col(), w);
+        self.insert_error_message(token.row(), token.col(), w.as_str());
     }
 
     pub fn expected_different_token_error(
@@ -128,27 +140,31 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(
             token.row(),
             token.col(),
-            format!("Expected {expected_token_kind}."),
+            format!("Expected {expected_token_kind}.").as_str(),
         );
     }
 
     pub fn handle_error_at(&mut self, row: u32, col: u32, error: &str) {
-        self.insert_error_message(row, col, String::from(error));
+        self.insert_error_message(row, col, error);
     }
 
     pub fn variable_already_exists(&mut self, row: u32, col: u32, var_name: &str) {
-        self.insert_error_message(row, col, format!("Variable \"{var_name}\" already exists."));
+        self.insert_error_message(
+            row,
+            col,
+            format!("Variable \"{var_name}\" already exists.").as_str(),
+        );
     }
 
     pub fn invalid_type(&mut self, row: u32, col: u32, var_name: &str) {
         self.insert_error_message(
             row,
             col,
-            format!("Invalid type for variable \"{var_name}\"."),
+            format!("Invalid type for variable \"{var_name}\".").as_str(),
         );
     }
 
-    fn insert_error_message(&mut self, row: u32, col: u32, error: String) {
+    fn insert_error_message(&mut self, row: u32, col: u32, error: &str) {
         let error_message = format!("{}:{}:{}: {}", self.file_name, row, col, error);
         if self.error_messages.contains_key(&error_message) {
             return;

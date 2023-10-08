@@ -12,6 +12,7 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::mem::size_of;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -733,7 +734,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::YemKeyword
             | TokenKind::NomKeyword
-            | TokenKind::Number
+            | TokenKind::Integer
             | TokenKind::Yarn
             | TokenKind::OpenParen
             | TokenKind::Identifier => {
@@ -1021,8 +1022,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                     booba: false,
                 })
             }
-            TokenKind::Number => {
-                let number = self.expect(TokenKind::Number)?;
+            TokenKind::Integer => {
+                let number = self.expect(TokenKind::Integer)?;
                 Some(Expression::PpExpression {
                     position: self.position,
                     pp: number.parse::<i32>().unwrap(),

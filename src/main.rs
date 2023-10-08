@@ -88,6 +88,7 @@ use crate::parse::analysis::SemanticAnalyzer;
 use crate::parse::lexer::{Lexer, Token};
 use crate::parse::parser::{Parser, TranslationUnit};
 
+mod arena_alloc;
 mod emit;
 pub mod error_diagnosis;
 mod parse;

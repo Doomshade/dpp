@@ -68,7 +68,8 @@ impl<'a> Token<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenKind {
     Identifier,
-    Number,
+    Integer,
+    Float,
     Yarn,
     BangEqual,
     Comment,
@@ -103,22 +104,37 @@ pub enum TokenKind {
     Ampersand,
     Pipe,
     Comma,
-    IfKeyword,     // if
-    LetKeyword,    // let
-    ByeKeyword,    // return
-    FUNcKeyword,   // function
-    PprintKeyword, // write()
+    IfKeyword,
+    // if
+    LetKeyword,
+    // let
+    ByeKeyword,
+    // return
+    FUNcKeyword,
+    // function
+    PprintKeyword,
+    // write()
     PprintlnKeyword, // writeln()
-    PpanicKeyword, // panic()
-    PpinKeyword,   // read()
-    XxlppKeyword,  // i64
-    PpKeyword,     // i32
-    SppKeyword,    // i16
-    XsppKeyword,   // i8
-    PKeyword,      // char
-    BoobaKeyword,  // bool
-    NoppKeyword,   // void
-    YarnKeyword,   // String
+    PpanicKeyword,
+    // panic()
+    PpinKeyword,
+    // read()
+    XxlppKeyword,
+    // i64
+    PpKeyword,
+    // i32
+    SppKeyword,
+    // i16
+    XsppKeyword,
+    // i8
+    PKeyword,
+    // char
+    BoobaKeyword,
+    // bool
+    NoppKeyword,
+    // void
+    YarnKeyword,
+    // String
     ForKeyword,
     ElseKeyword,
     DoubleQuote,
@@ -137,7 +153,8 @@ impl Display for TokenKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let text_representation = match self {
             Self::Identifier => "identifier",
-            Self::Number => "number",
+            Self::Integer => "integer",
+            Self::Float => "float",
             Self::Yarn => "yarn",
             Self::BangEqual => "\"!=\"",
             Self::Comment | Self::Whitespace | Self::Eof | Self::Unknown => "",
@@ -469,11 +486,24 @@ impl<'a, 'b> Lexer<'a, 'b> {
     fn handle_number(&mut self) -> Token<'a> {
         let start = self.cursor;
 
+        let mut number_kind = TokenKind::Integer;
         while self.peek().is_ascii_digit() {
             self.advance();
         }
 
-        self.new_token(TokenKind::Number, &self.raw_input[start..self.cursor])
+        if self.peek() == '.' {
+            number_kind = TokenKind::Float;
+            if !self.peek().is_ascii_digit() {
+                self.error_diag
+                    .borrow_mut()
+                    .invalid_number(self.row, self.col);
+            }
+            while self.peek().is_ascii_digit() {
+                self.advance();
+            }
+        }
+
+        self.new_token(number_kind, &self.raw_input[start..self.cursor])
     }
 
     fn handle_identifier(&mut self) -> Token<'a> {
