@@ -2,11 +2,12 @@ use core::fmt;
 use std::collections::HashMap;
 use std::io;
 use std::io::{BufWriter, Write};
+use std::mem::size_of;
 
 use crate::parse::analysis::{BoundBlock, BoundFunction};
 use crate::parse::parser::{BinaryOperator, Expression, Statement};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Instruction {
     /// Push the literal value arg onto the stack.
     LIT {
@@ -57,7 +58,7 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Operation {
     Return = 0,
     /// Negate the value on the top of the stack (i.e. multiply by -1).
@@ -106,6 +107,8 @@ where
     function_labels: HashMap<String, u32>,
     scopes: Vec<HashMap<String, u32>>,
 }
+
+const PL0_DATA_SIZE: usize = size_of::<i32>();
 
 impl<T: Write> Emitter<T> {
     pub fn new(writer: BufWriter<T>) -> Self {
@@ -158,9 +161,6 @@ impl<T: Write> Emitter<T> {
     }
 
     pub fn emit_expression<'a>(&mut self, expression: &Expression<'a>) {
-        if !self.should_emit {
-            return;
-        }
         match expression {
             Expression::PpExpression { pp, .. } => {
                 self.emit_instruction(Instruction::LIT { value: *pp });
@@ -217,6 +217,7 @@ impl<T: Write> Emitter<T> {
                 let var_loc = self
                     .get_variable_location(identifier)
                     .expect(format!("Unknown variable {identifier}").as_str());
+                dbg!(var_loc);
                 self.emit_instruction(Instruction::LOD {
                     level: 0,
                     offset: var_loc as i32 - self.code.len() as i32,
@@ -272,14 +273,61 @@ impl<T: Write> Emitter<T> {
 
     pub fn emit_function<'a>(&mut self, function: &BoundFunction<'a>) {
         self.add_function_label(&function.identifier);
-        // Load the parameters into the stack.
+
+        // Load the parameters into the stack from the callee function.
+        // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
+        // To load them we have to get the total size of parameters and subtract it
+        // each time we load a parameter.
+        // for example:
+        // ```FUNc foo(argc: pp, argv:xxlpp) {
+        // ...
+        // }
+        // foo(1, 2);```
+        // The parameters are loaded as follows:
+        // The total size is 4 (pp) + 8 (xxlpp) = 12.
+        // Load the variable at offset 12 (argc) and then subtract 4 from the offset.
+        // Load the variable at offset 8 (argv) and then subtract 8 from the offset.
+        // The LOD function only loads 32 bits, so for anything bigger
+        // than that we need to LOD again.
         let parameters = &function.parameters;
+        let total_size = parameters.iter().fold(0, |acc, parameter| {
+            acc + parameter.data_type.size().expect("TODO: Handle structs.")
+        });
+        let mut curr_offset = total_size as i32;
         for i in 0..parameters.len() {
-            let offset = (i as i32) - parameters.len() as i32;
-            self.emit_instruction(Instruction::LOD { level: 1, offset });
+            let size = parameters[parameters.len() - i - 1]
+                .data_type
+                .size()
+                .unwrap();
+
+            self.load(1, curr_offset, size);
+            self.emit_instruction(Instruction::LOD {
+                level: 1,
+                offset: curr_offset,
+            });
+
+            curr_offset -= size as i32;
         }
 
         self.emit_block(&function.block);
+    }
+
+    fn load(&mut self, level: u32, offset: i32, size: usize) {
+        for i in 0..size / PL0_DATA_SIZE {
+            self.emit_instruction(Instruction::LOD {
+                level,
+                offset: offset + i as i32 * PL0_DATA_SIZE as i32, // Load 4 bytes at a time.
+            });
+        }
+    }
+
+    fn store(&mut self, level: u32, offset: i32, size: usize) {
+        for i in 0..size / PL0_DATA_SIZE {
+            self.emit_instruction(Instruction::STO {
+                level,
+                offset: offset + i as i32 * PL0_DATA_SIZE as i32, // Store 4 bytes at a time.
+            });
+        }
     }
 
     fn add_function_label(&mut self, label: &str) {
@@ -301,7 +349,7 @@ impl<T: Write> Emitter<T> {
     }
 
     pub fn emit_all(&mut self) -> io::Result<()> {
-        for instruction in self.code {
+        for instruction in &self.code {
             match instruction {
                 Instruction::LOD { level, offset } => {
                     self.writer
@@ -328,6 +376,7 @@ impl<T: Write> Emitter<T> {
                         .write(format!("CAL {} {}\r\n", level, address).as_bytes())?;
                 }
                 Instruction::OPR { operation } => {
+                    // Stupid usage of clone because we get the reference to the enum.
                     self.writer
                         .write(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
                 }
@@ -339,7 +388,6 @@ impl<T: Write> Emitter<T> {
                         .write(format!("INT 0 {}\r\n", size).as_bytes())?;
                 }
             }
-            self.emit_debug_info(DebugKeyword::REGS)?;
         }
         Ok(())
     }

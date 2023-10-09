@@ -1,4 +1,3 @@
-use crate::emit::emitter::{Emitter, Instruction};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
@@ -6,6 +5,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::rc::Rc;
 
+use crate::emit::emitter::{Emitter, Instruction};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::evaluate::Evaluator;
 use crate::parse::parser::{
@@ -13,12 +13,31 @@ use crate::parse::parser::{
 };
 
 #[derive(Default)]
-struct Scope<'a> {
+struct FunctionScope<'a> {
+    variables: HashMap<&'a str, BoundVariable<'a>>,
+}
+
+impl<'a> FunctionScope<'a> {
+    fn push_variable(&mut self, variable: BoundVariable<'a>) {
+        self.variables.insert(variable.identifier, variable);
+    }
+
+    fn get_variable(&self, identifier: &str) -> Option<&BoundVariable<'a>> {
+        self.variables.get(identifier)
+    }
+
+    fn has_variable(&self, identifier: &str) -> bool {
+        self.variables.contains_key(identifier)
+    }
+}
+
+#[derive(Default)]
+struct GlobalScope<'a> {
     variables: HashMap<&'a str, BoundVariable<'a>>,
     functions: HashMap<&'a str, BoundFunction<'a>>,
 }
 
-impl<'a> Scope<'a> {
+impl<'a> GlobalScope<'a> {
     fn push_variable(&mut self, variable: BoundVariable<'a>) {
         self.variables.insert(variable.identifier, variable);
     }
@@ -46,9 +65,11 @@ pub struct SemanticAnalyzer<'a, 'b, T>
 where
     T: Write,
 {
-    /// Current stack of scopes. The initial scope is the global scope that should be popped
+    global_scope: GlobalScope<'a>,
+    /// Current stack of function scopes. The initial scope is the global scope that should be
+    /// popped
     /// at the end of the analysis.
-    scopes: Vec<Scope<'a>>,
+    function_scopes: Vec<FunctionScope<'a>>,
     error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
     evaluator: Evaluator<'a>,
     emitter: Emitter<T>,
@@ -98,7 +119,8 @@ pub struct BoundParameter<'a> {
 impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     pub fn new(error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>, emitter: Emitter<T>) -> Self {
         Self {
-            scopes: Vec::default(),
+            function_scopes: Vec::default(),
+            global_scope: GlobalScope::default(),
             error_diag,
             evaluator: Evaluator { none: PhantomData },
             emitter,
@@ -141,7 +163,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     fn analyze_statement(&mut self, statement: Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.scope().has_variable(&variable.identifier) {
+                if self.function_scope().has_variable(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -149,7 +171,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     );
                 }
 
-                let scope = self.scope_mut();
+                let scope = self.function_scope_mut();
                 let bound_var = BoundVariable {
                     position: variable.position,
                     identifier: variable.identifier,
@@ -164,7 +186,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 variable,
                 expression,
             } => {
-                if self.scope().has_variable(&variable.identifier) {
+                if self.function_scope().has_variable(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -188,7 +210,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     value: Some(expression.clone()),
                     initialized: true,
                 };
-                self.scope_mut().push_variable(bound_var);
+                self.function_scope_mut().push_variable(bound_var);
             }
             _ => {}
         }
@@ -224,7 +246,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 lhs_data_type
             }
             Expression::IdentifierExpression { identifier, .. } => self
-                .scope()
+                .function_scope()
                 .get_variable(identifier)
                 .unwrap()
                 .data_type
@@ -234,7 +256,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     }
 
     fn begin_global_scope(&mut self, translation_unit: &TranslationUnit<'a>) {
-        self.begin_scope();
+        self.begin_function_scope();
         let functions = &translation_unit.functions;
         let statements = &translation_unit.global_statements;
 
@@ -305,15 +327,14 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     }
 
     fn end_global_scope(&mut self) {
-        self.end_scope();
         self.emitter.end_scope();
     }
-    fn begin_scope(&mut self) {
-        self.scopes.push(Scope::default());
+    fn begin_function_scope(&mut self) {
+        self.function_scopes.push(FunctionScope::default());
     }
 
-    fn end_scope(&mut self) {
-        self.scopes.pop().expect("A scope to pop");
+    fn end_function_scope(&mut self) {
+        self.function_scopes.pop().expect("A scope to pop");
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
@@ -325,7 +346,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             });
         }
 
-        self.scope_mut().push_function(BoundFunction {
+        self.global_scope_mut().push_function(BoundFunction {
             identifier: function.identifier.clone(),
             return_type: function.return_type.clone(),
             block: BoundBlock {
@@ -341,26 +362,26 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 .collect::<Vec<BoundParameter<'a>>>()
                 .clone(),
         });
-        self.begin_scope();
+        self.begin_function_scope();
     }
 
     fn end_function(&mut self) {
-        self.end_scope();
+        self.end_function_scope();
     }
 
-    fn scope_mut(&mut self) -> &mut Scope<'a> {
-        self.scopes.last_mut().expect("A scope")
+    fn function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
+        self.function_scopes.last_mut().expect("A scope")
     }
 
-    fn scope(&self) -> &Scope<'a> {
-        self.scopes.last().expect("A scope")
+    fn function_scope(&self) -> &FunctionScope<'a> {
+        self.function_scopes.last().expect("A scope")
     }
 
-    fn global_scope_mut(&mut self) -> &mut Scope<'a> {
-        self.scopes.first_mut().expect("Global scope")
+    fn global_scope_mut(&mut self) -> &mut GlobalScope<'a> {
+        &mut self.global_scope
     }
 
-    fn global_scope(&self) -> &Scope<'a> {
-        self.scopes.first().expect("Global scope")
+    fn global_scope(&self) -> &GlobalScope<'a> {
+        &self.global_scope
     }
 }

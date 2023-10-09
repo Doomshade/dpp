@@ -12,6 +12,7 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::mem::size_of;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -219,6 +220,20 @@ pub enum DataType<'a> {
     // void
     Nopp,
     Struct { name: &'a str },
+}
+
+impl<'a> DataType<'a> {
+    pub fn size(&self) -> Option<usize> {
+        match self {
+            DataType::Xxlpp => Some(size_of::<i64>()),
+            DataType::Pp => Some(size_of::<i32>()),
+            DataType::Spp => Some(size_of::<i16>()),
+            DataType::Xspp => Some(size_of::<i8>()),
+            DataType::P => Some(size_of::<char>()),
+            DataType::Booba => Some(size_of::<bool>()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
