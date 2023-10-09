@@ -74,16 +74,14 @@
     rust_2018_idioms
 )]
 
-use crate::emit::emitter::Emitter;
-use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::rc::Rc;
 use std::{env, fs};
 
+use crate::emit::emitter::Emitter;
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::analysis::{GlobalScope, SemanticAnalyzer};
 use crate::parse::lexer::{Lexer, Token};
@@ -119,7 +117,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file_path = &args[1];
 
     let file_contents = fs::read_to_string(file_path)?;
-    let error_diag = Rc::new(RefCell::new(ErrorDiagnosis::new(file_path, &file_contents)));
+    let error_diag = std::rc::Rc::new(std::cell::RefCell::new(ErrorDiagnosis::new(
+        file_path,
+        &file_contents,
+    )));
 
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
@@ -144,7 +145,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn lex<'a>(
     input: &'a str,
-    error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
+    error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
 ) -> Result<Vec<Token<'a>>, Box<dyn Error>> {
     let mut lexer = Lexer::new(input, error_diag.clone());
     let tokens = lexer.lex();
@@ -154,9 +155,9 @@ fn lex<'a>(
 
 fn parse<'a>(
     tokens: Vec<Token<'a>>,
-    error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
+    error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
 ) -> Result<TranslationUnit<'a>, Box<dyn Error>> {
-    let mut parser = Parser::new(Rc::new(tokens), error_diag.clone());
+    let mut parser = Parser::new(std::rc::Rc::new(tokens), error_diag.clone());
     let result = parser.parse();
     error_diag.borrow().check_errors()?;
     Ok(result)
@@ -164,16 +165,20 @@ fn parse<'a>(
 
 fn analyze_and_emit<'a, T: Write>(
     translation_unit: TranslationUnit<'a>,
-    error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
+    error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
     output: &str,
 ) -> Result<(), Box<dyn Error>> {
     let file = fs::File::create(output).expect("Unable to create file");
     let writer = std::io::BufWriter::new(file);
 
-    let function_scopes = Rc::new(RefCell::new(Vec::default()));
-    let global_scope = Rc::new(RefCell::new(GlobalScope::default()));
+    let function_scopes = std::rc::Rc::new(std::cell::RefCell::new(Vec::default()));
+    let global_scope = std::rc::Rc::new(std::cell::RefCell::new(GlobalScope::default()));
 
-    let emitter = Emitter::new(writer, function_scopes.clone(), global_scope.clone());
+    let emitter = Emitter::new(
+        writer,
+        std::rc::Rc::clone(&function_scopes),
+        std::rc::Rc::clone(&global_scope),
+    );
     let mut analyzer = SemanticAnalyzer::new(
         error_diag.clone(),
         function_scopes.clone(),

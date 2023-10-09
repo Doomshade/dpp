@@ -220,13 +220,20 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
             }
             Expression::IdentifierExpression { identifier, .. } => {
-                let var_loc = self
-                    .get_variable_location(identifier)
-                    .expect(format!("Unknown variable {identifier}").as_str());
-                dbg!(var_loc);
+                let var_loc: u32;
+                {
+                    let global_scope = self.global_scope.borrow();
+                    var_loc = global_scope
+                        .scope
+                        .get_variable_absolute_position_relative_to_scope(identifier)
+                        .expect(format!("Unknown variable {identifier}").as_str())
+                        .clone();
+                    dbg!(&var_loc);
+                }
+                let size = var_loc as i32 - self.code.len() as i32;
                 self.emit_instruction(Instruction::LOD {
                     level: 0,
-                    offset: var_loc as i32 - self.code.len() as i32,
+                    offset: size,
                 });
             }
             Expression::FunctionCall {
@@ -246,7 +253,7 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     fn get_variable_location(&self, identifier: &str) -> Option<u32> {
-        // self.global_scope.borrow().get_variable(identifier);
+        self.global_scope.borrow().scope.get_variable(identifier);
         Some(1)
     }
 

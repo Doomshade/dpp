@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::mem::size_of;
-use std::rc::Rc;
 
 use crate::emit::emitter::{Emitter, Instruction};
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -16,30 +15,46 @@ pub struct FunctionScope<'a> {
 
 #[derive(Default)]
 pub struct Scope<'a> {
+    variable_absolute_positions: HashMap<&'a str, u32>,
+    current_position: u32,
+    /// Indices to the `variables` vector.
     variable_indices: HashMap<&'a str, usize>,
     variables: Vec<std::rc::Rc<BoundVariable<'a>>>,
 }
 
 impl<'a> Scope<'a> {
     fn push_variable(&mut self, variable: BoundVariable<'a>) {
+        self.variable_absolute_positions
+            .insert(variable.identifier, self.current_position);
+        self.current_position += variable.size() as u32;
         self.variable_indices
             .insert(variable.identifier, self.variables.len());
-        self.variables.push(Rc::new(variable));
+        self.variables.push(std::rc::Rc::new(variable));
     }
 
-    fn get_variable(&self, identifier: &str) -> Option<&Rc<BoundVariable<'a>>> {
-        let option = self.variable_indices.get(identifier)?;
-        self.variables.get(*option)
+    pub fn get_variable_absolute_position_relative_to_scope(
+        &self,
+        identifier: &str,
+    ) -> Option<&u32> {
+        self.variable_absolute_positions.get(identifier)
     }
 
-    fn has_variable(&self, identifier: &str) -> bool {
+    pub fn get_variable_index(&self, identifier: &'a str) -> Option<&usize> {
+        self.variable_indices.get(identifier)
+    }
+
+    pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<BoundVariable<'a>>> {
+        self.variables.get(*self.get_variable_index(identifier)?)
+    }
+
+    pub fn has_variable(&self, identifier: &str) -> bool {
         self.variable_indices.contains_key(identifier)
     }
 }
 
 #[derive(Default)]
 pub struct GlobalScope<'a> {
-    pub global_scope: Scope<'a>,
+    pub scope: Scope<'a>,
     pub functions: HashMap<&'a str, BoundFunction<'a>>,
 }
 
@@ -179,7 +194,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 }
 
                 let mut ref_mut = self.function_scopes.borrow_mut();
-                let mut scope = ref_mut.last_mut().unwrap();
+                let mut function_scope = ref_mut.last_mut().unwrap();
                 let bound_var = BoundVariable {
                     position: variable.position,
                     identifier: variable.identifier,
@@ -188,7 +203,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     data_type: variable.data_type.clone(),
                 };
                 dbg!(&bound_var);
-                scope.scope.push_variable(bound_var);
+                function_scope.scope.push_variable(bound_var);
             }
             Statement::VariableDeclarationAndAssignment {
                 variable,
@@ -263,11 +278,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 let current_function_scope = function_scopes.last().unwrap();
                 if let Some(variable) = current_function_scope.scope.get_variable(identifier) {
                     return variable.data_type.clone();
-                } else if let Some(global_variable) = self
-                    .global_scope
-                    .borrow()
-                    .global_scope
-                    .get_variable(identifier)
+                } else if let Some(global_variable) =
+                    self.global_scope.borrow().scope.get_variable(identifier)
                 {
                     return global_variable.data_type.clone();
                 } else {
@@ -284,25 +296,15 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         let statements = &translation_unit.global_statements;
 
         for statement in statements {
-            let global_scope = self.global_scope.borrow();
-            if let Some(variable) = match statement {
-                Statement::VariableDeclaration { variable } => {
-                    global_scope.global_scope.get_variable(variable.identifier)
-                }
-                Statement::VariableDeclarationAndAssignment { variable, .. } => {
-                    global_scope.global_scope.get_variable(variable.identifier)
-                }
+            if let variable = match statement {
+                Statement::VariableDeclaration { variable } => variable,
+                Statement::VariableDeclarationAndAssignment { variable, .. } => variable,
                 _ => {
                     panic!("Invalid statement type")
                 }
             } {
                 let identifier = variable.identifier;
-                if self
-                    .global_scope
-                    .borrow()
-                    .global_scope
-                    .has_variable(&identifier)
-                {
+                if self.global_scope.borrow().scope.has_variable(&identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -320,7 +322,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 dbg!(&bound_var);
                 self.global_scope
                     .borrow_mut()
-                    .global_scope
+                    .scope
                     .push_variable(bound_var);
             }
         }
