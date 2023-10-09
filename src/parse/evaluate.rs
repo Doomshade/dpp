@@ -10,7 +10,7 @@ impl<'a> Evaluator<'a> {
     pub fn eval(&self, expr: &Expression<'a>) -> DataType<'a> {
         return match expr {
             Expression::PpExpression { .. } => DataType::Pp,
-            Expression::PpExpression { .. } => DataType::P,
+            Expression::PExpression { .. } => DataType::P,
             Expression::BoobaExpression { .. } => DataType::Booba,
             Expression::YarnExpression { .. } => DataType::Yarn,
             Expression::UnaryExpression { operand, op, .. } => {

@@ -54,8 +54,15 @@ where
 
 #[derive(Clone, Debug)]
 pub struct BoundFunction<'a> {
-    identifier: &'a str,
-    return_type: DataType<'a>,
+    pub identifier: &'a str,
+    pub return_type: DataType<'a>,
+    pub block: BoundBlock<'a>,
+    pub parameters: Vec<BoundParameter<'a>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct BoundBlock<'a> {
+    pub statements: Vec<Statement<'a>>,
 }
 
 #[derive(Clone, Debug)]
@@ -80,7 +87,7 @@ impl<'a> BoundVariable<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BoundParameter<'a> {
     pub identifier: &'a str,
     pub data_type: DataType<'a>,
@@ -188,12 +195,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 };
                 self.scope_mut().push_variable(bound_var);
             }
-            Statement::PrintStatement {
-                expression,
-                print_function,
-                ..
-            } => {}
-            Statement::ByeStatement { expression, .. } => {}
             _ => {}
         }
     }
@@ -246,9 +247,22 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             }
 
             let scope = self.global_scope_mut();
+            let block = BoundBlock {
+                statements: function.block.statements.clone(),
+            };
             let bound_func = BoundFunction {
                 identifier: function.identifier,
                 return_type: function.return_type.clone(),
+                block,
+                parameters: function
+                    .parameters
+                    .iter()
+                    .map(|param| BoundParameter {
+                        identifier: param.identifier,
+                        data_type: param.data_type.clone(),
+                    })
+                    .collect::<Vec<BoundParameter<'a>>>()
+                    .clone(),
             };
             dbg!(&bound_func);
             scope.push_function(bound_func);
@@ -278,6 +292,18 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         self.scope_mut().push_function(BoundFunction {
             identifier: function.identifier.clone(),
             return_type: function.return_type.clone(),
+            block: BoundBlock {
+                statements: function.block.statements.clone(),
+            },
+            parameters: function
+                .parameters
+                .iter()
+                .map(|param| BoundParameter {
+                    identifier: param.identifier,
+                    data_type: param.data_type.clone(),
+                })
+                .collect::<Vec<BoundParameter<'a>>>()
+                .clone(),
         });
         self.begin_scope();
     }

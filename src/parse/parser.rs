@@ -12,7 +12,6 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::mem::size_of;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -160,6 +159,10 @@ pub enum Expression<'a> {
     PpExpression {
         position: (u32, u32),
         pp: i32,
+    },
+    PExpression {
+        position: (u32, u32),
+        p: char,
     },
     BoobaExpression {
         position: (u32, u32),

@@ -1,4 +1,5 @@
-use crate::parse::parser::{BinaryOperator, Expression};
+use crate::parse::analysis::{BoundBlock, BoundFunction};
+use crate::parse::parser::{BinaryOperator, Expression, Statement};
 use core::fmt;
 use std::io;
 use std::io::{BufWriter, Write};
@@ -16,12 +17,12 @@ pub enum Instruction {
     /// Load (i.e. push onto the stack) the value of the cell identified by level and offset. A level value of 0 means the variable is in the currently executing procedure; 1 means it's in the immediately enclosing region of the program. 2 means it's the region outside that (in PL/0 as in Pascal procedures can nest indefinitely). The offset distinguishes among the variables declared at that level.
     LOD {
         level: u32,
-        offset: u32,
+        offset: i32,
     },
     /// Store the value currently at the top of the stack to the memory cell identified by level and offset, popping the value off the stack in the process.
     STO {
         level: u32,
-        offset: u32,
+        offset: i32,
     },
     /// Call the subroutine at location address, which is level nesting levels different from the nesting level of the currently executing code. This instruction pushes a stack frame (or block mark) onto the stack, storing
     ///
@@ -47,7 +48,7 @@ pub enum Instruction {
 }
 
 impl fmt::Display for Instruction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
         // or, alternatively:
         // fmt::Debug::fmt(self, f)
@@ -152,6 +153,9 @@ impl<T: Write> Emitter<T> {
             Expression::PpExpression { pp, .. } => {
                 self.emit_instruction(Instruction::LIT { value: *pp })?;
             }
+            Expression::PExpression { p, .. } => {
+                self.emit_instruction(Instruction::LIT { value: *p as i32 })?;
+            }
             Expression::BoobaExpression { booba, .. } => {
                 self.emit_instruction(Instruction::LIT {
                     value: *booba as i32,
@@ -229,6 +233,24 @@ impl<T: Write> Emitter<T> {
         vec
     }
 
+    pub fn emit_function<'a>(&mut self, function: &BoundFunction<'a>) -> io::Result<()> {
+        self.emit_label(&function.identifier)?;
+        let parameters = &function.parameters;
+        for i in 0..parameters.len() {
+            let offset = (i as i32) - parameters.len() as i32;
+            self.emit_instruction(Instruction::LOD { level: 1, offset })?;
+        }
+
+        self.emit_block(&function.block)?;
+
+        Ok(())
+    }
+
+    fn emit_label(&mut self, label: &str) -> io::Result<()> {
+        self.writer.write(format!("{}:\r\n", label).as_bytes())?;
+        Ok(())
+    }
+
     pub fn emit_instruction(&mut self, instruction: Instruction) -> io::Result<()> {
         if !self.should_emit {
             return Ok(());
@@ -272,6 +294,21 @@ impl<T: Write> Emitter<T> {
         }
         self.emit_debug_info(DebugKeyword::REGS)?;
 
+        Ok(())
+    }
+    fn emit_block<'a>(&mut self, block: &BoundBlock<'a>) -> io::Result<()> {
+        for statement in &block.statements {
+            self.emit_statement(statement)?;
+        }
+        Ok(())
+    }
+    fn emit_statement<'a>(&mut self, statement: &Statement<'a>) -> io::Result<()> {
+        match statement {
+            Statement::ExpressionStatement { expression, .. } => {
+                self.emit_expression(expression)?;
+            }
+            _ => todo!("emit_statement"),
+        }
         Ok(())
     }
 }
