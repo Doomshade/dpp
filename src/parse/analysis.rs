@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
 use std::mem::size_of;
@@ -11,49 +10,48 @@ use crate::parse::parser::{
 };
 
 #[derive(Default)]
-struct FunctionScope<'a> {
-    variables: HashMap<&'a str, BoundVariable<'a>>,
+pub struct FunctionScope<'a> {
+    scope: Scope<'a>,
 }
 
-impl<'a> FunctionScope<'a> {
+#[derive(Default)]
+pub struct Scope<'a> {
+    variable_indices: HashMap<&'a str, usize>,
+    variables: Vec<std::rc::Rc<BoundVariable<'a>>>,
+}
+
+impl<'a> Scope<'a> {
     fn push_variable(&mut self, variable: BoundVariable<'a>) {
-        self.variables.insert(variable.identifier, variable);
+        self.variable_indices
+            .insert(variable.identifier, self.variables.len());
+        self.variables.push(Rc::new(variable));
     }
 
-    fn get_variable(&self, identifier: &str) -> Option<&BoundVariable<'a>> {
-        self.variables.get(identifier)
+    fn get_variable(&self, identifier: &str) -> Option<&Rc<BoundVariable<'a>>> {
+        let option = self.variable_indices.get(identifier)?;
+        self.variables.get(*option)
     }
 
     fn has_variable(&self, identifier: &str) -> bool {
-        self.variables.contains_key(identifier)
+        self.variable_indices.contains_key(identifier)
     }
 }
 
 #[derive(Default)]
-struct GlobalScope<'a> {
-    variables: HashMap<&'a str, BoundVariable<'a>>,
-    functions: HashMap<&'a str, BoundFunction<'a>>,
+pub struct GlobalScope<'a> {
+    pub global_scope: Scope<'a>,
+    pub functions: HashMap<&'a str, BoundFunction<'a>>,
 }
 
 impl<'a> GlobalScope<'a> {
-    fn push_variable(&mut self, variable: BoundVariable<'a>) {
-        self.variables.insert(variable.identifier, variable);
-    }
     fn push_function(&mut self, function: BoundFunction<'a>) {
         self.functions.insert(function.identifier, function);
     }
 
-    fn get_variable(&self, identifier: &str) -> Option<&BoundVariable<'a>> {
-        self.variables.get(identifier)
-    }
-
-    fn get_function(&self, identifier: &str) -> Option<&BoundFunction<'a>> {
+    pub fn get_function(&self, identifier: &str) -> Option<&BoundFunction<'a>> {
         self.functions.get(identifier)
     }
 
-    fn has_variable(&self, identifier: &str) -> bool {
-        self.variables.contains_key(identifier)
-    }
     fn has_function(&self, identifier: &str) -> bool {
         self.functions.contains_key(identifier)
     }
@@ -63,13 +61,13 @@ pub struct SemanticAnalyzer<'a, 'b, T>
 where
     T: Write,
 {
-    global_scope: GlobalScope<'a>,
+    global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
     /// Current stack of function scopes. The initial scope is the global scope that should be
     /// popped
     /// at the end of the analysis.
-    function_scopes: Vec<FunctionScope<'a>>,
-    error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
-    emitter: Emitter<T>,
+    function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
+    error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    emitter: Emitter<'a, T>,
 }
 
 #[derive(Clone, Debug)]
@@ -114,10 +112,15 @@ pub struct BoundParameter<'a> {
 }
 
 impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
-    pub fn new(error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>, emitter: Emitter<T>) -> Self {
+    pub fn new(
+        error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+        function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
+        global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
+        emitter: Emitter<'a, T>,
+    ) -> Self {
         Self {
-            function_scopes: Vec::default(),
-            global_scope: GlobalScope::default(),
+            function_scopes,
+            global_scope,
             error_diag,
             emitter,
         }
@@ -135,7 +138,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 self.analyze_function(function);
             }
         }
-        self.end_global_scope();
         self.emitter
             .emit_instruction(Instruction::JMP { address: 0 });
         self.emitter.emit_all().expect("OOF");
@@ -156,10 +158,19 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         self.analyze_statement(statement);
     }
 
+    fn has_variable_in_function_scope(&self, identifier: &str) -> bool {
+        self.function_scopes
+            .borrow()
+            .last()
+            .unwrap()
+            .scope
+            .has_variable(identifier)
+    }
+
     fn analyze_statement(&mut self, statement: Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.function_scope().has_variable(&variable.identifier) {
+                if self.has_variable_in_function_scope(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -167,7 +178,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     );
                 }
 
-                let scope = self.function_scope_mut();
+                let mut ref_mut = self.function_scopes.borrow_mut();
+                let mut scope = ref_mut.last_mut().unwrap();
                 let bound_var = BoundVariable {
                     position: variable.position,
                     identifier: variable.identifier,
@@ -176,13 +188,13 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     data_type: variable.data_type.clone(),
                 };
                 dbg!(&bound_var);
-                scope.push_variable(bound_var);
+                scope.scope.push_variable(bound_var);
             }
             Statement::VariableDeclarationAndAssignment {
                 variable,
                 expression,
             } => {
-                if self.function_scope().has_variable(&variable.identifier) {
+                if self.has_variable_in_function_scope(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -206,7 +218,12 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     value: Some(expression.clone()),
                     initialized: true,
                 };
-                self.function_scope_mut().push_variable(bound_var);
+                self.function_scopes
+                    .borrow_mut()
+                    .last_mut()
+                    .unwrap()
+                    .scope
+                    .push_variable(bound_var);
             }
             _ => {}
         }
@@ -241,12 +258,22 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 // TODO: Check whether the binary operator is available for the given data type.
                 lhs_data_type
             }
-            Expression::IdentifierExpression { identifier, .. } => self
-                .function_scope()
-                .get_variable(identifier)
-                .unwrap()
-                .data_type
-                .clone(),
+            Expression::IdentifierExpression { identifier, .. } => {
+                let mut function_scopes = self.function_scopes.borrow_mut();
+                let current_function_scope = function_scopes.last().unwrap();
+                if let Some(variable) = current_function_scope.scope.get_variable(identifier) {
+                    return variable.data_type.clone();
+                } else if let Some(global_variable) = self
+                    .global_scope
+                    .borrow()
+                    .global_scope
+                    .get_variable(identifier)
+                {
+                    return global_variable.data_type.clone();
+                } else {
+                    panic!("Variable not found");
+                }
+            }
             _ => DataType::Nopp,
         };
     }
@@ -257,19 +284,25 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         let statements = &translation_unit.global_statements;
 
         for statement in statements {
+            let global_scope = self.global_scope.borrow();
             if let Some(variable) = match statement {
                 Statement::VariableDeclaration { variable } => {
-                    self.global_scope().get_variable(variable.identifier)
+                    global_scope.global_scope.get_variable(variable.identifier)
                 }
                 Statement::VariableDeclarationAndAssignment { variable, .. } => {
-                    self.global_scope().get_variable(variable.identifier)
+                    global_scope.global_scope.get_variable(variable.identifier)
                 }
                 _ => {
                     panic!("Invalid statement type")
                 }
             } {
                 let identifier = variable.identifier;
-                if self.global_scope().has_variable(&identifier) {
+                if self
+                    .global_scope
+                    .borrow()
+                    .global_scope
+                    .has_variable(&identifier)
+                {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -285,13 +318,19 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     data_type: variable.data_type.clone(),
                 };
                 dbg!(&bound_var);
-                self.global_scope_mut().push_variable(bound_var);
+                self.global_scope
+                    .borrow_mut()
+                    .global_scope
+                    .push_variable(bound_var);
             }
-            self.emitter.begin_scope();
         }
 
         for function in functions {
-            if self.global_scope().has_function(&function.identifier) {
+            if self
+                .global_scope
+                .borrow()
+                .has_function(&function.identifier)
+            {
                 self.error_diag.borrow_mut().function_already_exists(
                     function.position.0,
                     function.position.1,
@@ -299,7 +338,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 );
             }
 
-            let scope = self.global_scope_mut();
+            let mut scope = self.global_scope.borrow_mut();
             let block = BoundBlock {
                 statements: function.block.statements.clone(),
             };
@@ -322,15 +361,17 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         }
     }
 
-    fn end_global_scope(&mut self) {
-        self.emitter.end_scope();
-    }
     fn begin_function_scope(&mut self) {
-        self.function_scopes.push(FunctionScope::default());
+        self.function_scopes
+            .borrow_mut()
+            .push(FunctionScope::default());
     }
 
     fn end_function_scope(&mut self) {
-        self.function_scopes.pop().expect("A scope to pop");
+        self.function_scopes
+            .borrow_mut()
+            .pop()
+            .expect("A scope to pop");
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
@@ -361,23 +402,11 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         self.begin_function_scope();
     }
 
+    fn global_scope_mut(&mut self) -> std::cell::RefMut<'_, GlobalScope<'a>> {
+        self.global_scope.borrow_mut()
+    }
+
     fn end_function(&mut self) {
         self.end_function_scope();
-    }
-
-    fn function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
-        self.function_scopes.last_mut().expect("A scope")
-    }
-
-    fn function_scope(&self) -> &FunctionScope<'a> {
-        self.function_scopes.last().expect("A scope")
-    }
-
-    fn global_scope_mut(&mut self) -> &mut GlobalScope<'a> {
-        &mut self.global_scope
-    }
-
-    fn global_scope(&self) -> &GlobalScope<'a> {
-        &self.global_scope
     }
 }

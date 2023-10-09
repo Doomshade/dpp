@@ -4,7 +4,7 @@ use std::io;
 use std::io::{BufWriter, Write};
 use std::mem::size_of;
 
-use crate::parse::analysis::{BoundBlock, BoundFunction};
+use crate::parse::analysis::{BoundBlock, BoundFunction, FunctionScope, GlobalScope};
 use crate::parse::parser::{BinaryOperator, Expression, Statement};
 
 #[derive(Clone, Debug)]
@@ -97,27 +97,33 @@ pub enum DebugKeyword {
     ECHO { message: &'static str },
 }
 
-pub struct Emitter<T>
+pub struct Emitter<'a, T>
 where
     T: Write,
 {
     writer: BufWriter<T>,
     should_emit: bool,
     code: Vec<Instruction>,
+    function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
+    global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
     function_labels: HashMap<String, u32>,
-    scopes: Vec<HashMap<String, u32>>,
 }
 
 const PL0_DATA_SIZE: usize = size_of::<i32>();
 
-impl<T: Write> Emitter<T> {
-    pub fn new(writer: BufWriter<T>) -> Self {
+impl<'a, T: Write> Emitter<'a, T> {
+    pub fn new(
+        writer: BufWriter<T>,
+        function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
+        global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
+    ) -> Self {
         Self {
             writer,
             should_emit: true,
             code: Vec::new(),
             function_labels: HashMap::new(),
-            scopes: Vec::new(),
+            function_scopes,
+            global_scope,
         }
     }
 
@@ -160,7 +166,7 @@ impl<T: Write> Emitter<T> {
         Ok(())
     }
 
-    pub fn emit_expression<'a>(&mut self, expression: &Expression<'a>) {
+    pub fn emit_expression(&mut self, expression: &Expression<'a>) {
         match expression {
             Expression::PpExpression { pp, .. } => {
                 self.emit_instruction(Instruction::LIT { value: *pp });
@@ -239,13 +245,9 @@ impl<T: Write> Emitter<T> {
         }
     }
 
-    fn get_variable_location(&self, variable: &str) -> Option<u32> {
-        self.scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.get(variable))
-            .as_deref()
-            .copied()
+    fn get_variable_location(&self, identifier: &str) -> Option<u32> {
+        // self.global_scope.borrow().get_variable(identifier);
+        Some(1)
     }
 
     fn pack_yarn(yarn: &str) -> Vec<i32> {
@@ -271,7 +273,7 @@ impl<T: Write> Emitter<T> {
         vec
     }
 
-    pub fn emit_function<'a>(&mut self, function: &BoundFunction<'a>) {
+    pub fn emit_function(&mut self, function: &BoundFunction<'a>) {
         self.add_function_label(&function.identifier);
 
         // Load the parameters into the stack from the callee function.
@@ -335,11 +337,7 @@ impl<T: Write> Emitter<T> {
             .insert(label.to_string(), self.code.len() as u32);
     }
 
-    fn add_variable_label(&mut self, label: &str) {
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(label.to_string(), self.code.len() as u32);
-        }
-    }
+    fn add_variable_label(&mut self, label: &str) {}
 
     pub fn emit_instruction(&mut self, instruction: Instruction) {
         if !self.should_emit {
@@ -392,14 +390,12 @@ impl<T: Write> Emitter<T> {
         Ok(())
     }
 
-    pub fn emit_block<'a>(&mut self, block: &BoundBlock<'a>) {
-        self.begin_scope();
+    pub fn emit_block(&mut self, block: &BoundBlock<'a>) {
         for statement in &block.statements {
             self.emit_statement(statement);
         }
-        self.end_scope();
     }
-    pub fn emit_statement<'a>(&mut self, statement: &Statement<'a>) {
+    pub fn emit_statement(&mut self, statement: &Statement<'a>) {
         match statement {
             Statement::ExpressionStatement { expression, .. } => {
                 self.emit_expression(expression);
@@ -416,13 +412,5 @@ impl<T: Write> Emitter<T> {
             }
             _ => todo!("emit_statement"),
         };
-    }
-
-    pub fn begin_scope(&mut self) {
-        self.scopes.push(HashMap::new());
-    }
-
-    pub fn end_scope(&mut self) {
-        self.scopes.pop();
     }
 }

@@ -78,13 +78,14 @@ use crate::emit::emitter::Emitter;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::io::{BufWriter, Write};
+use std::fs::File;
+use std::io::Write;
 use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::{env, fs};
 
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::analysis::SemanticAnalyzer;
+use crate::parse::analysis::{GlobalScope, SemanticAnalyzer};
 use crate::parse::lexer::{Lexer, Token};
 use crate::parse::parser::{Parser, TranslationUnit};
 
@@ -129,11 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     const OUTPUT: &'static str = "out/dpp/test.pl0";
 
-    let file = fs::File::create(OUTPUT)?;
-    let writer = BufWriter::new(file);
-    let emitter = Emitter::new(writer);
-
-    analyze_and_emit(translation_unit, &error_diag, emitter)?;
+    analyze_and_emit::<File>(translation_unit, &error_diag, OUTPUT)?;
     let mut child = Command::new("resources/pl0_interpret.exe")
         .args(["-a", "+d", "+l", "+i", "+t", "+s", OUTPUT])
         .stdout(Stdio::piped())
@@ -168,9 +165,21 @@ fn parse<'a>(
 fn analyze_and_emit<'a, T: Write>(
     translation_unit: TranslationUnit<'a>,
     error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
-    emitter: Emitter<T>,
+    output: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let mut analyzer = SemanticAnalyzer::new(error_diag.clone(), emitter);
+    let file = fs::File::create(output).expect("Unable to create file");
+    let writer = std::io::BufWriter::new(file);
+
+    let function_scopes = Rc::new(RefCell::new(Vec::default()));
+    let global_scope = Rc::new(RefCell::new(GlobalScope::default()));
+
+    let emitter = Emitter::new(writer, function_scopes.clone(), global_scope.clone());
+    let mut analyzer = SemanticAnalyzer::new(
+        error_diag.clone(),
+        function_scopes.clone(),
+        global_scope.clone(),
+        emitter,
+    );
     analyzer.analyze(translation_unit);
     error_diag.borrow().check_errors()?;
     Ok(())
