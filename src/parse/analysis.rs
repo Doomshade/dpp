@@ -1,13 +1,11 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
-use std::marker::PhantomData;
 use std::mem::size_of;
 use std::rc::Rc;
 
 use crate::emit::emitter::{Emitter, Instruction};
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::evaluate::Evaluator;
 use crate::parse::parser::{
     DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator,
 };
@@ -71,7 +69,6 @@ where
     /// at the end of the analysis.
     function_scopes: Vec<FunctionScope<'a>>,
     error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
-    evaluator: Evaluator<'a>,
     emitter: Emitter<T>,
 }
 
@@ -122,7 +119,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             function_scopes: Vec::default(),
             global_scope: GlobalScope::default(),
             error_diag,
-            evaluator: Evaluator { none: PhantomData },
             emitter,
         }
     }
