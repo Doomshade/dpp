@@ -1,6 +1,6 @@
 pp -> testt = 1 + 2 + 3*2;
 pp -> test = 1 + 2 + 3*200000;
-yarn -> testa = "ab";
+pp -> aa = test + 5;
 # TODO: Add an expression for this.
 # p -> a = 'a';
 # yarn -> asd = "0000";

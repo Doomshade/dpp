@@ -8,7 +8,9 @@ use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::evaluate::Evaluator;
-use crate::parse::parser::{DataType, Expression, Function, Statement, TranslationUnit};
+use crate::parse::parser::{
+    DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator,
+};
 
 #[derive(Default)]
 struct Scope<'a> {
@@ -117,8 +119,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         }
         self.end_global_scope();
         self.emitter
-            .emit_instruction(Instruction::JMP { address: 0 })
-            .expect("asd");
+            .emit_instruction(Instruction::JMP { address: 0 });
+        self.emitter.emit_all().expect("OOF");
     }
 
     fn analyze_function(&mut self, function: Function<'a>) {
@@ -137,7 +139,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     }
 
     fn analyze_statement(&mut self, statement: Statement<'a>) {
-        match statement {
+        match &statement {
             Statement::VariableDeclaration { variable } => {
                 if self.scope().has_variable(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
@@ -153,7 +155,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     identifier: variable.identifier,
                     value: None,
                     initialized: false,
-                    data_type: variable.data_type,
+                    data_type: variable.data_type.clone(),
                 };
                 dbg!(&bound_var);
                 scope.push_variable(bound_var);
@@ -171,7 +173,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     return;
                 }
 
-                if self.evaluator.eval(&expression) != variable.data_type {
+                if self.eval(&expression) != variable.data_type {
                     self.error_diag.borrow_mut().invalid_type(
                         variable.position.0,
                         variable.position.1,
@@ -179,24 +181,56 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     );
                 }
                 dbg!(&expression);
-                self.emitter.emit_expression(&expression).expect("asd");
-                self.emitter
-                    .emit_instruction(Instruction::STO {
-                        level: 0,
-                        offset: 1000, // TODO: Store this offset somewhere.
-                    })
-                    .expect("asd");
                 let bound_var = BoundVariable {
                     position: variable.position,
                     identifier: variable.identifier.clone(),
                     data_type: variable.data_type.clone(),
-                    value: Some(expression),
+                    value: Some(expression.clone()),
                     initialized: true,
                 };
                 self.scope_mut().push_variable(bound_var);
             }
             _ => {}
         }
+        self.emitter.emit_statement(&statement);
+    }
+
+    pub fn eval(&self, expr: &Expression<'a>) -> DataType<'a> {
+        return match expr {
+            Expression::PpExpression { .. } => DataType::Pp,
+            Expression::PExpression { .. } => DataType::P,
+            Expression::BoobaExpression { .. } => DataType::Booba,
+            Expression::YarnExpression { .. } => DataType::Yarn,
+            Expression::UnaryExpression { operand, op, .. } => {
+                let data_type = self.eval(operand);
+                return match op {
+                    UnaryOperator::Not => match data_type {
+                        DataType::Booba => data_type,
+                        _ => panic!("Invalid type for unary operator"),
+                    },
+                    UnaryOperator::Negate => match data_type {
+                        DataType::Xxlpp | DataType::Pp | DataType::Spp | DataType::Xspp => {
+                            data_type
+                        }
+                        _ => panic!("Invalid type for unary operator"),
+                    },
+                };
+            }
+            Expression::BinaryExpression { lhs, rhs, op, .. } => {
+                let lhs_data_type = self.eval(lhs);
+                let rhs_data_type = self.eval(rhs);
+                assert_eq!(lhs_data_type, rhs_data_type, "Data types do not match");
+                // TODO: Check whether the binary operator is available for the given data type.
+                lhs_data_type
+            }
+            Expression::IdentifierExpression { identifier, .. } => self
+                .scope()
+                .get_variable(identifier)
+                .unwrap()
+                .data_type
+                .clone(),
+            _ => DataType::Nopp,
+        };
     }
 
     fn begin_global_scope(&mut self, translation_unit: &TranslationUnit<'a>) {
@@ -235,6 +269,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 dbg!(&bound_var);
                 self.global_scope_mut().push_variable(bound_var);
             }
+            self.emitter.begin_scope();
         }
 
         for function in functions {
@@ -271,6 +306,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
 
     fn end_global_scope(&mut self) {
         self.end_scope();
+        self.emitter.end_scope();
     }
     fn begin_scope(&mut self) {
         self.scopes.push(Scope::default());

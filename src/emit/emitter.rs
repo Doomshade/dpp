@@ -1,8 +1,10 @@
-use crate::parse::analysis::{BoundBlock, BoundFunction};
-use crate::parse::parser::{BinaryOperator, Expression, Statement};
 use core::fmt;
+use std::collections::HashMap;
 use std::io;
 use std::io::{BufWriter, Write};
+
+use crate::parse::analysis::{BoundBlock, BoundFunction};
+use crate::parse::parser::{BinaryOperator, Expression, Statement};
 
 #[derive(Debug)]
 pub enum Instruction {
@@ -100,6 +102,9 @@ where
 {
     writer: BufWriter<T>,
     should_emit: bool,
+    code: Vec<Instruction>,
+    function_labels: HashMap<String, u32>,
+    scopes: Vec<HashMap<String, u32>>,
 }
 
 impl<T: Write> Emitter<T> {
@@ -107,10 +112,17 @@ impl<T: Write> Emitter<T> {
         Self {
             writer,
             should_emit: true,
+            code: Vec::new(),
+            function_labels: HashMap::new(),
+            scopes: Vec::new(),
         }
     }
 
     pub fn stop_emitting(&mut self) {
+        {
+            let stop_emitting = 69;
+        }
+        let stop_emitting = 5;
         self.should_emit = false;
     }
 
@@ -145,52 +157,52 @@ impl<T: Write> Emitter<T> {
         Ok(())
     }
 
-    pub fn emit_expression<'a>(&mut self, expression: &Expression<'a>) -> io::Result<()> {
+    pub fn emit_expression<'a>(&mut self, expression: &Expression<'a>) {
         if !self.should_emit {
-            return Ok(());
+            return;
         }
         match expression {
             Expression::PpExpression { pp, .. } => {
-                self.emit_instruction(Instruction::LIT { value: *pp })?;
+                self.emit_instruction(Instruction::LIT { value: *pp });
             }
             Expression::PExpression { p, .. } => {
-                self.emit_instruction(Instruction::LIT { value: *p as i32 })?;
+                self.emit_instruction(Instruction::LIT { value: *p as i32 });
             }
             Expression::BoobaExpression { booba, .. } => {
                 self.emit_instruction(Instruction::LIT {
                     value: *booba as i32,
-                })?;
+                });
             }
             Expression::YarnExpression { yarn, .. } => {
                 self.emit_instruction(Instruction::LIT {
                     value: yarn.len() as i32,
-                })?;
+                });
                 let vec = Self::pack_yarn(yarn);
                 for four_packed_chars in vec {
                     self.emit_instruction(Instruction::LIT {
                         value: four_packed_chars,
-                    })?;
+                    });
                 }
             }
             Expression::UnaryExpression { .. } => {}
             Expression::BinaryExpression { lhs, rhs, op, .. } => {
-                self.emit_expression(lhs)?;
-                self.emit_expression(rhs)?;
+                self.emit_expression(lhs);
+                self.emit_expression(rhs);
                 match op {
                     BinaryOperator::Add => {
                         self.emit_instruction(Instruction::OPR {
                             operation: Operation::Add,
-                        })?;
+                        });
                     }
                     BinaryOperator::Subtract => {
                         self.emit_instruction(Instruction::OPR {
                             operation: Operation::Subtract,
-                        })?;
+                        });
                     }
                     BinaryOperator::Multiply => {
                         self.emit_instruction(Instruction::OPR {
                             operation: Operation::Multiply,
-                        })?;
+                        });
                     }
                     BinaryOperator::Divide => {}
                     BinaryOperator::NotEqual => {}
@@ -201,13 +213,38 @@ impl<T: Write> Emitter<T> {
                     BinaryOperator::LessThanOrEqual => {}
                 }
             }
-            Expression::IdentifierExpression { .. } => {}
-            Expression::FunctionCall { .. } => {}
+            Expression::IdentifierExpression { identifier, .. } => {
+                let var_loc = self
+                    .get_variable_location(identifier)
+                    .expect(format!("Unknown variable {identifier}").as_str());
+                self.emit_instruction(Instruction::LOD {
+                    level: 0,
+                    offset: var_loc as i32 - self.code.len() as i32,
+                });
+            }
+            Expression::FunctionCall {
+                identifier,
+                arguments,
+                ..
+            } => {
+                // TODO: Handle the error
+                let function_label = self.function_labels.get(&identifier.to_string()).unwrap();
+                for argument in arguments {
+                    self.emit_expression(argument);
+                }
+            }
             Expression::AssignmentExpression { .. } => {}
             Expression::InvalidExpression => {}
         }
+    }
 
-        Ok(())
+    fn get_variable_location(&self, variable: &str) -> Option<u32> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(variable))
+            .as_deref()
+            .copied()
     }
 
     fn pack_yarn(yarn: &str) -> Vec<i32> {
@@ -233,82 +270,111 @@ impl<T: Write> Emitter<T> {
         vec
     }
 
-    pub fn emit_function<'a>(&mut self, function: &BoundFunction<'a>) -> io::Result<()> {
-        self.emit_label(&function.identifier)?;
+    pub fn emit_function<'a>(&mut self, function: &BoundFunction<'a>) {
+        self.add_function_label(&function.identifier);
+        // Load the parameters into the stack.
         let parameters = &function.parameters;
         for i in 0..parameters.len() {
             let offset = (i as i32) - parameters.len() as i32;
-            self.emit_instruction(Instruction::LOD { level: 1, offset })?;
+            self.emit_instruction(Instruction::LOD { level: 1, offset });
         }
 
-        self.emit_block(&function.block)?;
-
-        Ok(())
+        self.emit_block(&function.block);
     }
 
-    fn emit_label(&mut self, label: &str) -> io::Result<()> {
-        self.writer.write(format!("{}:\r\n", label).as_bytes())?;
-        Ok(())
+    fn add_function_label(&mut self, label: &str) {
+        self.function_labels
+            .insert(label.to_string(), self.code.len() as u32);
     }
 
-    pub fn emit_instruction(&mut self, instruction: Instruction) -> io::Result<()> {
+    fn add_variable_label(&mut self, label: &str) {
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(label.to_string(), self.code.len() as u32);
+        }
+    }
+
+    pub fn emit_instruction(&mut self, instruction: Instruction) {
         if !self.should_emit {
-            return Ok(());
+            return;
         }
-        match instruction {
-            Instruction::LOD { level, offset } => {
-                self.writer
-                    .write(format!("LOD {} {}\r\n", level, offset).as_bytes())?;
-            }
-            Instruction::STO { level, offset } => {
-                self.writer
-                    .write(format!("STO {} {}\r\n", level, offset).as_bytes())?;
-            }
-            Instruction::LIT { value } => {
-                self.writer
-                    .write(format!("LIT 0 {}\r\n", value).as_bytes())?;
-            }
-            Instruction::JMP { address } => {
-                self.writer
-                    .write(format!("JMP 0 {}\r\n", address).as_bytes())?;
-            }
-            Instruction::JMC { address } => {
-                self.writer
-                    .write(format!("JPC 0 {}\r\n", address).as_bytes())?;
-            }
-            Instruction::CAL { level, address } => {
-                self.writer
-                    .write(format!("CAL {} {}\r\n", level, address).as_bytes())?;
-            }
-            Instruction::OPR { operation } => {
-                self.writer
-                    .write(format!("OPR 0 {}\r\n", operation as u32).as_bytes())?;
-            }
-            Instruction::RET => {
-                self.writer.write(format!("RET 0 0\r\n").as_bytes())?;
-            }
-            Instruction::INT { size } => {
-                self.writer
-                    .write(format!("INT 0 {}\r\n", size).as_bytes())?;
-            }
-        }
-        self.emit_debug_info(DebugKeyword::REGS)?;
+        self.code.push(instruction);
+    }
 
-        Ok(())
-    }
-    fn emit_block<'a>(&mut self, block: &BoundBlock<'a>) -> io::Result<()> {
-        for statement in &block.statements {
-            self.emit_statement(statement)?;
+    pub fn emit_all(&mut self) -> io::Result<()> {
+        for instruction in self.code {
+            match instruction {
+                Instruction::LOD { level, offset } => {
+                    self.writer
+                        .write(format!("LOD {} {}\r\n", level, offset).as_bytes())?;
+                }
+                Instruction::STO { level, offset } => {
+                    self.writer
+                        .write(format!("STO {} {}\r\n", level, offset).as_bytes())?;
+                }
+                Instruction::LIT { value } => {
+                    self.writer
+                        .write(format!("LIT 0 {}\r\n", value).as_bytes())?;
+                }
+                Instruction::JMP { address } => {
+                    self.writer
+                        .write(format!("JMP 0 {}\r\n", address).as_bytes())?;
+                }
+                Instruction::JMC { address } => {
+                    self.writer
+                        .write(format!("JMC 0 {}\r\n", address).as_bytes())?;
+                }
+                Instruction::CAL { level, address } => {
+                    self.writer
+                        .write(format!("CAL {} {}\r\n", level, address).as_bytes())?;
+                }
+                Instruction::OPR { operation } => {
+                    self.writer
+                        .write(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
+                }
+                Instruction::RET => {
+                    self.writer.write(b"RET 0 0\r\n")?;
+                }
+                Instruction::INT { size } => {
+                    self.writer
+                        .write(format!("INT 0 {}\r\n", size).as_bytes())?;
+                }
+            }
+            self.emit_debug_info(DebugKeyword::REGS)?;
         }
         Ok(())
     }
-    fn emit_statement<'a>(&mut self, statement: &Statement<'a>) -> io::Result<()> {
+
+    pub fn emit_block<'a>(&mut self, block: &BoundBlock<'a>) {
+        self.begin_scope();
+        for statement in &block.statements {
+            self.emit_statement(statement);
+        }
+        self.end_scope();
+    }
+    pub fn emit_statement<'a>(&mut self, statement: &Statement<'a>) {
         match statement {
             Statement::ExpressionStatement { expression, .. } => {
-                self.emit_expression(expression)?;
+                self.emit_expression(expression);
+            }
+            Statement::VariableDeclaration { variable } => {
+                self.add_variable_label(variable.identifier);
+            }
+            Statement::VariableDeclarationAndAssignment {
+                variable,
+                expression,
+            } => {
+                self.add_variable_label(variable.identifier);
+                self.emit_expression(expression);
             }
             _ => todo!("emit_statement"),
-        }
-        Ok(())
+        };
+    }
+
+    pub fn begin_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    pub fn end_scope(&mut self) {
+        self.scopes.pop();
     }
 }
