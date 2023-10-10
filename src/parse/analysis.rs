@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::emit::emitter::{Emitter, Instruction};
+use crate::emit::emitter::{Address, Emitter, Instruction};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
     DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
@@ -199,13 +199,20 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             for statement in translation_unit.global_statements {
                 self.analyze_global_statement(statement);
             }
+            // The last instruction will be the JMP to 0 - indicating exit.
+            self.emitter.emit_instruction(Instruction::CAL {
+                level: 1,
+                address: Address::Label(String::from("main")),
+            });
 
             for function in translation_unit.functions {
                 self.analyze_function(function);
             }
         }
-        self.emitter
-            .emit_instruction(Instruction::JMP { address: 0 });
+        // The last instruction will be the JMP to 0 - indicating exit.
+        self.emitter.emit_instruction(Instruction::JMP {
+            address: Address::Absolute(0),
+        });
         self.emitter.emit_all().expect("OOF");
     }
 
@@ -222,7 +229,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     fn analyze_global_statement(&mut self, statement: Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.has_variable_in_function_scope(&variable.identifier) {
+                if self.has_variable_in_scope(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -238,7 +245,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 variable,
                 expression,
             } => {
-                if self.has_variable_in_function_scope(&variable.identifier) {
+                if self.has_variable_in_scope(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -275,7 +282,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         self.emitter.emit_statement(&statement);
     }
 
-    fn has_variable_in_function_scope(&self, identifier: &str) -> bool {
+    fn has_variable_in_scope(&self, identifier: &str) -> bool {
         return if let Some(scope) = self.function_scopes.borrow().last() {
             scope.scope.has_variable(identifier)
         } else {
@@ -286,7 +293,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     fn analyze_statement(&mut self, statement: Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.has_variable_in_function_scope(&variable.identifier) {
+                if self.has_variable_in_scope(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -304,7 +311,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 variable,
                 expression,
             } => {
-                if self.has_variable_in_function_scope(&variable.identifier) {
+                if self.has_variable_in_scope(&variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -422,7 +429,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             });
         }
 
-        self.global_scope_mut().push_function(BoundFunction {
+        self.global_scope.borrow_mut().push_function(BoundFunction {
             identifier: function.identifier.clone(),
             return_type: function.return_type.clone(),
             block: BoundBlock {
@@ -439,10 +446,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 .clone(),
         });
         self.begin_function_scope();
-    }
-
-    fn global_scope_mut(&mut self) -> std::cell::RefMut<'_, GlobalScope<'a>> {
-        self.global_scope.borrow_mut()
+        self.emitter.emit_label(function.identifier);
     }
 
     fn end_function(&mut self) {

@@ -1,7 +1,25 @@
+use std::fmt::{Display, Formatter};
 use std::io::Write;
 
 use crate::parse::analysis::{BoundBlock, BoundFunction, FunctionScope, GlobalScope};
-use crate::parse::parser::{BinaryOperator, Expression, Number, Statement};
+use crate::parse::parser::{BinaryOperator, Expression, Statement};
+
+#[derive(Clone, Debug)]
+pub enum Address {
+    Absolute(u32),
+    Label(String),
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Address::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
+            Address::Label(label) => write!(f, "@{label} ")?,
+        };
+
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
@@ -30,7 +48,7 @@ pub enum Instruction {
     ///     the current program counter (so that it can be restored when the subroutine returns)
     CAL {
         level: u32,
-        address: u32,
+        address: Address,
     },
     RET,
     INT {
@@ -38,15 +56,17 @@ pub enum Instruction {
     },
     /// Jump to the instruction at address.
     JMP {
-        address: u32,
+        address: Address,
     },
     /// Pop the current value from the top of the stack. If it's 0 (false), jump to the instruction at address. Otherwise, continue with the current location of the program counter.
     JMC {
-        address: u32,
+        address: Address,
     },
+    // TODO: Those aren't instructions! Make a new enum.
     DBG {
         debug_keyword: DebugKeyword,
     },
+    Label(String),
 }
 
 impl std::fmt::Display for Instruction {
@@ -240,7 +260,7 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn emit_function(&mut self, function: &BoundFunction<'a>) {
-        self.add_function_label(function.identifier());
+        self.emit_label(function.identifier());
 
         // Load the parameters into the stack from the callee function.
         // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
@@ -289,9 +309,10 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
-    fn add_function_label(&mut self, label: &str) {
+    pub fn emit_label(&mut self, label: &str) {
         self.function_labels
             .insert(label.to_string(), self.code.len() as u32);
+        self.code.push(Instruction::Label(String::from(label)));
     }
 
     pub fn emit_instruction(&mut self, instruction: Instruction) {
@@ -314,8 +335,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                         .write(format!("LIT 0 {}\r\n", value).as_bytes())?;
                 }
                 Instruction::JMP { address } => {
-                    self.writer
-                        .write(format!("JMP 0 {}\r\n", address).as_bytes())?;
+                    let str = format!("JMP 0 {}\r\n", address);
+                    dbg!(&str);
+                    self.writer.write(str.as_bytes())?;
                 }
                 Instruction::JMC { address } => {
                     self.writer
@@ -360,6 +382,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                             .write(format!("&ECHO {message}\r\n").as_bytes())?;
                     }
                 },
+                Instruction::Label(label) => {
+                    self.writer.write(format!("@{label} ").as_bytes())?;
+                }
             }
         }
         Ok(())

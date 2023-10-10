@@ -9,11 +9,15 @@ pp -> aa = test + 5;
 # p -> a = 'a';
 # yarn -> asd = "0000";
 
-# FUNc test() -> pp {
-#    # pprintln(testt);
-#    # pprintln(asd);
-#    bye 0;
-#}
+FUNc test() -> pp {
+    pp -> d = 1 + 2 + 3*4;
+}
+
+FUNc main() -> pp {
+    pp -> d = 1 + 2 + 3*4;
+    # pprintln(asd);
+    # bye 0;
+}
 
 # FUNc main(argc: pp, argv: yarn) -> pp {
 #     pprintln(test);
