@@ -198,11 +198,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                     dbg!(&var_loc);
                 }
                 self.emit_debug_info(DebugKeyword::STK);
-                self.load(0, var_loc as i32, 0);
-                self.emit_instruction(Instruction::LOD {
-                    level: 0,
-                    offset: var_loc as i32,
-                });
+                self.load(0, var_loc as i32, 4);
                 self.emit_debug_info(DebugKeyword::STK);
             }
             Expression::FunctionCall { arguments, .. } => {
@@ -268,13 +264,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         let mut curr_offset = total_size as i32;
         for i in 0..parameters.len() {
             let size = parameters[parameters.len() - i - 1].data_type.size();
-
             self.load(1, curr_offset, size);
-            self.emit_instruction(Instruction::LOD {
-                level: 1,
-                offset: curr_offset,
-            });
-
             curr_offset -= size as i32;
         }
 
@@ -285,7 +275,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         for i in 0..size / PL0_DATA_SIZE {
             self.emit_instruction(Instruction::LOD {
                 level,
-                offset: offset + i as i32 * PL0_DATA_SIZE as i32, // Load 4 bytes at a time.
+                offset: offset + i as i32, // Load 4 bytes at a time.
             });
         }
     }
@@ -390,7 +380,14 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.emit_expression(expression);
                 self.emit_debug_info(DebugKeyword::STK);
             }
-            _ => todo!("emit_statement"),
+            Statement::ByeStatement { expression, .. } => {
+                // if let Some(expression) = expression {
+                //     self.emit_expression(expression);
+                // }
+                // self.emit_instruction(Instruction::RET);
+                self.emit_debug_info(DebugKeyword::STK);
+            }
+            _ => todo!("Emitting statement: {:#?}", statement),
         };
     }
 }

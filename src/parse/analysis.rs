@@ -49,6 +49,10 @@ impl<'a> GlobalScope<'a> {
         self.functions.insert(function.identifier, function);
     }
 
+    fn push_variable(&mut self, variable: BoundVariable<'a>) {
+        self.scope.push_variable(variable);
+    }
+
     pub fn scope(&self) -> &Scope<'a> {
         &self.scope
     }
@@ -190,7 +194,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     }
 
     pub fn analyze(&mut self, translation_unit: TranslationUnit<'a>) {
-        self.begin_global_scope(&translation_unit);
         {
             // Analyze global statements and functions.
             for statement in translation_unit.global_statements {
@@ -217,17 +220,67 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     }
 
     fn analyze_global_statement(&mut self, statement: Statement<'a>) {
-        // TODO: Handle only a number of statements.
-        self.analyze_statement(statement);
+        match &statement {
+            Statement::VariableDeclaration { variable } => {
+                if self.has_variable_in_function_scope(&variable.identifier) {
+                    self.error_diag.borrow_mut().variable_already_exists(
+                        variable.position.0,
+                        variable.position.1,
+                        variable.identifier,
+                    );
+                }
+
+                let bound_var = BoundVariable::new(variable, None);
+                dbg!(&bound_var);
+                self.global_scope.borrow_mut().push_variable(bound_var);
+            }
+            Statement::VariableDeclarationAndAssignment {
+                variable,
+                expression,
+            } => {
+                if self.has_variable_in_function_scope(&variable.identifier) {
+                    self.error_diag.borrow_mut().variable_already_exists(
+                        variable.position.0,
+                        variable.position.1,
+                        variable.identifier,
+                    );
+                    return;
+                }
+
+                let data_type = self.eval(&expression);
+                let mut matching_data_type = false;
+                if let DataType::Number(..) = data_type {
+                    if let DataType::Number(..) = variable.data_type {
+                        matching_data_type = true;
+                    }
+                }
+                if !matching_data_type {
+                    matching_data_type = data_type == variable.data_type;
+                }
+                assert!(matching_data_type, "Data types do not match");
+
+                if self.eval(&expression) != variable.data_type {
+                    self.error_diag.borrow_mut().invalid_type(
+                        variable.position.0,
+                        variable.position.1,
+                        variable.identifier,
+                    );
+                }
+                dbg!(&expression);
+                let bound_var = BoundVariable::new(variable, Some(expression));
+                self.global_scope.borrow_mut().push_variable(bound_var);
+            }
+            _ => {}
+        }
+        self.emitter.emit_statement(&statement);
     }
 
     fn has_variable_in_function_scope(&self, identifier: &str) -> bool {
-        self.function_scopes
-            .borrow()
-            .last()
-            .unwrap()
-            .scope
-            .has_variable(identifier)
+        return if let Some(scope) = self.function_scopes.borrow().last() {
+            scope.scope.has_variable(identifier)
+        } else {
+            false
+        };
     }
 
     fn analyze_statement(&mut self, statement: Statement<'a>) {
@@ -323,10 +376,12 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             }
             Expression::IdentifierExpression { identifier, .. } => {
                 let function_scopes = self.function_scopes.borrow_mut();
-                let current_function_scope = function_scopes.last().unwrap();
-                if let Some(variable) = current_function_scope.scope.get_variable(identifier) {
-                    return variable.data_type.clone();
-                } else if let Some(global_variable) =
+                if let Some(current_function_scope) = function_scopes.last() {
+                    if let Some(variable) = current_function_scope.scope.get_variable(identifier) {
+                        return variable.data_type.clone();
+                    }
+                }
+                if let Some(global_variable) =
                     self.global_scope.borrow().scope.get_variable(identifier)
                 {
                     return global_variable.data_type.clone();
@@ -334,75 +389,15 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     panic!("Variable not found");
                 }
             }
+            Expression::FunctionCall { identifier, .. } => {
+                if let Some(global_function) = self.global_scope.borrow().get_function(identifier) {
+                    return global_function.return_type.clone();
+                } else {
+                    panic!("Function not found");
+                }
+            }
             _ => DataType::Nopp,
         };
-    }
-
-    fn begin_global_scope(&mut self, translation_unit: &TranslationUnit<'a>) {
-        self.begin_function_scope();
-        let functions = &translation_unit.functions;
-        let statements = &translation_unit.global_statements;
-
-        for statement in statements {
-            let variable = match statement {
-                Statement::VariableDeclaration { variable } => variable,
-                Statement::VariableDeclarationAndAssignment { variable, .. } => variable,
-                _ => {
-                    panic!("Invalid statement type")
-                }
-            };
-
-            let identifier = variable.identifier;
-            if self.global_scope.borrow().scope.has_variable(&identifier) {
-                self.error_diag.borrow_mut().variable_already_exists(
-                    variable.position.0,
-                    variable.position.1,
-                    identifier,
-                );
-            }
-
-            let bound_var = BoundVariable::new(variable, None);
-            dbg!(&bound_var);
-            self.global_scope
-                .borrow_mut()
-                .scope
-                .push_variable(bound_var);
-        }
-
-        for function in functions {
-            if self
-                .global_scope
-                .borrow()
-                .has_function(&function.identifier)
-            {
-                self.error_diag.borrow_mut().function_already_exists(
-                    function.position.0,
-                    function.position.1,
-                    function.identifier,
-                );
-            }
-
-            let mut scope = self.global_scope.borrow_mut();
-            let block = BoundBlock {
-                statements: function.block.statements.clone(),
-            };
-            let bound_func = BoundFunction {
-                identifier: function.identifier,
-                return_type: function.return_type.clone(),
-                block,
-                parameters: function
-                    .parameters
-                    .iter()
-                    .map(|param| BoundParameter {
-                        identifier: param.identifier,
-                        data_type: param.data_type.clone(),
-                    })
-                    .collect::<Vec<BoundParameter<'a>>>()
-                    .clone(),
-            };
-            dbg!(&bound_func);
-            scope.push_function(bound_func);
-        }
     }
 
     fn begin_function_scope(&mut self) {
