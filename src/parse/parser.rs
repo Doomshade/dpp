@@ -12,7 +12,6 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::mem::size_of;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -155,15 +154,23 @@ pub struct Case<'a> {
     block: Box<Block<'a>>,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum Number {
+    Pp,
+    Spp,
+    Xspp,
+}
+
 #[derive(Clone, Debug)]
 pub enum Expression<'a> {
-    PpExpression {
+    NumberExpression {
         position: (u32, u32),
-        pp: i32,
+        number_type: Number,
+        value: i32,
     },
     PExpression {
         position: (u32, u32),
-        p: char,
+        value: char,
     },
     BoobaExpression {
         position: (u32, u32),
@@ -201,16 +208,10 @@ pub enum Expression<'a> {
     InvalidExpression,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum DataType<'a> {
-    // u64
-    Xxlpp,
-    // u32
-    Pp,
-    // u16
-    Spp,
-    // u8
-    Xspp,
+    // Xxlpp, Pp, Spp, Xspp
+    Number(Number),
     // char
     P,
     // string
@@ -222,16 +223,30 @@ pub enum DataType<'a> {
     Struct { name: &'a str },
 }
 
+impl PartialEq for DataType<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DataType::Number(..), DataType::Number(..)) => true,
+            (DataType::P, DataType::P) => true,
+            (DataType::Yarn, DataType::Yarn) => true,
+            (DataType::Booba, DataType::Booba) => true,
+            (DataType::Nopp, DataType::Nopp) => true,
+            _ => false,
+        }
+    }
+}
+
 impl<'a> DataType<'a> {
-    pub fn size(&self) -> Option<usize> {
+    pub fn size(&self) -> usize {
         match self {
-            DataType::Xxlpp => Some(size_of::<i64>()),
-            DataType::Pp => Some(size_of::<i32>()),
-            DataType::Spp => Some(size_of::<i16>()),
-            DataType::Xspp => Some(size_of::<i8>()),
-            DataType::P => Some(size_of::<char>()),
-            DataType::Booba => Some(size_of::<bool>()),
-            _ => None,
+            DataType::Number(number) => match number {
+                Number::Pp => std::mem::size_of::<i32>(),
+                Number::Spp => std::mem::size_of::<i16>(),
+                Number::Xspp => std::mem::size_of::<i8>(),
+            },
+            DataType::P => std::mem::size_of::<char>(),
+            DataType::Booba => std::mem::size_of::<bool>(),
+            _ => panic!("Invalid data type"),
         }
     }
 }
@@ -752,7 +767,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::YemKeyword
             | TokenKind::NomKeyword
-            | TokenKind::Integer
+            | TokenKind::Number
             | TokenKind::Yarn
             | TokenKind::OpenParen
             | TokenKind::Identifier => {
@@ -859,10 +874,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         ])?;
 
         match token.1 {
-            TokenKind::XxlppKeyword => Some(DataType::Xxlpp),
-            TokenKind::PpKeyword => Some(DataType::Pp),
-            TokenKind::SppKeyword => Some(DataType::Spp),
-            TokenKind::XsppKeyword => Some(DataType::Xspp),
+            TokenKind::PpKeyword => Some(DataType::Number(Number::Pp)),
+            TokenKind::SppKeyword => Some(DataType::Number(Number::Spp)),
+            TokenKind::XsppKeyword => Some(DataType::Number(Number::Xspp)),
             TokenKind::PKeyword => Some(DataType::P),
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),
@@ -1040,12 +1054,28 @@ impl<'a, 'b> Parser<'a, 'b> {
                     booba: false,
                 })
             }
-            TokenKind::Integer => {
-                let number = self.expect(TokenKind::Integer)?;
-                Some(Expression::PpExpression {
-                    position: self.position,
-                    pp: number.parse::<i32>().unwrap(),
-                })
+            TokenKind::Number => {
+                let number = self.expect(TokenKind::Number)?;
+                if let Ok(value) = number.parse::<i32>() {
+                    Some(Expression::NumberExpression {
+                        position: self.position,
+                        number_type: Number::Pp,
+                        value,
+                    })
+                } else {
+                    panic!("Invalid number")
+                }
+            }
+            TokenKind::P => {
+                let char = self.expect(TokenKind::P)?;
+                if let Some(value) = char.chars().next() {
+                    Some(Expression::PExpression {
+                        position: self.position,
+                        value,
+                    })
+                } else {
+                    panic!("Invalid character")
+                }
             }
             TokenKind::Yarn => {
                 let yarn = self.expect(TokenKind::Yarn)?;

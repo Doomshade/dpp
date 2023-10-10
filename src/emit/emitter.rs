@@ -1,11 +1,7 @@
-use core::fmt;
-use std::collections::HashMap;
-use std::io;
-use std::io::{BufWriter, Write};
-use std::mem::size_of;
+use std::io::Write;
 
 use crate::parse::analysis::{BoundBlock, BoundFunction, FunctionScope, GlobalScope};
-use crate::parse::parser::{BinaryOperator, Expression, Statement};
+use crate::parse::parser::{BinaryOperator, Expression, Number, Statement};
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
@@ -48,10 +44,13 @@ pub enum Instruction {
     JMC {
         address: u32,
     },
+    DBG {
+        debug_keyword: DebugKeyword,
+    },
 }
 
-impl fmt::Display for Instruction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
         // or, alternatively:
         // fmt::Debug::fmt(self, f)
@@ -88,6 +87,7 @@ pub enum Operation {
     LessThanOrEqualTo = 13,
 }
 
+#[derive(Clone, Debug)]
 pub enum DebugKeyword {
     REGS,
     STK,
@@ -101,77 +101,44 @@ pub struct Emitter<'a, T>
 where
     T: Write,
 {
-    writer: BufWriter<T>,
-    should_emit: bool,
+    writer: std::io::BufWriter<T>,
+    // The instructions to be emitted.
     code: Vec<Instruction>,
+    /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
     function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
+    /// The global scope.
     global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-    function_labels: HashMap<String, u32>,
+    /// The labels of the functions.
+    function_labels: std::collections::HashMap<String, u32>,
 }
 
-const PL0_DATA_SIZE: usize = size_of::<i32>();
+const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
 impl<'a, T: Write> Emitter<'a, T> {
     pub fn new(
-        writer: BufWriter<T>,
+        writer: std::io::BufWriter<T>,
         function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
         global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
     ) -> Self {
         Self {
             writer,
-            should_emit: true,
             code: Vec::new(),
-            function_labels: HashMap::new(),
+            function_labels: std::collections::HashMap::new(),
             function_scopes,
             global_scope,
         }
     }
 
-    pub fn stop_emitting(&mut self) {
-        {
-            let stop_emitting = 69;
-        }
-        let stop_emitting = 5;
-        self.should_emit = false;
-    }
-
-    pub fn emit_debug_info(&mut self, debug: DebugKeyword) -> io::Result<()> {
-        if !self.should_emit {
-            return Ok(());
-        }
-        match debug {
-            DebugKeyword::REGS => {
-                self.writer.write(b"&REGS\r\n")?;
-            }
-            DebugKeyword::STK => {
-                self.writer.write(b"&STK\r\n")?;
-            }
-            DebugKeyword::STKA => {
-                self.writer.write(b"&STKA\r\n")?;
-            }
-            DebugKeyword::STKRG { start, end } => {
-                self.writer
-                    .write(format!("&STKRG {start} {end}\r\n").as_bytes())?;
-            }
-            DebugKeyword::STKN { amount } => {
-                self.writer
-                    .write(format!("&STKN {amount}\r\n").as_bytes())?;
-            }
-            DebugKeyword::ECHO { message } => {
-                self.writer
-                    .write(format!("&ECHO {message}\r\n").as_bytes())?;
-            }
-        };
-
-        Ok(())
+    pub fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
+        self.emit_instruction(Instruction::DBG { debug_keyword });
     }
 
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
         match expression {
-            Expression::PpExpression { pp, .. } => {
-                self.emit_instruction(Instruction::LIT { value: *pp });
+            Expression::NumberExpression { value, .. } => {
+                self.emit_instruction(Instruction::LIT { value: *value })
             }
-            Expression::PExpression { p, .. } => {
+            Expression::PExpression { value: p, .. } => {
                 self.emit_instruction(Instruction::LIT { value: *p as i32 });
             }
             Expression::BoobaExpression { booba, .. } => {
@@ -220,29 +187,26 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
             }
             Expression::IdentifierExpression { identifier, .. } => {
-                let var_loc: u32;
+                let var_loc;
                 {
                     let global_scope = self.global_scope.borrow();
                     var_loc = global_scope
-                        .scope
-                        .get_variable_absolute_position_relative_to_scope(identifier)
+                        .scope()
+                        .get_variable(identifier)
                         .expect(format!("Unknown variable {identifier}").as_str())
-                        .clone();
+                        .position_in_scope();
                     dbg!(&var_loc);
                 }
-                let size = var_loc as i32 - self.code.len() as i32;
+                self.emit_debug_info(DebugKeyword::STK);
+                self.load(0, var_loc as i32, 0);
                 self.emit_instruction(Instruction::LOD {
                     level: 0,
-                    offset: size,
+                    offset: var_loc as i32,
                 });
+                self.emit_debug_info(DebugKeyword::STK);
             }
-            Expression::FunctionCall {
-                identifier,
-                arguments,
-                ..
-            } => {
+            Expression::FunctionCall { arguments, .. } => {
                 // TODO: Handle the error
-                let function_label = self.function_labels.get(&identifier.to_string()).unwrap();
                 for argument in arguments {
                     self.emit_expression(argument);
                 }
@@ -253,13 +217,12 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     fn get_variable_location(&self, identifier: &str) -> Option<u32> {
-        self.global_scope.borrow().scope.get_variable(identifier);
+        self.global_scope.borrow().scope().get_variable(identifier);
         Some(1)
     }
 
     fn pack_yarn(yarn: &str) -> Vec<i32> {
         let mut vec: Vec<i32> = Vec::with_capacity((yarn.len() / 4) + 1);
-        // 6386532
         for chunk in yarn.as_bytes().chunks(4) {
             let packed_chars = match chunk.len() {
                 1 => chunk[0] as i32,
@@ -281,7 +244,7 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn emit_function(&mut self, function: &BoundFunction<'a>) {
-        self.add_function_label(&function.identifier);
+        self.add_function_label(function.identifier());
 
         // Load the parameters into the stack from the callee function.
         // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
@@ -298,16 +261,13 @@ impl<'a, T: Write> Emitter<'a, T> {
         // Load the variable at offset 8 (argv) and then subtract 8 from the offset.
         // The LOD function only loads 32 bits, so for anything bigger
         // than that we need to LOD again.
-        let parameters = &function.parameters;
-        let total_size = parameters.iter().fold(0, |acc, parameter| {
-            acc + parameter.data_type.size().expect("TODO: Handle structs.")
-        });
+        let parameters = function.parameters();
+        let total_size = parameters
+            .iter()
+            .fold(0, |acc, parameter| acc + parameter.data_type.size());
         let mut curr_offset = total_size as i32;
         for i in 0..parameters.len() {
-            let size = parameters[parameters.len() - i - 1]
-                .data_type
-                .size()
-                .unwrap();
+            let size = parameters[parameters.len() - i - 1].data_type.size();
 
             self.load(1, curr_offset, size);
             self.emit_instruction(Instruction::LOD {
@@ -318,7 +278,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             curr_offset -= size as i32;
         }
 
-        self.emit_block(&function.block);
+        self.emit_block(function.block());
     }
 
     fn load(&mut self, level: u32, offset: i32, size: usize) {
@@ -344,16 +304,11 @@ impl<'a, T: Write> Emitter<'a, T> {
             .insert(label.to_string(), self.code.len() as u32);
     }
 
-    fn add_variable_label(&mut self, label: &str) {}
-
     pub fn emit_instruction(&mut self, instruction: Instruction) {
-        if !self.should_emit {
-            return;
-        }
         self.code.push(instruction);
     }
 
-    pub fn emit_all(&mut self) -> io::Result<()> {
+    pub fn emit_all(&mut self) -> std::io::Result<()> {
         for instruction in &self.code {
             match instruction {
                 Instruction::LOD { level, offset } => {
@@ -392,6 +347,29 @@ impl<'a, T: Write> Emitter<'a, T> {
                     self.writer
                         .write(format!("INT 0 {}\r\n", size).as_bytes())?;
                 }
+                Instruction::DBG { debug_keyword } => match debug_keyword {
+                    DebugKeyword::REGS => {
+                        self.writer.write(b"&REGS\r\n")?;
+                    }
+                    DebugKeyword::STK => {
+                        self.writer.write(b"&STK\r\n")?;
+                    }
+                    DebugKeyword::STKA => {
+                        self.writer.write(b"&STKA\r\n")?;
+                    }
+                    DebugKeyword::STKRG { start, end } => {
+                        self.writer
+                            .write(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+                    }
+                    DebugKeyword::STKN { amount } => {
+                        self.writer
+                            .write(format!("&STKN {amount}\r\n").as_bytes())?;
+                    }
+                    DebugKeyword::ECHO { message } => {
+                        self.writer
+                            .write(format!("&ECHO {message}\r\n").as_bytes())?;
+                    }
+                },
             }
         }
         Ok(())
@@ -407,15 +385,10 @@ impl<'a, T: Write> Emitter<'a, T> {
             Statement::ExpressionStatement { expression, .. } => {
                 self.emit_expression(expression);
             }
-            Statement::VariableDeclaration { variable } => {
-                self.add_variable_label(variable.identifier);
-            }
-            Statement::VariableDeclarationAndAssignment {
-                variable,
-                expression,
-            } => {
-                self.add_variable_label(variable.identifier);
+            Statement::VariableDeclaration { .. } => {}
+            Statement::VariableDeclarationAndAssignment { expression, .. } => {
                 self.emit_expression(expression);
+                self.emit_debug_info(DebugKeyword::STK);
             }
             _ => todo!("emit_statement"),
         };

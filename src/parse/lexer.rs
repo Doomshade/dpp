@@ -68,8 +68,8 @@ impl<'a> Token<'a> {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenKind {
     Identifier,
-    Integer,
-    Float,
+    Number,
+    P,
     Yarn,
     BangEqual,
     Comment,
@@ -153,8 +153,8 @@ impl Display for TokenKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let text_representation = match self {
             Self::Identifier => "identifier",
-            Self::Integer => "integer",
-            Self::Float => "float",
+            Self::Number => "integer",
+            Self::P => "p",
             Self::Yarn => "yarn",
             Self::BangEqual => "\"!=\"",
             Self::Comment | Self::Whitespace | Self::Eof | Self::Unknown => "",
@@ -333,17 +333,21 @@ impl<'a, 'b> Lexer<'a, 'b> {
         let start = self.cursor;
 
         self.advance(); // Consume opening quote.
-        self.advance(); // Consume the character.
         if self.peek() == '\\' {
             // TODO: Handle escaped characters.
             self.advance(); // Consume the escaped character.
         }
+        self.advance(); // Consume the character.
+
+        if self.peek() != '\'' {
+            self.error_diag
+                .borrow_mut()
+                .expected_different_token_error(&self.new_token(TokenKind::P, ""), TokenKind::P);
+            return self.new_token(TokenKind::Eof, "EOF");
+        }
 
         self.advance(); // Consume closing quote.
-        self.new_token(
-            TokenKind::PKeyword,
-            &self.raw_input[start + 1..self.cursor - 1],
-        )
+        self.new_token(TokenKind::P, &self.raw_input[start + 1..self.cursor - 1])
     }
 
     fn handle_unknown(&mut self) -> Token<'a> {
@@ -486,13 +490,11 @@ impl<'a, 'b> Lexer<'a, 'b> {
     fn handle_number(&mut self) -> Token<'a> {
         let start = self.cursor;
 
-        let mut number_kind = TokenKind::Integer;
         while self.peek().is_ascii_digit() {
             self.advance();
         }
 
         if self.peek() == '.' {
-            number_kind = TokenKind::Float;
             if !self.peek().is_ascii_digit() {
                 self.error_diag
                     .borrow_mut()
@@ -503,7 +505,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             }
         }
 
-        self.new_token(number_kind, &self.raw_input[start..self.cursor])
+        self.new_token(TokenKind::Number, &self.raw_input[start..self.cursor])
     }
 
     fn handle_identifier(&mut self) -> Token<'a> {

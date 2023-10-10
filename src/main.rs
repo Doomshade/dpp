@@ -87,7 +87,6 @@ use crate::parse::analysis::{GlobalScope, SemanticAnalyzer};
 use crate::parse::lexer::{Lexer, Token};
 use crate::parse::parser::{Parser, TranslationUnit};
 
-mod arena_alloc;
 mod emit;
 pub mod error_diagnosis;
 mod parse;
@@ -132,7 +131,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     const OUTPUT: &'static str = "out/dpp/test.pl0";
 
     analyze_and_emit::<File>(translation_unit, &error_diag, OUTPUT)?;
-    let mut child = Command::new("resources/pl0_interpret.exe")
+    let child = Command::new("resources/pl0_interpret.exe")
         .args(["-a", "+d", "+l", "+i", "+t", "+s", OUTPUT])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

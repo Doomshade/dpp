@@ -1,66 +1,56 @@
 use std::collections::HashMap;
 use std::io::Write;
-use std::mem::size_of;
 
 use crate::emit::emitter::{Emitter, Instruction};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
-    DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator,
+    DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
 };
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct FunctionScope<'a> {
     scope: Scope<'a>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Scope<'a> {
-    variable_absolute_positions: HashMap<&'a str, u32>,
+    /// The current position in the stack frame. This is used to calculate the absolute position
+    /// of the variable in the stack frame.
     current_position: u32,
-    /// Indices to the `variables` vector.
-    variable_indices: HashMap<&'a str, usize>,
-    variables: Vec<std::rc::Rc<BoundVariable<'a>>>,
+    /// This is basically the symbol table.
+    variables: HashMap<&'a str, std::rc::Rc<BoundVariable<'a>>>,
 }
 
 impl<'a> Scope<'a> {
-    fn push_variable(&mut self, variable: BoundVariable<'a>) {
-        self.variable_absolute_positions
-            .insert(variable.identifier, self.current_position);
-        self.current_position += variable.size() as u32;
-        self.variable_indices
-            .insert(variable.identifier, self.variables.len());
-        self.variables.push(std::rc::Rc::new(variable));
-    }
-
-    pub fn get_variable_absolute_position_relative_to_scope(
-        &self,
-        identifier: &str,
-    ) -> Option<&u32> {
-        self.variable_absolute_positions.get(identifier)
-    }
-
-    pub fn get_variable_index(&self, identifier: &'a str) -> Option<&usize> {
-        self.variable_indices.get(identifier)
+    fn push_variable(&mut self, mut variable: BoundVariable<'a>) {
+        variable.position_in_scope = self.current_position;
+        self.current_position += ((variable.size() as u32 - 1) / 4) + 1;
+        self.variables
+            .insert(variable.identifier, std::rc::Rc::new(variable));
     }
 
     pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<BoundVariable<'a>>> {
-        self.variables.get(*self.get_variable_index(identifier)?)
+        self.variables.get(identifier)
     }
 
     pub fn has_variable(&self, identifier: &str) -> bool {
-        self.variable_indices.contains_key(identifier)
+        self.variables.contains_key(identifier)
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct GlobalScope<'a> {
-    pub scope: Scope<'a>,
-    pub functions: HashMap<&'a str, BoundFunction<'a>>,
+    scope: Scope<'a>,
+    functions: HashMap<&'a str, BoundFunction<'a>>,
 }
 
 impl<'a> GlobalScope<'a> {
     fn push_function(&mut self, function: BoundFunction<'a>) {
         self.functions.insert(function.identifier, function);
+    }
+
+    pub fn scope(&self) -> &Scope<'a> {
+        &self.scope
     }
 
     pub fn get_function(&self, identifier: &str) -> Option<&BoundFunction<'a>> {
@@ -87,10 +77,25 @@ where
 
 #[derive(Clone, Debug)]
 pub struct BoundFunction<'a> {
-    pub identifier: &'a str,
-    pub return_type: DataType<'a>,
-    pub block: BoundBlock<'a>,
-    pub parameters: Vec<BoundParameter<'a>>,
+    identifier: &'a str,
+    return_type: DataType<'a>,
+    block: BoundBlock<'a>,
+    parameters: Vec<BoundParameter<'a>>,
+}
+
+impl<'a> BoundFunction<'a> {
+    pub fn identifier(&self) -> &'a str {
+        self.identifier
+    }
+    pub fn return_type(&self) -> &DataType<'a> {
+        &self.return_type
+    }
+    pub fn block(&self) -> &BoundBlock<'a> {
+        &self.block
+    }
+    pub fn parameters(&self) -> &Vec<BoundParameter<'a>> {
+        &self.parameters
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -100,23 +105,62 @@ pub struct BoundBlock<'a> {
 
 #[derive(Clone, Debug)]
 pub struct BoundVariable<'a> {
-    position: (u32, u32),
+    /// Returns the absolute position of the variable in the scope. The absolute position
+    /// is the position relative to the base pointer. The first variable has the position 0, the
+    /// second has a position of `((first_variable_size - 1) / 4) + 1` - in essence if the size of
+    /// the first variable is 1...4 bytes, then the position is 1, if the size is 5...8 bytes, then
+    /// the position is 2, and so on. This is because the PL/0 machine has a word size of 4 bytes
+    /// and if we want to store something larger than that we have to store multiple words.
+    position_in_scope: u32,
     identifier: &'a str,
     data_type: DataType<'a>,
+    size: usize,
     value: Option<Expression<'a>>,
-    initialized: bool,
 }
 
 impl<'a> BoundVariable<'a> {
+    fn new(variable: &Variable<'a>, expression: Option<&Expression<'a>>) -> Self {
+        let identifier = variable.identifier.clone();
+        let size = variable.data_type.size();
+        let data_type = variable.data_type.clone();
+        return if let Some(expression) = expression {
+            BoundVariable {
+                position_in_scope: 0,
+                identifier,
+                size,
+                data_type,
+                value: Some(expression.clone()),
+            }
+        } else {
+            BoundVariable {
+                position_in_scope: 0,
+                identifier,
+                size,
+                data_type,
+                value: None,
+            }
+        };
+    }
+
+    pub fn initialized(&self) -> bool {
+        self.value.is_some()
+    }
+
     pub fn size(&self) -> usize {
-        match self.data_type {
-            DataType::Xxlpp => size_of::<i64>(),
-            DataType::Pp => size_of::<i32>(),
-            DataType::Spp => size_of::<i16>(),
-            DataType::Xspp => size_of::<i8>(),
-            DataType::P => size_of::<char>(),
-            _ => panic!(""),
-        }
+        self.data_type.size()
+    }
+
+    pub fn position_in_scope(&self) -> u32 {
+        self.position_in_scope
+    }
+    pub fn identifier(&self) -> &'a str {
+        self.identifier
+    }
+    pub fn data_type(&self) -> &DataType<'a> {
+        &self.data_type
+    }
+    pub fn value(&self) -> &Option<Expression<'a>> {
+        &self.value
     }
 }
 
@@ -139,6 +183,10 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             error_diag,
             emitter,
         }
+    }
+
+    fn is_in_function_scope(&self) -> bool {
+        self.function_scopes.borrow().last().is_some()
     }
 
     pub fn analyze(&mut self, translation_unit: TranslationUnit<'a>) {
@@ -194,14 +242,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 }
 
                 let mut ref_mut = self.function_scopes.borrow_mut();
-                let mut function_scope = ref_mut.last_mut().unwrap();
-                let bound_var = BoundVariable {
-                    position: variable.position,
-                    identifier: variable.identifier,
-                    value: None,
-                    initialized: false,
-                    data_type: variable.data_type.clone(),
-                };
+                let function_scope = ref_mut.last_mut().unwrap();
+                let bound_var = BoundVariable::new(variable, None);
                 dbg!(&bound_var);
                 function_scope.scope.push_variable(bound_var);
             }
@@ -218,6 +260,18 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     return;
                 }
 
+                let data_type = self.eval(&expression);
+                let mut matching_data_type = false;
+                if let DataType::Number(..) = data_type {
+                    if let DataType::Number(..) = variable.data_type {
+                        matching_data_type = true;
+                    }
+                }
+                if !matching_data_type {
+                    matching_data_type = data_type == variable.data_type;
+                }
+                assert!(matching_data_type, "Data types do not match");
+
                 if self.eval(&expression) != variable.data_type {
                     self.error_diag.borrow_mut().invalid_type(
                         variable.position.0,
@@ -226,13 +280,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     );
                 }
                 dbg!(&expression);
-                let bound_var = BoundVariable {
-                    position: variable.position,
-                    identifier: variable.identifier.clone(),
-                    data_type: variable.data_type.clone(),
-                    value: Some(expression.clone()),
-                    initialized: true,
-                };
+                let bound_var = BoundVariable::new(variable, Some(expression));
                 self.function_scopes
                     .borrow_mut()
                     .last_mut()
@@ -247,7 +295,9 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
 
     pub fn eval(&self, expr: &Expression<'a>) -> DataType<'a> {
         return match expr {
-            Expression::PpExpression { .. } => DataType::Pp,
+            Expression::NumberExpression { number_type, .. } => {
+                DataType::Number(number_type.clone())
+            }
             Expression::PExpression { .. } => DataType::P,
             Expression::BoobaExpression { .. } => DataType::Booba,
             Expression::YarnExpression { .. } => DataType::Yarn,
@@ -259,14 +309,12 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                         _ => panic!("Invalid type for unary operator"),
                     },
                     UnaryOperator::Negate => match data_type {
-                        DataType::Xxlpp | DataType::Pp | DataType::Spp | DataType::Xspp => {
-                            data_type
-                        }
+                        DataType::Number(..) => data_type,
                         _ => panic!("Invalid type for unary operator"),
                     },
                 };
             }
-            Expression::BinaryExpression { lhs, rhs, op, .. } => {
+            Expression::BinaryExpression { lhs, rhs, .. } => {
                 let lhs_data_type = self.eval(lhs);
                 let rhs_data_type = self.eval(rhs);
                 assert_eq!(lhs_data_type, rhs_data_type, "Data types do not match");
@@ -274,7 +322,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 lhs_data_type
             }
             Expression::IdentifierExpression { identifier, .. } => {
-                let mut function_scopes = self.function_scopes.borrow_mut();
+                let function_scopes = self.function_scopes.borrow_mut();
                 let current_function_scope = function_scopes.last().unwrap();
                 if let Some(variable) = current_function_scope.scope.get_variable(identifier) {
                     return variable.data_type.clone();
@@ -296,35 +344,29 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         let statements = &translation_unit.global_statements;
 
         for statement in statements {
-            if let variable = match statement {
+            let variable = match statement {
                 Statement::VariableDeclaration { variable } => variable,
                 Statement::VariableDeclarationAndAssignment { variable, .. } => variable,
                 _ => {
                     panic!("Invalid statement type")
                 }
-            } {
-                let identifier = variable.identifier;
-                if self.global_scope.borrow().scope.has_variable(&identifier) {
-                    self.error_diag.borrow_mut().variable_already_exists(
-                        variable.position.0,
-                        variable.position.1,
-                        identifier,
-                    );
-                }
+            };
 
-                let bound_var = BoundVariable {
-                    position: variable.position,
+            let identifier = variable.identifier;
+            if self.global_scope.borrow().scope.has_variable(&identifier) {
+                self.error_diag.borrow_mut().variable_already_exists(
+                    variable.position.0,
+                    variable.position.1,
                     identifier,
-                    value: None,
-                    initialized: false,
-                    data_type: variable.data_type.clone(),
-                };
-                dbg!(&bound_var);
-                self.global_scope
-                    .borrow_mut()
-                    .scope
-                    .push_variable(bound_var);
+                );
             }
+
+            let bound_var = BoundVariable::new(variable, None);
+            dbg!(&bound_var);
+            self.global_scope
+                .borrow_mut()
+                .scope
+                .push_variable(bound_var);
         }
 
         for function in functions {

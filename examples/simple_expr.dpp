@@ -1,5 +1,9 @@
+p -> asd = 'A';
 pp -> testt = 1 + 2 + 3*2;
 pp -> test = 1 + 2 + 3*200000;
+pp -> b = 1 + 2 + 3*6;
+pp -> c = 1 + 2 + 3*5;
+pp -> d = 1 + 2 + 3*4;
 pp -> aa = test + 5;
 # TODO: Add an expression for this.
 # p -> a = 'a';
