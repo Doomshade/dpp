@@ -13,8 +13,8 @@ pub enum Address {
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Address::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
-            Address::Label(label) => write!(f, "@{label} ")?,
+            Self::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
+            Self::Label(label) => write!(f, "@{label} ")?,
         };
 
         Ok(())
@@ -24,20 +24,20 @@ impl Display for Address {
 #[derive(Clone, Debug)]
 pub enum Instruction {
     /// Push the literal value arg onto the stack.
-    LIT {
+    Literal {
         value: i32,
     },
     /// Return from a subroutine. This instruction uses the stack frame (or block mark) from the current invocation of the subroutine to clear the stack of all data local to the current subroutine, restore the base register, and restore the program counter. Like all operations which require no arguments, it uses the op code OPR, with a second argument (here zero) indicating which of the zero-argument operations to perform.
-    OPR {
+    Operation {
         operation: Operation,
     },
     /// Load (i.e. push onto the stack) the value of the cell identified by level and offset. A level value of 0 means the variable is in the currently executing procedure; 1 means it's in the immediately enclosing region of the program. 2 means it's the region outside that (in PL/0 as in Pascal procedures can nest indefinitely). The offset distinguishes among the variables declared at that level.
-    LOD {
+    Load {
         level: u32,
         offset: i32,
     },
     /// Store the value currently at the top of the stack to the memory cell identified by level and offset, popping the value off the stack in the process.
-    STO {
+    Store {
         level: u32,
         offset: i32,
     },
@@ -46,24 +46,24 @@ pub enum Instruction {
     ///     the base address for variables, level blocks down on the stack (so that variables in outer blocks can be referred to and modified)
     ///     the current base address (so that it can be restored when the subroutine returns)
     ///     the current program counter (so that it can be restored when the subroutine returns)
-    CAL {
+    Call {
         level: u32,
         address: Address,
     },
-    RET,
-    INT {
+    Return,
+    Int {
         size: i32,
     },
     /// Jump to the instruction at address.
-    JMP {
+    Jump {
         address: Address,
     },
     /// Pop the current value from the top of the stack. If it's 0 (false), jump to the instruction at address. Otherwise, continue with the current location of the program counter.
-    JMC {
+    Jmc {
         address: Address,
     },
     // TODO: Those aren't instructions! Make a new enum.
-    DBG {
+    Dbg {
         debug_keyword: DebugKeyword,
     },
     Label(String),
@@ -71,7 +71,7 @@ pub enum Instruction {
 
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
         // or, alternatively:
         // fmt::Debug::fmt(self, f)
     }
@@ -109,12 +109,12 @@ pub enum Operation {
 
 #[derive(Clone, Debug)]
 pub enum DebugKeyword {
-    REGS,
-    STK,
-    STKA,
-    STKRG { start: u32, end: u32 },
-    STKN { amount: u32 },
-    ECHO { message: &'static str },
+    Registers,
+    Stack,
+    StackA,
+    StackRg { start: u32, end: u32 },
+    StackN { amount: u32 },
+    Echo { message: &'static str },
 }
 
 pub struct Emitter<'a, T>
@@ -150,76 +150,68 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
-        self.emit_instruction(Instruction::DBG { debug_keyword });
+        self.emit_instruction(Instruction::Dbg { debug_keyword });
     }
 
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
         match expression {
-            Expression::NumberExpression { value, .. } => {
-                self.emit_instruction(Instruction::LIT { value: *value })
+            Expression::Number { value, .. } => {
+                self.emit_instruction(Instruction::Literal { value: *value });
             }
-            Expression::PExpression { value: p, .. } => {
-                self.emit_instruction(Instruction::LIT { value: *p as i32 });
+            Expression::P { value: p, .. } => {
+                self.emit_instruction(Instruction::Literal { value: *p as i32 });
             }
-            Expression::BoobaExpression { booba, .. } => {
-                self.emit_instruction(Instruction::LIT {
-                    value: *booba as i32,
+            Expression::Booba { booba, .. } => {
+                self.emit_instruction(Instruction::Literal {
+                    value: i32::from(*booba),
                 });
             }
-            Expression::YarnExpression { yarn, .. } => {
-                self.emit_instruction(Instruction::LIT {
+            Expression::Yarn { yarn, .. } => {
+                self.emit_instruction(Instruction::Literal {
                     value: yarn.len() as i32,
                 });
                 let vec = Self::pack_yarn(yarn);
                 for four_packed_chars in vec {
-                    self.emit_instruction(Instruction::LIT {
+                    self.emit_instruction(Instruction::Literal {
                         value: four_packed_chars,
                     });
                 }
             }
-            Expression::UnaryExpression { .. } => {}
-            Expression::BinaryExpression { lhs, rhs, op, .. } => {
+            Expression::Binary { lhs, rhs, op, .. } => {
                 self.emit_expression(lhs);
                 self.emit_expression(rhs);
                 match op {
                     BinaryOperator::Add => {
-                        self.emit_instruction(Instruction::OPR {
+                        self.emit_instruction(Instruction::Operation {
                             operation: Operation::Add,
                         });
                     }
                     BinaryOperator::Subtract => {
-                        self.emit_instruction(Instruction::OPR {
+                        self.emit_instruction(Instruction::Operation {
                             operation: Operation::Subtract,
                         });
                     }
                     BinaryOperator::Multiply => {
-                        self.emit_instruction(Instruction::OPR {
+                        self.emit_instruction(Instruction::Operation {
                             operation: Operation::Multiply,
                         });
                     }
-                    BinaryOperator::Divide => {}
-                    BinaryOperator::NotEqual => {}
-                    BinaryOperator::Equal => {}
-                    BinaryOperator::GreaterThan => {}
-                    BinaryOperator::GreaterThanOrEqual => {}
-                    BinaryOperator::LessThan => {}
-                    BinaryOperator::LessThanOrEqual => {}
+                    _ => {}
                 }
             }
-            Expression::IdentifierExpression { identifier, .. } => {
+            Expression::Identifier { identifier, .. } => {
                 let var_loc;
                 {
                     let global_scope = self.global_scope.borrow();
                     var_loc = global_scope
                         .scope()
                         .get_variable(identifier)
-                        .expect(format!("Unknown variable {identifier}").as_str())
+                        .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
                         .position_in_scope();
-                    dbg!(&var_loc);
                 }
-                self.emit_debug_info(DebugKeyword::STK);
+                self.emit_debug_info(DebugKeyword::Stack);
                 self.load(0, var_loc as i32, 4);
-                self.emit_debug_info(DebugKeyword::STK);
+                self.emit_debug_info(DebugKeyword::Stack);
             }
             Expression::FunctionCall {
                 arguments,
@@ -229,25 +221,24 @@ impl<'a, T: Write> Emitter<'a, T> {
                 for argument in arguments {
                     self.emit_expression(argument);
                 }
-                self.emit_instruction(Instruction::CAL {
+                self.emit_instruction(Instruction::Call {
                     level: 1,
                     address: Address::Label(String::from(*identifier)),
                 });
             }
-            Expression::AssignmentExpression { .. } => {}
-            Expression::InvalidExpression => {}
+            _ => todo!("Not implemented"),
         }
     }
 
     pub fn emit_main_call(&mut self) {
-        self.emit_instruction(Instruction::CAL {
+        self.emit_instruction(Instruction::Call {
             level: 0,
             address: Address::Label(String::from("main")),
         });
     }
 
     pub fn emit_function_call(&mut self, name: &str) {
-        self.emit_instruction(Instruction::CAL {
+        self.emit_instruction(Instruction::Call {
             level: 1,
             address: Address::Label(String::from(name)),
         });
@@ -262,14 +253,14 @@ impl<'a, T: Write> Emitter<'a, T> {
         let mut vec: Vec<i32> = Vec::with_capacity((yarn.len() / 4) + 1);
         for chunk in yarn.as_bytes().chunks(4) {
             let packed_chars = match chunk.len() {
-                1 => chunk[0] as i32,
-                2 => (chunk[1] as i32) << 8 | (chunk[0] as i32),
-                3 => (chunk[2] as i32) << 16 | (chunk[1] as i32) << 8 | (chunk[0] as i32),
+                1 => i32::from(chunk[0]),
+                2 => i32::from(chunk[1]) << 8 | i32::from(chunk[0]),
+                3 => i32::from(chunk[2]) << 16 | i32::from(chunk[1]) << 8 | i32::from(chunk[0]),
                 4 => {
-                    (chunk[3] as i32) << 24
-                        | (chunk[2] as i32) << 16
-                        | (chunk[1] as i32) << 8
-                        | (chunk[0] as i32)
+                    i32::from(chunk[3]) << 24
+                        | i32::from(chunk[2]) << 16
+                        | i32::from(chunk[1]) << 8
+                        | i32::from(chunk[0])
                 }
                 _ => unreachable!(),
             };
@@ -314,7 +305,7 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     fn load(&mut self, level: u32, offset: i32, size: usize) {
         for i in 0..size / PL0_DATA_SIZE {
-            self.emit_instruction(Instruction::LOD {
+            self.emit_instruction(Instruction::Load {
                 level,
                 offset: offset + i as i32, // Load 4 bytes at a time.
             });
@@ -323,7 +314,7 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     fn store(&mut self, level: u32, offset: i32, size: usize) {
         for i in 0..size / PL0_DATA_SIZE {
-            self.emit_instruction(Instruction::STO {
+            self.emit_instruction(Instruction::Store {
                 level,
                 offset: offset + i as i32 * PL0_DATA_SIZE as i32, // Store 4 bytes at a time.
             });
@@ -343,67 +334,67 @@ impl<'a, T: Write> Emitter<'a, T> {
     pub fn emit_all(&mut self) -> std::io::Result<()> {
         for instruction in &self.code {
             match instruction {
-                Instruction::LOD { level, offset } => {
+                Instruction::Load { level, offset } => {
                     self.writer
-                        .write(format!("LOD {} {}\r\n", level, offset).as_bytes())?;
+                        .write_all(format!("LOD {level} {offset}\r\n").as_bytes())?;
                 }
-                Instruction::STO { level, offset } => {
+                Instruction::Store { level, offset } => {
                     self.writer
-                        .write(format!("STO {} {}\r\n", level, offset).as_bytes())?;
+                        .write_all(format!("STO {level} {offset}\r\n").as_bytes())?;
                 }
-                Instruction::LIT { value } => {
+                Instruction::Literal { value } => {
                     self.writer
-                        .write(format!("LIT 0 {}\r\n", value).as_bytes())?;
+                        .write_all(format!("LIT 0 {value}\r\n").as_bytes())?;
                 }
-                Instruction::JMP { address } => {
-                    let str = format!("JMP 0 {}\r\n", address);
-                    self.writer.write(str.as_bytes())?;
+                Instruction::Jump { address } => {
+                    let str = format!("JMP 0 {address}\r\n");
+                    self.writer.write_all(str.as_bytes())?;
                 }
-                Instruction::JMC { address } => {
+                Instruction::Jmc { address } => {
                     self.writer
-                        .write(format!("JMC 0 {}\r\n", address).as_bytes())?;
+                        .write_all(format!("JMC 0 {address}\r\n").as_bytes())?;
                 }
-                Instruction::CAL { level, address } => {
+                Instruction::Call { level, address } => {
                     self.writer
-                        .write(format!("CAL {} {}\r\n", level, address).as_bytes())?;
+                        .write_all(format!("CAL {level} {address}\r\n").as_bytes())?;
                 }
-                Instruction::OPR { operation } => {
+                Instruction::Operation { operation } => {
                     // Stupid usage of clone because we get the reference to the enum.
                     self.writer
-                        .write(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
+                        .write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
                 }
-                Instruction::RET => {
-                    self.writer.write(b"RET 0 0\r\n")?;
+                Instruction::Return => {
+                    self.writer.write_all(b"RET 0 0\r\n")?;
                 }
-                Instruction::INT { size } => {
+                Instruction::Int { size } => {
                     self.writer
-                        .write(format!("INT 0 {}\r\n", size).as_bytes())?;
+                        .write_all(format!("INT 0 {size}\r\n").as_bytes())?;
                 }
-                Instruction::DBG { debug_keyword } => match debug_keyword {
-                    DebugKeyword::REGS => {
-                        self.writer.write(b"&REGS\r\n")?;
+                Instruction::Dbg { debug_keyword } => match debug_keyword {
+                    DebugKeyword::Registers => {
+                        self.writer.write_all(b"&REGS\r\n")?;
                     }
-                    DebugKeyword::STK => {
-                        self.writer.write(b"&STK\r\n")?;
+                    DebugKeyword::Stack => {
+                        self.writer.write_all(b"&STK\r\n")?;
                     }
-                    DebugKeyword::STKA => {
-                        self.writer.write(b"&STKA\r\n")?;
+                    DebugKeyword::StackA => {
+                        self.writer.write_all(b"&STKA\r\n")?;
                     }
-                    DebugKeyword::STKRG { start, end } => {
+                    DebugKeyword::StackRg { start, end } => {
                         self.writer
-                            .write(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+                            .write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
                     }
-                    DebugKeyword::STKN { amount } => {
+                    DebugKeyword::StackN { amount } => {
                         self.writer
-                            .write(format!("&STKN {amount}\r\n").as_bytes())?;
+                            .write_all(format!("&STKN {amount}\r\n").as_bytes())?;
                     }
-                    DebugKeyword::ECHO { message } => {
+                    DebugKeyword::Echo { message } => {
                         self.writer
-                            .write(format!("&ECHO {message}\r\n").as_bytes())?;
+                            .write_all(format!("&ECHO {message}\r\n").as_bytes())?;
                     }
                 },
                 Instruction::Label(label) => {
-                    self.writer.write(format!("@{label} ").as_bytes())?;
+                    self.writer.write_all(format!("@{label} ").as_bytes())?;
                 }
             }
         }
@@ -417,21 +408,21 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
     pub fn emit_statement(&mut self, statement: &Statement<'a>) {
         match statement {
-            Statement::ExpressionStatement { expression, .. } => {
+            Statement::Expression { expression, .. } => {
                 self.emit_expression(expression);
             }
             Statement::VariableDeclaration { .. } => {}
             Statement::VariableDeclarationAndAssignment { expression, .. } => {
                 self.emit_expression(expression);
-                self.emit_debug_info(DebugKeyword::STK);
+                self.emit_debug_info(DebugKeyword::Stack);
             }
-            Statement::ByeStatement { expression, .. } => {
+            Statement::Bye { expression, .. } => {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
                 }
-                self.emit_debug_info(DebugKeyword::REGS);
-                self.emit_debug_info(DebugKeyword::STK);
-                self.emit_instruction(Instruction::RET);
+                self.emit_debug_info(DebugKeyword::Registers);
+                self.emit_debug_info(DebugKeyword::Stack);
+                self.emit_instruction(Instruction::Return);
                 // Don't emit RET. The function `emit_function` will handle this
                 // because in case of main function we want to JMP 0 0 instead of RET 0 0.
             }

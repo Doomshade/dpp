@@ -60,10 +60,6 @@ impl<'a> GlobalScope<'a> {
     pub fn get_function(&self, identifier: &str) -> Option<&BoundFunction<'a>> {
         self.functions.get(identifier)
     }
-
-    fn has_function(&self, identifier: &str) -> bool {
-        self.functions.contains_key(identifier)
-    }
 }
 
 pub struct SemanticAnalyzer<'a, 'b, T>
@@ -127,7 +123,7 @@ impl<'a> BoundVariable<'a> {
         let identifier = variable.identifier.clone();
         let size = variable.data_type.size();
         let data_type = variable.data_type.clone();
-        return if let Some(expression) = expression {
+        if let Some(expression) = expression {
             BoundVariable {
                 position_in_scope: 0,
                 identifier,
@@ -143,7 +139,7 @@ impl<'a> BoundVariable<'a> {
                 data_type,
                 value: None,
             }
-        };
+        }
     }
 
     pub fn initialized(&self) -> bool {
@@ -200,11 +196,11 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 self.analyze_global_statement(statement);
             }
 
-            self.emitter.emit_debug_info(DebugKeyword::REGS);
+            self.emitter.emit_debug_info(DebugKeyword::Registers);
             self.emitter.emit_main_call();
 
             // The last instruction will be the JMP to 0 - indicating exit.
-            self.emitter.emit_instruction(Instruction::JMP {
+            self.emitter.emit_instruction(Instruction::Jump {
                 address: Address::Absolute(0),
             });
 
@@ -219,25 +215,18 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     fn analyze_function(&mut self, function: &Function<'a>) {
         self.begin_function(&function);
         {
-            self.emitter.emit_instruction(Instruction::INT { size: 3 });
+            self.emitter.emit_instruction(Instruction::Int { size: 3 });
             for statement in &function.block.statements {
                 self.analyze_statement(statement);
-                self.emitter.emit_debug_info(DebugKeyword::REGS);
-                self.emitter.emit_debug_info(DebugKeyword::STK);
+                self.emitter.emit_debug_info(DebugKeyword::Registers);
+                self.emitter.emit_debug_info(DebugKeyword::Stack);
             }
             if function.return_type != DataType::Nopp {
                 // If it's anything other than Nopp, then we require the function to have
                 // a return statement at the very end.
                 let last_statement = function.block.statements.last();
-                if let Some(last_statement) = last_statement {
-                    if let Statement::ByeStatement { .. } = last_statement {
-                        // Do nothing.
-                    } else {
-                        self.error_diag.borrow_mut().missing_return_statement(
-                            function.block.position.0,
-                            function.block.position.1,
-                        );
-                    }
+                if let Some(Statement::Bye { .. }) = last_statement {
+                    // Do nothing.
                 } else {
                     self.error_diag.borrow_mut().missing_return_statement(
                         function.block.position.0,
@@ -255,7 +244,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 variable,
                 expression,
             } => {
-                if self.has_variable_in_scope(&variable.identifier) {
+                if self.has_variable_in_scope(variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -264,7 +253,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     return;
                 }
 
-                let data_type = self.eval(&expression);
+                let data_type = self.eval(expression);
                 let mut matching_data_type = false;
                 if let DataType::Number(..) = data_type {
                     if let DataType::Number(..) = variable.data_type {
@@ -276,20 +265,20 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 }
                 assert!(matching_data_type, "Data types do not match");
 
-                if self.eval(&expression) != variable.data_type {
+                if self.eval(expression) != variable.data_type {
                     self.error_diag.borrow_mut().invalid_type(
                         variable.position.0,
                         variable.position.1,
                         variable.identifier,
                     );
                 }
-                dbg!(&expression);
+                dbg!(expression);
                 let bound_var = BoundVariable::new(variable, Some(expression));
                 self.global_scope.borrow_mut().push_variable(bound_var);
             }
             _ => {}
         }
-        self.emitter.emit_statement(&statement);
+        self.emitter.emit_statement(statement);
     }
 
     fn has_variable_in_scope(&self, identifier: &str) -> bool {
@@ -303,7 +292,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.has_variable_in_scope(&variable.identifier) {
+                if self.has_variable_in_scope(variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -321,7 +310,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 variable,
                 expression,
             } => {
-                if self.has_variable_in_scope(&variable.identifier) {
+                if self.has_variable_in_scope(variable.identifier) {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position.0,
                         variable.position.1,
@@ -330,7 +319,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     return;
                 }
 
-                let data_type = self.eval(&expression);
+                let data_type = self.eval(expression);
                 let mut matching_data_type = false;
                 if let DataType::Number(..) = data_type {
                     if let DataType::Number(..) = variable.data_type {
@@ -342,7 +331,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 }
                 assert!(matching_data_type, "Data types do not match");
 
-                if self.eval(&expression) != variable.data_type {
+                if self.eval(expression) != variable.data_type {
                     self.error_diag.borrow_mut().invalid_type(
                         variable.position.0,
                         variable.position.1,
@@ -358,23 +347,21 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     .scope
                     .push_variable(bound_var);
             }
-            Statement::ExpressionStatement { expression, .. } => {
+            Statement::Expression { expression, .. } => {
                 self.emitter.emit_expression(expression);
             }
             _ => {}
         }
-        self.emitter.emit_statement(&statement);
+        self.emitter.emit_statement(statement);
     }
 
     pub fn eval(&self, expr: &Expression<'a>) -> DataType<'a> {
         return match expr {
-            Expression::NumberExpression { number_type, .. } => {
-                DataType::Number(number_type.clone())
-            }
-            Expression::PExpression { .. } => DataType::P,
-            Expression::BoobaExpression { .. } => DataType::Booba,
-            Expression::YarnExpression { .. } => DataType::Yarn,
-            Expression::UnaryExpression { operand, op, .. } => {
+            Expression::Number { number_type, .. } => DataType::Number(number_type.clone()),
+            Expression::P { .. } => DataType::P,
+            Expression::Booba { .. } => DataType::Booba,
+            Expression::Yarn { .. } => DataType::Yarn,
+            Expression::Unary { operand, op, .. } => {
                 let data_type = self.eval(operand);
                 return match op {
                     UnaryOperator::Not => match data_type {
@@ -387,14 +374,14 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     },
                 };
             }
-            Expression::BinaryExpression { lhs, rhs, .. } => {
+            Expression::Binary { lhs, rhs, .. } => {
                 let lhs_data_type = self.eval(lhs);
                 let rhs_data_type = self.eval(rhs);
                 assert_eq!(lhs_data_type, rhs_data_type, "Data types do not match");
                 // TODO: Check whether the binary operator is available for the given data type.
                 lhs_data_type
             }
-            Expression::IdentifierExpression { identifier, .. } => {
+            Expression::Identifier { identifier, .. } => {
                 let function_scopes = self.function_scopes.borrow_mut();
                 if let Some(current_function_scope) = function_scopes.last() {
                     if let Some(variable) = current_function_scope.scope.get_variable(identifier) {
@@ -405,16 +392,14 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     self.global_scope.borrow().scope.get_variable(identifier)
                 {
                     return global_variable.data_type.clone();
-                } else {
-                    panic!("Variable not found");
                 }
+                panic!("Variable not found");
             }
             Expression::FunctionCall { identifier, .. } => {
                 if let Some(global_function) = self.global_scope.borrow().get_function(identifier) {
                     return global_function.return_type.clone();
-                } else {
-                    panic!("Function not found");
                 }
+                panic!("Function not found");
             }
             _ => DataType::Nopp,
         };

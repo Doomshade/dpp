@@ -78,70 +78,70 @@ pub enum Statement<'a> {
         variable: Variable<'a>,
         expression: Expression<'a>,
     },
-    IfStatement {
+    If {
         position: (u32, u32),
         expression: Expression<'a>,
         statement: Box<Statement<'a>>,
     },
-    IfElseStatement {
+    IfElse {
         position: (u32, u32),
         expression: Expression<'a>,
         statement: Box<Statement<'a>>,
         else_statement: Box<Statement<'a>>,
     },
-    ByeStatement {
+    Bye {
         position: (u32, u32),
         expression: Option<Expression<'a>>,
     },
-    PrintStatement {
+    Print {
         position: (u32, u32),
         print_function: fn(&str),
         expression: Expression<'a>,
     },
-    BlockStatement {
+    Block {
         position: (u32, u32),
         block: Box<Block<'a>>,
     },
-    ExpressionStatement {
+    Expression {
         position: (u32, u32),
         expression: Expression<'a>,
     },
-    EmptyStatement {
+    Empty {
         position: (u32, u32),
     },
-    ForStatement {
+    For {
         position: (u32, u32),
         index_ident: &'a str,
         length_expression: Expression<'a>,
         statement: Box<Statement<'a>>,
     },
-    ForStatementWithIdentExpression {
+    ForWithIdentExpression {
         position: (u32, u32),
         ident: Expression<'a>,
         length_expression: Expression<'a>,
         statement: Box<Statement<'a>>,
     },
-    WhileStatement {
+    While {
         position: (u32, u32),
         expression: Expression<'a>,
         statement: Box<Statement<'a>>,
     },
-    DoWhileStatement {
+    DoWhile {
         position: (u32, u32),
         block: Block<'a>,
         expression: Expression<'a>,
     },
-    LoopStatement {
+    Loop {
         position: (u32, u32),
         block: Box<Block<'a>>,
     },
-    BreakStatement {
+    Break {
         position: (u32, u32),
     },
-    ContinueStatement {
+    Continue {
         position: (u32, u32),
     },
-    SwitchStatement {
+    Switch {
         position: (u32, u32),
         expression: Expression<'a>,
         cases: Vec<Case<'a>>,
@@ -154,7 +154,7 @@ pub struct Case<'a> {
     block: Box<Block<'a>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Number {
     Pp,
     Spp,
@@ -163,35 +163,36 @@ pub enum Number {
 
 #[derive(Clone, Debug)]
 pub enum Expression<'a> {
-    NumberExpression {
+    // TODO: Use LiteralExpression instead.
+    Number {
         position: (u32, u32),
         number_type: Number,
         value: i32,
     },
-    PExpression {
+    P {
         position: (u32, u32),
         value: char,
     },
-    BoobaExpression {
+    Booba {
         position: (u32, u32),
         booba: bool,
     },
-    YarnExpression {
+    Yarn {
         position: (u32, u32),
         yarn: &'a str,
     },
-    UnaryExpression {
+    Unary {
         position: (u32, u32),
         op: UnaryOperator,
         operand: Box<Expression<'a>>,
     },
-    BinaryExpression {
+    Binary {
         position: (u32, u32),
         lhs: Box<Expression<'a>>,
         op: BinaryOperator,
         rhs: Box<Expression<'a>>,
     },
-    IdentifierExpression {
+    Identifier {
         position: (u32, u32),
         identifier: &'a str,
     },
@@ -200,12 +201,12 @@ pub enum Expression<'a> {
         identifier: &'a str,
         arguments: Vec<Expression<'a>>,
     },
-    AssignmentExpression {
+    Assignment {
         position: (u32, u32),
         identifier: &'a str,
         expression: Box<Expression<'a>>,
     },
-    InvalidExpression,
+    Invalid,
 }
 
 #[derive(Debug, Clone)]
@@ -225,14 +226,14 @@ pub enum DataType<'a> {
 
 impl PartialEq for DataType<'_> {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (DataType::Number(..), DataType::Number(..)) => true,
-            (DataType::P, DataType::P) => true,
-            (DataType::Yarn, DataType::Yarn) => true,
-            (DataType::Booba, DataType::Booba) => true,
-            (DataType::Nopp, DataType::Nopp) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (DataType::Number(..), DataType::Number(..))
+                | (DataType::P, DataType::P)
+                | (DataType::Yarn, DataType::Yarn)
+                | (DataType::Booba, DataType::Booba)
+                | (DataType::Nopp, DataType::Nopp)
+        )
     }
 }
 
@@ -551,9 +552,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn parameter(&mut self) -> Option<Parameter<'a>> {
         let identifier = self.expect(TokenKind::Identifier)?;
-        dbg!(self.token());
         self.expect(TokenKind::Colon)?;
-        dbg!(self.token());
         let data_type = self.data_type()?;
         Some(Parameter {
             position: self.position,
@@ -603,14 +602,14 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if self.matches_token_kind(TokenKind::ElseKeyword) {
                     self.expect(TokenKind::ElseKeyword)?;
                     let else_statement = self.statement()?;
-                    Some(Statement::IfElseStatement {
+                    Some(Statement::IfElse {
                         position: self.position,
                         expression,
                         statement: Box::new(statement),
                         else_statement: Box::new(else_statement),
                     })
                 } else {
-                    Some(Statement::IfStatement {
+                    Some(Statement::If {
                         position: self.position,
                         expression,
                         statement: Box::new(statement),
@@ -633,7 +632,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let statement = self.statement()?;
 
                 if let Some(ident_expression) = ident_expression {
-                    return Some(Statement::ForStatementWithIdentExpression {
+                    return Some(Statement::ForWithIdentExpression {
                         position: self.position,
                         ident: ident_expression,
                         length_expression: expression,
@@ -641,7 +640,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     });
                 }
 
-                return Some(Statement::ForStatement {
+                return Some(Statement::For {
                     position: self.position,
                     index_ident: ident,
                     length_expression: expression,
@@ -655,7 +654,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::CloseParen)?;
                 let statement = self.statement()?;
 
-                return Some(Statement::WhileStatement {
+                return Some(Statement::While {
                     position: self.position,
                     expression,
                     statement: Box::new(statement),
@@ -669,7 +668,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::DoWhileStatement {
+                return Some(Statement::DoWhile {
                     position: self.position,
                     block,
                     expression,
@@ -678,7 +677,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::LoopKeyword => {
                 self.expect(TokenKind::LoopKeyword)?;
                 let block = self.block()?;
-                return Some(Statement::LoopStatement {
+                return Some(Statement::Loop {
                     position: self.position,
                     block: Box::new(block),
                 });
@@ -686,14 +685,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::BreakKeyword => {
                 self.expect(TokenKind::BreakKeyword)?;
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::BreakStatement {
+                return Some(Statement::Break {
                     position: self.position,
                 });
             }
             TokenKind::ContinueKeyword => {
                 self.expect(TokenKind::ContinueKeyword)?;
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::ContinueStatement {
+                return Some(Statement::Continue {
                     position: self.position,
                 });
             }
@@ -706,7 +705,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let mut cases = Vec::<Case<'a>>::new();
                 if self.matches_token_kind(TokenKind::CloseBrace) {
                     self.expect(TokenKind::CloseBrace)?;
-                    return Some(Statement::SwitchStatement {
+                    return Some(Statement::Switch {
                         position: self.position,
                         expression,
                         cases,
@@ -720,7 +719,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
 
                 self.expect(TokenKind::CloseBrace)?;
-                return Some(Statement::SwitchStatement {
+                return Some(Statement::Switch {
                     position: self.position,
                     expression,
                     cases,
@@ -729,7 +728,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::ByeKeyword => {
                 self.expect(TokenKind::ByeKeyword)?;
                 if let Some(expression) = self.expr() {
-                    let ret = Statement::ByeStatement {
+                    let ret = Statement::Bye {
                         position: self.position,
                         expression: Some(expression),
                     };
@@ -738,7 +737,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
 
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::ByeStatement {
+                return Some(Statement::Bye {
                     position: self.position,
                     expression: None,
                 });
@@ -750,7 +749,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::CloseParen)?;
                 self.expect(TokenKind::Semicolon)?;
 
-                return Some(Statement::PrintStatement {
+                return Some(Statement::Print {
                     position: self.position,
                     print_function: match token_kind {
                         TokenKind::PprintKeyword => Self::print,
@@ -762,7 +761,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::Semicolon => {
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::EmptyStatement {
+                return Some(Statement::Empty {
                     position: self.position,
                 });
             }
@@ -774,14 +773,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::Identifier => {
                 let expression = self.expr()?;
                 self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::ExpressionStatement {
+                return Some(Statement::Expression {
                     position: self.position,
                     expression,
                 });
             }
             TokenKind::OpenBrace => {
                 let block = self.block()?;
-                return Some(Statement::BlockStatement {
+                return Some(Statement::Block {
                     position: self.position,
                     block: Box::new(block),
                 });
@@ -908,7 +907,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.consume_token();
 
             let rhs = self.comp()?;
-            expr = Expression::BinaryExpression {
+            expr = Expression::Binary {
                 position: self.position,
                 lhs: Box::new(expr),
                 op,
@@ -937,7 +936,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.consume_token();
             let rhs = self.term()?;
 
-            expr = Expression::BinaryExpression {
+            expr = Expression::Binary {
                 position: self.position,
                 lhs: Box::new(expr),
                 op,
@@ -960,7 +959,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.consume_token();
             let rhs = self.factor()?;
 
-            expr = Expression::BinaryExpression {
+            expr = Expression::Binary {
                 position: self.position,
                 lhs: Box::new(expr),
                 op,
@@ -984,7 +983,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             };
             self.consume_token();
             let rhs = self.unary()?;
-            expr = Expression::BinaryExpression {
+            expr = Expression::Binary {
                 position: self.position,
                 lhs: Box::new(expr),
                 op,
@@ -1003,7 +1002,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             };
             self.consume_token();
             let operand = self.unary()?;
-            Some(Expression::UnaryExpression {
+            Some(Expression::Unary {
                 position: self.position,
                 op,
                 operand: Box::new(operand),
@@ -1029,13 +1028,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                     TokenKind::Equal => {
                         self.expect(TokenKind::Equal)?;
                         let expression = self.expr()?;
-                        Some(Expression::AssignmentExpression {
+                        Some(Expression::Assignment {
                             position: self.position,
                             identifier,
                             expression: Box::new(expression),
                         })
                     }
-                    _ => Some(Expression::IdentifierExpression {
+                    _ => Some(Expression::Identifier {
                         position: self.position,
                         identifier,
                     }),
@@ -1043,14 +1042,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::YemKeyword => {
                 self.expect(TokenKind::YemKeyword)?;
-                Some(Expression::BoobaExpression {
+                Some(Expression::Booba {
                     position: self.position,
                     booba: true,
                 })
             }
             TokenKind::NomKeyword => {
                 self.expect(TokenKind::NomKeyword)?;
-                Some(Expression::BoobaExpression {
+                Some(Expression::Booba {
                     position: self.position,
                     booba: false,
                 })
@@ -1058,7 +1057,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::Number => {
                 let number = self.expect(TokenKind::Number)?;
                 if let Ok(value) = number.parse::<i32>() {
-                    Some(Expression::NumberExpression {
+                    Some(Expression::Number {
                         position: self.position,
                         number_type: Number::Pp,
                         value,
@@ -1070,7 +1069,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::P => {
                 let char = self.expect(TokenKind::P)?;
                 if let Some(value) = char.chars().next() {
-                    Some(Expression::PExpression {
+                    Some(Expression::P {
                         position: self.position,
                         value,
                     })
@@ -1080,7 +1079,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::Yarn => {
                 let yarn = self.expect(TokenKind::Yarn)?;
-                Some(Expression::YarnExpression {
+                Some(Expression::Yarn {
                     position: self.position,
                     yarn,
                 })
@@ -1094,7 +1093,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             _ => {
                 self.add_error("expression");
                 // Return some here to let the callee handle this.
-                Some(Expression::InvalidExpression)
+                Some(Expression::Invalid)
             }
         }
     }

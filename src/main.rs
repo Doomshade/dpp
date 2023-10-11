@@ -76,8 +76,7 @@
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::fs::File;
-use std::io::Write;
+
 use std::process::{Command, Stdio};
 use std::{env, fs};
 
@@ -124,13 +123,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Lex -> parse -> analyze -> emit.
     // Pass error diag to each step.
     let tokens = lex(&file_contents, &error_diag)?;
-    dbg!(&tokens);
     let translation_unit = parse(tokens, &error_diag)?;
-    dbg!(&translation_unit);
+    const OUTPUT: &str = "out/dpp/test.pl0";
 
-    const OUTPUT: &'static str = "out/dpp/test.pl0";
-
-    analyze_and_emit::<File>(translation_unit, &error_diag, OUTPUT)?;
+    analyze_and_emit(translation_unit, &error_diag, OUTPUT)?;
     let child = Command::new("resources/pl0_interpret.exe")
         .args(["-a", "+d", "+l", "+i", "+t", "+s", OUTPUT])
         .stdout(Stdio::piped())
@@ -138,7 +134,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .spawn()?;
 
     let output = String::from_utf8(child.wait_with_output()?.stdout)?;
-    println!("{}", output);
+    println!("{output}");
     Ok(())
 }
 
@@ -162,7 +158,7 @@ fn parse<'a>(
     Ok(result)
 }
 
-fn analyze_and_emit<'a, T: Write>(
+fn analyze_and_emit<'a>(
     translation_unit: TranslationUnit<'a>,
     error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
     output: &str,
