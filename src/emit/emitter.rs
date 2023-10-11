@@ -336,7 +336,6 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
                 Instruction::JMP { address } => {
                     let str = format!("JMP 0 {}\r\n", address);
-                    dbg!(&str);
                     self.writer.write(str.as_bytes())?;
                 }
                 Instruction::JMC { address } => {
@@ -406,10 +405,13 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.emit_debug_info(DebugKeyword::STK);
             }
             Statement::ByeStatement { expression, .. } => {
-                // if let Some(expression) = expression {
-                //     self.emit_expression(expression);
-                // }
-                // self.emit_instruction(Instruction::RET);
+                if let Some(expression) = expression {
+                    self.emit_expression(expression);
+                }
+                self.emit_debug_info(DebugKeyword::REGS);
+                self.emit_debug_info(DebugKeyword::STK);
+                self.emit_instruction(Instruction::RET);
+                self.emit_debug_info(DebugKeyword::REGS);
                 self.emit_debug_info(DebugKeyword::STK);
             }
             _ => todo!("Emitting statement: {:#?}", statement),

@@ -40,13 +40,15 @@
         \alt `pprint' `(' <expr> `)' `;'
         \alt `pprintln' `(' <expr> `)' `;'
         \alt `;'
-        \alt <var-decl>
+        \alt <var-decl> `;'
         \alt <block>
         \alt <expr> `;'
 
         <case> ::= `case' <expr> `:' <block>
 
-        <var-decl> ::= <data-type> `->' <ident> [`=' <expr>] `;'
+        <var-decl> ::= <data-type> `->' <ident>
+
+        <var-decl-and-assign> ::= <var-decl> `=' <expr>
 
         <data-type> ::= `xxlpp' // long
         \alt `pp' // int

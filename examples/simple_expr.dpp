@@ -1,4 +1,4 @@
-p -> asd = 'A';
+p -> asd;
 pp -> testt = 1 + 2 + 3*2;
 pp -> test = 1 + 2 + 3*200000;
 pp -> b = 1 + 2 + 3*6;
@@ -11,12 +11,13 @@ pp -> aa = test + 5;
 
 FUNc test() -> pp {
     pp -> d = 1 + 2 + 3*4;
+    bye 0;
 }
 
 FUNc main() -> pp {
     pp -> d = 1 + 2 + 3*4;
     # pprintln(asd);
-    # bye 0;
+    bye 0;
 }
 
 # FUNc main(argc: pp, argv: yarn) -> pp {

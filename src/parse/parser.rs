@@ -58,7 +58,7 @@ pub struct Parameter<'a> {
 
 #[derive(Clone, Debug)]
 pub struct Block<'a> {
-    position: (u32, u32),
+    pub position: (u32, u32),
     pub statements: Vec<Statement<'a>>,
 }
 
@@ -563,6 +563,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn block(&mut self) -> Option<Block<'a>> {
+        let position = self.position;
         self.expect(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement<'a>>::new();
 
@@ -574,7 +575,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.expect(TokenKind::CloseBrace)?;
 
         Some(Block {
-            position: self.position,
+            position,
             statements,
         })
     }

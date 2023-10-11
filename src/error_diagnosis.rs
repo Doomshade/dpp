@@ -65,6 +65,10 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         }
     }
 
+    pub fn missing_return_statement(&mut self, row: u32, col: u32) {
+        self.insert_error_message(row, col, "Missing return statement.");
+    }
+
     pub fn handle(&mut self, error: &str) {
         self.handle_error_at(0, 0, error);
     }

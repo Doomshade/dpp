@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::emit::emitter::{Address, Emitter, Instruction};
+use crate::emit::emitter::{Address, DebugKeyword, Emitter, Instruction};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
     DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
@@ -200,8 +200,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 self.analyze_global_statement(statement);
             }
             // The last instruction will be the JMP to 0 - indicating exit.
-            self.emitter.emit_instruction(Instruction::CAL {
-                level: 1,
+            self.emitter.emit_debug_info(DebugKeyword::REGS);
+            self.emitter.emit_instruction(Instruction::JMP {
                 address: Address::Label(String::from("main")),
             });
 
@@ -219,6 +219,26 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     fn analyze_function(&mut self, function: Function<'a>) {
         self.begin_function(&function);
         {
+            if function.return_type != DataType::Nopp {
+                // If it's anything other than Nopp, then we require the function to have
+                // a return statement at the very end.
+                let last_statement = function.block.statements.last();
+                if let Some(last_statement) = last_statement {
+                    if let Statement::ByeStatement { .. } = last_statement {
+                        // Do nothing
+                    } else {
+                        self.error_diag.borrow_mut().missing_return_statement(
+                            function.block.position.0,
+                            function.block.position.1,
+                        );
+                    }
+                } else {
+                    self.error_diag.borrow_mut().missing_return_statement(
+                        function.block.position.0,
+                        function.block.position.1,
+                    );
+                }
+            }
             for statement in function.block.statements {
                 self.analyze_statement(statement);
             }
@@ -228,19 +248,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
 
     fn analyze_global_statement(&mut self, statement: Statement<'a>) {
         match &statement {
-            Statement::VariableDeclaration { variable } => {
-                if self.has_variable_in_scope(&variable.identifier) {
-                    self.error_diag.borrow_mut().variable_already_exists(
-                        variable.position.0,
-                        variable.position.1,
-                        variable.identifier,
-                    );
-                }
-
-                let bound_var = BoundVariable::new(variable, None);
-                dbg!(&bound_var);
-                self.global_scope.borrow_mut().push_variable(bound_var);
-            }
             Statement::VariableDeclarationAndAssignment {
                 variable,
                 expression,
