@@ -52,7 +52,7 @@ pub enum Instruction {
     },
     RET,
     INT {
-        size: u32,
+        size: i32,
     },
     /// Jump to the instruction at address.
     JMP {
@@ -221,15 +221,36 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.load(0, var_loc as i32, 4);
                 self.emit_debug_info(DebugKeyword::STK);
             }
-            Expression::FunctionCall { arguments, .. } => {
-                // TODO: Handle the error
+            Expression::FunctionCall {
+                arguments,
+                identifier,
+                ..
+            } => {
                 for argument in arguments {
                     self.emit_expression(argument);
                 }
+                self.emit_instruction(Instruction::CAL {
+                    level: 1,
+                    address: Address::Label(String::from(*identifier)),
+                });
             }
             Expression::AssignmentExpression { .. } => {}
             Expression::InvalidExpression => {}
         }
+    }
+
+    pub fn emit_main_call(&mut self) {
+        self.emit_instruction(Instruction::CAL {
+            level: 0,
+            address: Address::Label(String::from("main")),
+        });
+    }
+
+    pub fn emit_function_call(&mut self, name: &str) {
+        self.emit_instruction(Instruction::CAL {
+            level: 1,
+            address: Address::Label(String::from(name)),
+        });
     }
 
     fn get_variable_location(&self, identifier: &str) -> Option<u32> {
@@ -411,8 +432,8 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.emit_debug_info(DebugKeyword::REGS);
                 self.emit_debug_info(DebugKeyword::STK);
                 self.emit_instruction(Instruction::RET);
-                self.emit_debug_info(DebugKeyword::REGS);
-                self.emit_debug_info(DebugKeyword::STK);
+                // Don't emit RET. The function `emit_function` will handle this
+                // because in case of main function we want to JMP 0 0 instead of RET 0 0.
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };

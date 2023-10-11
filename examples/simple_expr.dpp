@@ -10,13 +10,15 @@ pp -> aa = test + 5;
 # yarn -> asd = "0000";
 
 FUNc test() -> pp {
-    pp -> d = 1 + 2 + 3*4;
+    pp -> d = 40000;
+    pp -> de = 50000;
     bye 0;
 }
 
 FUNc main() -> pp {
-    pp -> d = 1 + 2 + 3*4;
-    # pprintln(asd);
+    pp -> d = 120000;
+    pp -> de = 120000;
+    test();
     bye 0;
 }
 

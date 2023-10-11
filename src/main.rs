@@ -184,7 +184,7 @@ fn analyze_and_emit<'a, T: Write>(
         global_scope.clone(),
         emitter,
     );
-    analyzer.analyze(translation_unit);
+    analyzer.analyze(&translation_unit);
     error_diag.borrow().check_errors()?;
     Ok(())
 }
