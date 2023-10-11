@@ -12,6 +12,7 @@ pp -> aa = test + 5;
 FUNc test(bsd: pp) -> pp {
     pp -> d = test + 40000;
     pp -> de = 50000;
+    pp -> des = d + de;
     bye 0;
 }
 

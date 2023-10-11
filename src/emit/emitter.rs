@@ -114,7 +114,7 @@ pub enum DebugKeyword {
     StackA,
     StackRg { start: u32, end: u32 },
     StackN { amount: u32 },
-    Echo { message: &'static str },
+    Echo { message: String },
 }
 
 pub struct Emitter<'a, T>
@@ -217,6 +217,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                 for argument in arguments {
                     self.emit_expression(argument);
                 }
+                self.emit_debug_info(DebugKeyword::Echo {
+                    message: format!("Function call: {identifier}"),
+                });
                 self.emit_instruction(Instruction::Call {
                     level: 1,
                     address: Address::Label(String::from(*identifier)),
@@ -245,18 +248,11 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     pub fn emit_main_call(&mut self) {
         self.emit_debug_info(DebugKeyword::Echo {
-            message: "Calling main",
+            message: String::from("Calling main function."),
         });
         self.emit_instruction(Instruction::Call {
             level: 1,
             address: Address::Label(String::from("main")),
-        });
-    }
-
-    pub fn emit_function_call(&mut self, name: &str) {
-        self.emit_instruction(Instruction::Call {
-            level: 1,
-            address: Address::Label(String::from(name)),
         });
     }
 
