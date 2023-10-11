@@ -39,21 +39,8 @@ pub struct Function<'a> {
     pub position: (u32, u32),
     pub identifier: &'a str,
     pub return_type: DataType<'a>,
-    pub parameters: Vec<Parameter<'a>>,
+    pub parameters: Vec<Variable<'a>>,
     pub block: Block<'a>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Parameters<'a> {
-    position: (u32, u32),
-    parameters: Vec<Parameter<'a>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Parameter<'a> {
-    position: (u32, u32),
-    pub identifier: &'a str,
-    pub data_type: DataType<'a>,
 }
 
 #[derive(Clone, Debug)]
@@ -515,9 +502,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    fn params(&mut self) -> Option<Vec<Parameter<'a>>> {
+    fn params(&mut self) -> Option<Vec<Variable<'a>>> {
         self.expect(TokenKind::OpenParen)?;
-        let mut parameters = Vec::<Parameter<'a>>::new();
+        let mut parameters = Vec::<Variable<'a>>::new();
 
         // Check if the close parenthesis is present first,
         // then try to parse a parameter. If a parameter is present,
@@ -550,11 +537,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(parameters)
     }
 
-    fn parameter(&mut self) -> Option<Parameter<'a>> {
+    fn parameter(&mut self) -> Option<Variable<'a>> {
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
         let data_type = self.data_type()?;
-        Some(Parameter {
+        Some(Variable {
             position: self.position,
             identifier,
             data_type,

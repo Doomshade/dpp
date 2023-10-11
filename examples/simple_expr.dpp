@@ -9,8 +9,8 @@ pp -> aa = test + 5;
 # p -> a = 'a';
 # yarn -> asd = "0000";
 
-FUNc test() -> pp {
-    pp -> d = 40000;
+FUNc test(bsd: pp) -> pp {
+    pp -> d = test + 40000;
     pp -> de = 50000;
     bye 0;
 }
@@ -18,7 +18,8 @@ FUNc test() -> pp {
 FUNc main() -> pp {
     pp -> d = 120000;
     pp -> de = 120000;
-    test();
+    pp -> des = 5000;
+    test(123);
     bye 0;
 }
 

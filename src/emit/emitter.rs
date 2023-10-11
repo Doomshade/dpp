@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 
-use crate::parse::analysis::{BoundBlock, BoundFunction, FunctionScope, GlobalScope};
+use crate::parse::analysis::{BoundBlock, BoundVariable, FunctionScope, GlobalScope};
 use crate::parse::parser::{BinaryOperator, Expression, Statement};
 
 #[derive(Clone, Debug)]
@@ -149,6 +149,10 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
+    pub fn emit_jump(&mut self, address: Address) {
+        self.emit_instruction(Instruction::Jump { address });
+    }
+
     pub fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
         self.emit_instruction(Instruction::Dbg { debug_keyword });
     }
@@ -200,17 +204,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                let var_loc;
-                {
-                    let global_scope = self.global_scope.borrow();
-                    var_loc = global_scope
-                        .scope()
-                        .get_variable(identifier)
-                        .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
-                        .position_in_scope();
-                }
+                let (var_loc, level) = self.find_variable(identifier);
                 self.emit_debug_info(DebugKeyword::Stack);
-                self.load(0, var_loc as i32, 4);
+                self.load(level, var_loc as i32, 4);
                 self.emit_debug_info(DebugKeyword::Stack);
             }
             Expression::FunctionCall {
@@ -230,9 +226,29 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
+    fn find_variable(&self, identifier: &str) -> (u32, u32) {
+        if let Some(function_scope) = self.function_scopes.borrow().last() {
+            if let Some(variable) = function_scope.get_variable(identifier) {
+                return (0, variable.position_in_scope());
+            }
+        }
+
+        (
+            1,
+            self.global_scope
+                .borrow()
+                .get_variable(identifier)
+                .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
+                .position_in_scope(),
+        )
+    }
+
     pub fn emit_main_call(&mut self) {
+        self.emit_debug_info(DebugKeyword::Echo {
+            message: "Calling main",
+        });
         self.emit_instruction(Instruction::Call {
-            level: 0,
+            level: 1,
             address: Address::Label(String::from("main")),
         });
     }
@@ -245,7 +261,7 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     fn get_variable_location(&self, identifier: &str) -> Option<u32> {
-        self.global_scope.borrow().scope().get_variable(identifier);
+        self.global_scope.borrow().get_variable(identifier);
         Some(1)
     }
 
@@ -271,9 +287,17 @@ impl<'a, T: Write> Emitter<'a, T> {
         vec
     }
 
-    pub fn emit_function(&mut self, function: &BoundFunction<'a>) {
-        self.emit_label(function.identifier());
+    fn load(&mut self, level: u32, offset: i32, size: usize) {
+        for i in 0..size / PL0_DATA_SIZE {
+            self.emit_debug_info(DebugKeyword::Registers);
+            self.emit_instruction(Instruction::Load {
+                level,
+                offset: offset + i as i32, // Load 4 bytes at a time.
+            });
+        }
+    }
 
+    pub fn load_parameters(&mut self, parameters: &Vec<BoundVariable<'a>>) {
         // Load the parameters into the stack from the callee function.
         // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
         // To load them we have to get the total size of parameters and subtract it
@@ -289,26 +313,14 @@ impl<'a, T: Write> Emitter<'a, T> {
         // Load the variable at offset 8 (argv) and then subtract 8 from the offset.
         // The LOD function only loads 32 bits, so for anything bigger
         // than that we need to LOD again.
-        let parameters = function.parameters();
         let total_size = parameters
             .iter()
-            .fold(0, |acc, parameter| acc + parameter.data_type.size());
-        let mut curr_offset = total_size as i32;
+            .fold(0, |acc, parameter| acc + parameter.data_type().size());
+        let mut curr_offset = total_size as i32 - 1;
         for i in 0..parameters.len() {
-            let size = parameters[parameters.len() - i - 1].data_type.size();
+            let size = parameters[parameters.len() - i - 1].data_type().size();
             self.load(1, curr_offset, size);
             curr_offset -= size as i32;
-        }
-
-        self.emit_block(function.block());
-    }
-
-    fn load(&mut self, level: u32, offset: i32, size: usize) {
-        for i in 0..size / PL0_DATA_SIZE {
-            self.emit_instruction(Instruction::Load {
-                level,
-                offset: offset + i as i32, // Load 4 bytes at a time.
-            });
         }
     }
 

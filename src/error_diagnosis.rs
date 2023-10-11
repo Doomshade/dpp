@@ -109,6 +109,29 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(row, col, "Invalid number.");
     }
 
+    pub fn function_does_not_exist(&mut self, row: u32, col: u32) {
+        self.insert_error_message(row, col, "Function does not exist.");
+    }
+
+    pub fn invalid_number_of_arguments(
+        &mut self,
+        row: u32,
+        col: u32,
+        identifier: &str,
+        param_len: usize,
+        arg_len: usize,
+    ) {
+        self.insert_error_message(
+            row,
+            col,
+            format!(
+                "Invalid number of arguments for function \"{}\". Expected {}, got {}.",
+                identifier, param_len, arg_len
+            )
+            .as_str(),
+        );
+    }
+
     pub fn expected_one_of_token_error(
         &mut self,
         token: &Token<'a>,
