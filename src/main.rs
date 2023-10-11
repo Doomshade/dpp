@@ -167,7 +167,7 @@ fn analyze_and_emit<'a>(
     let writer = std::io::BufWriter::new(file);
 
     let function_scopes = std::rc::Rc::new(std::cell::RefCell::new(Vec::default()));
-    let global_scope = std::rc::Rc::new(std::cell::RefCell::new(GlobalScope::default()));
+    let global_scope = std::rc::Rc::new(std::cell::RefCell::new(GlobalScope::new()));
 
     let emitter = Emitter::new(
         writer,

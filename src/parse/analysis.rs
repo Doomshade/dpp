@@ -33,13 +33,19 @@ impl<'a> Scope<'a> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct FunctionScope<'a> {
     // TODO: Use Vec<Scope<'a>> because we allow nested scopes in functions.
     scope: Scope<'a>,
 }
 
 impl<'a> FunctionScope<'a> {
+    pub fn new() -> Self {
+        let mut scope = Scope::default();
+        scope.current_position += 3;
+        FunctionScope { scope }
+    }
+
     pub fn has_variable(&self, identifier: &str) -> bool {
         self.scope.has_variable(identifier)
     }
@@ -61,13 +67,21 @@ impl<'a> FunctionScope<'a> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct GlobalScope<'a> {
     scope: Scope<'a>,
     functions: HashMap<&'a str, BoundFunction<'a>>,
 }
 
 impl<'a> GlobalScope<'a> {
+    pub fn new() -> Self {
+        let mut scope = Scope::default();
+        scope.current_position = 1000;
+        GlobalScope {
+            scope,
+            functions: HashMap::new(),
+        }
+    }
     fn push_function(&mut self, function: BoundFunction<'a>) {
         self.functions.insert(function.identifier, function);
     }
@@ -298,10 +312,21 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 dbg!(expression);
                 let bound_var = BoundVariable::new(variable, Some(expression));
                 self.global_scope.borrow_mut().push_variable(bound_var);
+                self.emitter.emit_statement(statement);
+                self.emitter.store(
+                    0,
+                    self.global_scope
+                        .borrow()
+                        .get_variable(variable.identifier)
+                        .unwrap()
+                        .position_in_scope as i32,
+                    1,
+                );
             }
-            _ => {}
+            _ => {
+                self.emitter.emit_statement(statement);
+            }
         }
-        self.emitter.emit_statement(statement);
     }
 
     fn has_variable_in_local_function_scope(&self, identifier: &str) -> bool {
@@ -384,7 +409,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                             .function_does_not_exist(position.0, position.1);
                     }
                 }
-                self.emitter.emit_expression(expression);
             }
             _ => {}
         }
@@ -440,9 +464,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     }
 
     fn begin_function_scope(&mut self) {
-        self.function_scopes
-            .borrow_mut()
-            .push(FunctionScope::default());
+        self.function_scopes.borrow_mut().push(FunctionScope::new());
     }
 
     fn end_function_scope(&mut self) {
@@ -470,6 +492,9 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         self.emitter.emit_label(function.identifier);
         self.emitter.emit_instruction(Instruction::Int { size: 3 });
         self.load_parameters(&params);
+        self.emitter.emit_debug_info(DebugKeyword::Echo {
+            message: String::from("Loaded parameters"),
+        });
     }
 
     fn load_parameters(&mut self, parameters: &Vec<BoundVariable<'a>>) {
@@ -492,6 +517,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             .iter()
             .rev()
             .for_each(|parameter| self.push_local_function_variable(parameter.clone()));
+        self.emitter.load_parameters(parameters);
     }
 
     fn end_function(&mut self) {

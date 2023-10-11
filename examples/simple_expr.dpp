@@ -1,29 +1,36 @@
-p -> asd;
-pp -> testt = 1 + 2 + 3*2;
+p -> asd = '0';
+pp -> testt = 1 + 2 + 3*3;
 pp -> test = 1 + 2 + 3*200000;
 pp -> b = 1 + 2 + 3*6;
-pp -> c = 1 + 2 + 3*5;
-pp -> d = 1 + 2 + 3*4;
-pp -> aa = test + 5;
 # TODO: Add an expression for this.
 # p -> a = 'a';
 # yarn -> asd = "0000";
 
 FUNc test(bsd: pp) -> pp {
-    pp -> d = test + 40000;
+    pp -> d = bsd + 40000;
     pp -> de = 50000;
     pp -> des = d + de;
     bye 0;
 }
 
-FUNc main() -> pp {
-    pp -> d = 120000;
-    pp -> de = 120000;
-    pp -> des = 5000;
-    test(123);
-    bye 0;
+FUNc testt() -> pp {
+    pp -> d = 111;
+    bye d;
 }
 
+FUNc main() -> pp {
+    pp -> d = 120000;
+    pp -> de = d + 4;
+    pp -> des = 5000;
+    pp -> plsworkk = testt();
+    pp -> plswork = test(123);
+    test(456);
+
+    pp -> okay = plswork + 4321;
+    pp -> okayy = okay + 54321;
+    bye 0;
+}
+pp -> c = 456789;
 # FUNc main(argc: pp, argv: yarn) -> pp {
 #     pprintln(test);
 #     pprintln(asd);

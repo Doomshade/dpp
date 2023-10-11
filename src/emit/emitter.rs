@@ -1,8 +1,10 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 
-use crate::parse::analysis::{BoundBlock, BoundVariable, FunctionScope, GlobalScope};
-use crate::parse::parser::{BinaryOperator, Expression, Statement};
+use crate::parse::analysis::{
+    BoundBlock, BoundFunction, BoundVariable, FunctionScope, GlobalScope,
+};
+use crate::parse::parser::{BinaryOperator, DataType, Expression, Statement};
 
 #[derive(Clone, Debug)]
 pub enum Address {
@@ -204,9 +206,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                let (var_loc, level) = self.find_variable(identifier);
+                let (level, var_loc) = self.find_variable(identifier);
                 self.emit_debug_info(DebugKeyword::Stack);
-                self.load(level, var_loc as i32, 4);
+                self.load(level, var_loc as i32, 1);
                 self.emit_debug_info(DebugKeyword::Stack);
             }
             Expression::FunctionCall {
@@ -214,6 +216,25 @@ impl<'a, T: Write> Emitter<'a, T> {
                 identifier,
                 ..
             } => {
+                let has_return_type: Option<bool>;
+                if let Expression::FunctionCall { identifier, .. } = expression {
+                    let x = self.global_scope.borrow();
+                    let function = x.get_function(identifier).unwrap();
+                    if let DataType::Nopp = function.return_type() {
+                        has_return_type = Some(false);
+                    } else {
+                        has_return_type = Some(true);
+                    }
+                } else {
+                    has_return_type = None;
+                }
+
+                if let Some(has_return_type) = has_return_type {
+                    if has_return_type {
+                        self.emit_instruction(Instruction::Int { size: 1 });
+                    }
+                }
+
                 for argument in arguments {
                     self.emit_expression(argument);
                 }
@@ -224,6 +245,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                     level: 1,
                     address: Address::Label(String::from(*identifier)),
                 });
+                self.emit_debug_info(DebugKeyword::Stack);
             }
             _ => todo!("Not implemented"),
         }
@@ -251,7 +273,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             message: String::from("Calling main function."),
         });
         self.emit_instruction(Instruction::Call {
-            level: 1,
+            level: 0,
             address: Address::Label(String::from("main")),
         });
     }
@@ -283,8 +305,20 @@ impl<'a, T: Write> Emitter<'a, T> {
         vec
     }
 
-    fn load(&mut self, level: u32, offset: i32, size: usize) {
-        for i in 0..size / PL0_DATA_SIZE {
+    pub fn load_parameters(&mut self, parameters: &Vec<BoundVariable<'a>>) {
+        let total_size = parameters.iter().fold(0, |acc, parameter| {
+            acc + ((parameter.data_type().size() - 1) / PL0_DATA_SIZE) + 1
+        });
+        let mut curr_offset = total_size as i32;
+        for parameter in parameters.iter().rev() {
+            let size = ((parameter.data_type().size() - 1) / PL0_DATA_SIZE) + 1;
+            self.load(0, -curr_offset, size);
+            curr_offset += size as i32;
+        }
+    }
+
+    fn load(&mut self, level: u32, offset: i32, count: usize) {
+        for i in 0..count {
             self.emit_debug_info(DebugKeyword::Registers);
             self.emit_instruction(Instruction::Load {
                 level,
@@ -293,38 +327,11 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
-    pub fn load_parameters(&mut self, parameters: &Vec<BoundVariable<'a>>) {
-        // Load the parameters into the stack from the callee function.
-        // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
-        // To load them we have to get the total size of parameters and subtract it
-        // each time we load a parameter.
-        // for example:
-        // ```FUNc foo(argc: pp, argv:xxlpp) {
-        // ...
-        // }
-        // foo(1, 2);```
-        // The parameters are loaded as follows:
-        // The total size is 4 (pp) + 8 (xxlpp) = 12.
-        // Load the variable at offset 12 (argc) and then subtract 4 from the offset.
-        // Load the variable at offset 8 (argv) and then subtract 8 from the offset.
-        // The LOD function only loads 32 bits, so for anything bigger
-        // than that we need to LOD again.
-        let total_size = parameters
-            .iter()
-            .fold(0, |acc, parameter| acc + parameter.data_type().size());
-        let mut curr_offset = total_size as i32 - 1;
-        for i in 0..parameters.len() {
-            let size = parameters[parameters.len() - i - 1].data_type().size();
-            self.load(1, curr_offset, size);
-            curr_offset -= size as i32;
-        }
-    }
-
-    fn store(&mut self, level: u32, offset: i32, size: usize) {
-        for i in 0..size / PL0_DATA_SIZE {
+    pub fn store(&mut self, level: u32, offset: i32, count: usize) {
+        for i in 0..count {
             self.emit_instruction(Instruction::Store {
                 level,
-                offset: offset + i as i32 * PL0_DATA_SIZE as i32, // Store 4 bytes at a time.
+                offset: offset + i as i32,
             });
         }
     }
@@ -418,6 +425,21 @@ impl<'a, T: Write> Emitter<'a, T> {
         match statement {
             Statement::Expression { expression, .. } => {
                 self.emit_expression(expression);
+                if let Expression::FunctionCall { identifier, .. } = expression {
+                    // Drop the value returned by the function call if it returns anything.
+                    let return_type;
+                    {
+                        let x = self.global_scope.borrow();
+                        let function = x.get_function(identifier).unwrap();
+                        return_type = function.return_type().clone();
+                    }
+                    if let DataType::Nopp = return_type {
+                        // Do nothing.
+                    } else {
+                        self.emit_instruction(Instruction::Int { size: -1 });
+                        self.emit_debug_info(DebugKeyword::Stack);
+                    }
+                }
             }
             Statement::VariableDeclaration { .. } => {}
             Statement::VariableDeclarationAndAssignment { expression, .. } => {
@@ -427,6 +449,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             Statement::Bye { expression, .. } => {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
+                    self.store(0, -1, 1); // TODO: Offset must be -parameter.len()
                 }
                 self.emit_debug_info(DebugKeyword::Registers);
                 self.emit_debug_info(DebugKeyword::Stack);
