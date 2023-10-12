@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::emit::emitter::{Address, DebugKeyword, Emitter, Instruction};
+use crate::emit::emitter::{Address, DebugKeyword, Emitter};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
     DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
@@ -19,7 +19,7 @@ pub struct Scope<'a> {
 impl<'a> Scope<'a> {
     fn push_variable(&mut self, mut variable: BoundVariable<'a>) {
         variable.position_in_scope = self.current_position;
-        self.current_position += ((variable.size() as u32 - 1) / 4) + 1;
+        self.current_position += variable.size_in_instructions() as u32;
         self.variables
             .insert(variable.identifier, std::rc::Rc::new(variable));
     }
@@ -53,6 +53,8 @@ impl<'a> FunctionScope<'a> {
     pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<BoundVariable<'a>>> {
         self.scope.get_variable(identifier)
     }
+
+    pub fn push_argument(&mut self, variable: BoundVariable<'a>) {}
 
     pub fn push_variable(&mut self, variable: BoundVariable<'a>) {
         self.scope.push_variable(variable);
@@ -112,8 +114,8 @@ impl<'a> GlobalScope<'a> {
 }
 
 pub struct SemanticAnalyzer<'a, 'b, T>
-where
-    T: Write,
+    where
+        T: Write,
 {
     global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
     /// Current stack of function scopes. The initial scope is the global scope that should be
@@ -121,6 +123,7 @@ where
     /// at the end of the analysis.
     function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
     error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    current_level: std::rc::Rc<std::cell::RefCell<u32>>,
     emitter: Emitter<'a, T>,
 }
 
@@ -199,6 +202,10 @@ impl<'a> BoundVariable<'a> {
         self.data_type.size()
     }
 
+    pub fn size_in_instructions(&self) -> usize {
+        ((self.size() - 1) / 4) + 1
+    }
+
     pub fn position_in_scope(&self) -> u32 {
         self.position_in_scope
     }
@@ -218,12 +225,14 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
         function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
         global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
+        current_level: std::rc::Rc<std::cell::RefCell<u32>>,
         emitter: Emitter<'a, T>,
     ) -> Self {
         Self {
             function_scopes,
             global_scope,
             error_diag,
+            current_level,
             emitter,
         }
     }
@@ -309,19 +318,9 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                         variable.identifier,
                     );
                 }
-                dbg!(expression);
                 let bound_var = BoundVariable::new(variable, Some(expression));
                 self.global_scope.borrow_mut().push_variable(bound_var);
                 self.emitter.emit_statement(statement);
-                self.emitter.store(
-                    0,
-                    self.global_scope
-                        .borrow()
-                        .get_variable(variable.identifier)
-                        .unwrap()
-                        .position_in_scope as i32,
-                    1,
-                );
             }
             _ => {
                 self.emitter.emit_statement(statement);
@@ -451,13 +450,13 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 if let Some(global_variable) = self.global_scope.borrow().get_variable(identifier) {
                     return global_variable.data_type.clone();
                 }
-                panic!("Variable not found");
+                panic!("{}", format!("Variable {identifier} not found"));
             }
             Expression::FunctionCall { identifier, .. } => {
                 if let Some(global_function) = self.global_scope.borrow().get_function(identifier) {
                     return global_function.return_type.clone();
                 }
-                panic!("Function not found");
+                panic!("{}", format!("Function {identifier} not found"));
             }
             _ => DataType::Nopp,
         };
@@ -490,7 +489,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         });
         self.begin_function_scope();
         self.emitter.emit_label(function.identifier);
-        self.emitter.emit_instruction(Instruction::Int { size: 3 });
+        self.emitter.emit_int(3);
         self.load_parameters(&params);
         self.emitter.emit_debug_info(DebugKeyword::Echo {
             message: String::from("Loaded parameters"),

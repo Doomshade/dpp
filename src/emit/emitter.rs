@@ -1,9 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 
-use crate::parse::analysis::{
-    BoundBlock, BoundFunction, BoundVariable, FunctionScope, GlobalScope,
-};
+use crate::parse::analysis::{BoundVariable, FunctionScope, GlobalScope};
 use crate::parse::parser::{BinaryOperator, DataType, Expression, Statement};
 
 #[derive(Clone, Debug)]
@@ -24,7 +22,7 @@ impl Display for Address {
 }
 
 #[derive(Clone, Debug)]
-pub enum Instruction {
+enum Instruction {
     /// Push the literal value arg onto the stack.
     Literal {
         value: i32,
@@ -120,8 +118,8 @@ pub enum DebugKeyword {
 }
 
 pub struct Emitter<'a, T>
-where
-    T: Write,
+    where
+        T: Write,
 {
     writer: std::io::BufWriter<T>,
     // The instructions to be emitted.
@@ -132,6 +130,8 @@ where
     global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
     /// The labels of the functions.
     function_labels: std::collections::HashMap<String, u32>,
+
+    current_level: std::rc::Rc<std::cell::RefCell<u32>>,
 }
 
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
@@ -141,6 +141,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         writer: std::io::BufWriter<T>,
         function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
         global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
+        current_level: std::rc::Rc<std::cell::RefCell<u32>>,
     ) -> Self {
         Self {
             writer,
@@ -148,6 +149,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             function_labels: std::collections::HashMap::new(),
             function_scopes,
             global_scope,
+            current_level,
         }
     }
 
@@ -241,14 +243,15 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.emit_debug_info(DebugKeyword::Echo {
                     message: format!("Function call: {identifier}"),
                 });
-                self.emit_instruction(Instruction::Call {
-                    level: 1,
-                    address: Address::Label(String::from(*identifier)),
-                });
+                self.emit_call(Address::Label(String::from(*identifier)));
                 self.emit_debug_info(DebugKeyword::Stack);
             }
             _ => todo!("Not implemented"),
         }
+    }
+
+    pub fn emit_call(&mut self, address: Address) {
+        self.emit_call_with_level(1, address);
     }
 
     fn find_variable(&self, identifier: &str) -> (u32, u32) {
@@ -272,10 +275,20 @@ impl<'a, T: Write> Emitter<'a, T> {
         self.emit_debug_info(DebugKeyword::Echo {
             message: String::from("Calling main function."),
         });
+        self.emit_call_with_level(0, Address::Label(String::from("main")));
+    }
+
+    fn emit_call_with_level(&mut self, level: u32, address: Address) {
+        *self.current_level.borrow_mut() += level;
         self.emit_instruction(Instruction::Call {
-            level: 0,
-            address: Address::Label(String::from("main")),
+            level,
+            address,
         });
+    }
+
+    fn emit_ret(&mut self) {
+        *self.current_level.borrow_mut() -= 1;
+        self.emit_instruction(Instruction::Return);
     }
 
     fn get_variable_location(&self, identifier: &str) -> Option<u32> {
@@ -307,11 +320,11 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     pub fn load_parameters(&mut self, parameters: &Vec<BoundVariable<'a>>) {
         let total_size = parameters.iter().fold(0, |acc, parameter| {
-            acc + ((parameter.data_type().size() - 1) / PL0_DATA_SIZE) + 1
+            acc + parameter.size_in_instructions()
         });
         let mut curr_offset = total_size as i32;
         for parameter in parameters.iter().rev() {
-            let size = ((parameter.data_type().size() - 1) / PL0_DATA_SIZE) + 1;
+            let size = parameter.size_in_instructions();
             self.load(0, -curr_offset, size);
             curr_offset += size as i32;
         }
@@ -319,10 +332,9 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     fn load(&mut self, level: u32, offset: i32, count: usize) {
         for i in 0..count {
-            self.emit_debug_info(DebugKeyword::Registers);
             self.emit_instruction(Instruction::Load {
                 level,
-                offset: offset + i as i32, // Load 4 bytes at a time.
+                offset: offset + i as i32,
             });
         }
     }
@@ -339,10 +351,14 @@ impl<'a, T: Write> Emitter<'a, T> {
     pub fn emit_label(&mut self, label: &str) {
         self.function_labels
             .insert(label.to_string(), self.code.len() as u32);
-        self.code.push(Instruction::Label(String::from(label)));
+        self.emit_instruction(Instruction::Label(String::from(label)))
     }
 
-    pub fn emit_instruction(&mut self, instruction: Instruction) {
+    pub fn emit_int(&mut self, size: i32) {
+        self.emit_instruction(Instruction::Int { size })
+    }
+
+    fn emit_instruction(&mut self, instruction: Instruction) {
         self.code.push(instruction);
     }
 
@@ -416,11 +432,6 @@ impl<'a, T: Write> Emitter<'a, T> {
         Ok(())
     }
 
-    pub fn emit_block(&mut self, block: &BoundBlock<'a>) {
-        for statement in &block.statements {
-            self.emit_statement(statement);
-        }
-    }
     pub fn emit_statement(&mut self, statement: &Statement<'a>) {
         match statement {
             Statement::Expression { expression, .. } => {
