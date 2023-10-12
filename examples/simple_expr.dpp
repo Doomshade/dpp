@@ -1,7 +1,7 @@
 p -> asd = '0';
 pp -> testt = 1 + 2 * 3 * 3;
 pp -> test = 1 + 2 + 3*200000;
-pp -> b = 1  2 + 3*6;
+pp -> b = 1 + 2 + 3*6;
 # TODO: Add an expression for this.
 # p -> a = 'a';
 # yarn -> asd = "0000";
@@ -10,7 +10,7 @@ FUNc test(par: pp) -> pp {
     pp -> d = par + 40000;
     pp -> de = 50000;
     pp -> des = d + de;
-    bye 0;
+    bye des;
 }
 
 FUNc testt() -> pp {
@@ -22,6 +22,7 @@ FUNc main() -> pp {
     pp -> d = 120000;
     pp -> de = d + 4;
     pp -> des = 5000;
+    testt();
     pp -> plsworkk = testt();
     pp -> plswork = test(123);
     test(456);

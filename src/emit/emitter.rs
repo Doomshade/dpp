@@ -161,6 +161,10 @@ impl<'a, T: Write> Emitter<'a, T> {
         self.emit_instruction(Instruction::Dbg { debug_keyword });
     }
 
+    pub fn echo(&mut self, message: &str) {
+        self.emit_debug_info(DebugKeyword::Echo { message: String::from(message) });
+    }
+
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
         match expression {
             Expression::Number { value, .. } => {
@@ -169,12 +173,12 @@ impl<'a, T: Write> Emitter<'a, T> {
             Expression::P { value: p, .. } => {
                 self.emit_instruction(Instruction::Literal { value: *p as i32 });
             }
-            Expression::Booba { booba, .. } => {
+            Expression::Booba { value: booba, .. } => {
                 self.emit_instruction(Instruction::Literal {
                     value: i32::from(*booba),
                 });
             }
-            Expression::Yarn { yarn, .. } => {
+            Expression::Yarn { value: yarn, .. } => {
                 self.emit_instruction(Instruction::Literal {
                     value: yarn.len() as i32,
                 });
@@ -209,42 +213,49 @@ impl<'a, T: Write> Emitter<'a, T> {
             }
             Expression::Identifier { identifier, .. } => {
                 let (level, var_loc) = self.find_variable(identifier);
-                self.emit_debug_info(DebugKeyword::Stack);
+                self.echo(format!("Loading {}", identifier).as_str());
                 self.load(level, var_loc as i32, 1);
-                self.emit_debug_info(DebugKeyword::Stack);
             }
             Expression::FunctionCall {
                 arguments,
                 identifier,
                 ..
             } => {
-                let has_return_type: Option<bool>;
-                if let Expression::FunctionCall { identifier, .. } = expression {
-                    let x = self.global_scope.borrow();
-                    let function = x.get_function(identifier).unwrap();
-                    if let DataType::Nopp = function.return_type() {
-                        has_return_type = Some(false);
-                    } else {
-                        has_return_type = Some(true);
-                    }
-                } else {
-                    has_return_type = None;
+                // Size in instructions.
+                let return_type_size;
+                let arguments_size;
+                {
+                    let global_scope = self.global_scope.borrow();
+                    let function = global_scope.get_function(identifier).unwrap();
+                    return_type_size = function.return_type().size_in_instructions();
+                    arguments_size = function.parameters_size();
                 }
 
-                if let Some(has_return_type) = has_return_type {
-                    if has_return_type {
-                        self.emit_instruction(Instruction::Int { size: 1 });
-                    }
+                // If the function has a return type we need to allocate
+                // extra space on the stack for the thing it returns.
+                if return_type_size > 0 {
+                    self.echo(format!("Reserving {} bytes for return value of {}", return_type_size *
+                        4, identifier).as_str());
+                    self.emit_instruction(Instruction::Int { size: return_type_size as i32 });
                 }
 
-                for argument in arguments {
-                    self.emit_expression(argument);
+                // Emit arguments AFTER the return type.
+                if arguments.len() > 0 {
+                    self.echo(format!("Initializing {} arguments", arguments.len()).as_str());
+                    for argument in arguments {
+                        self.emit_expression(argument);
+                        self.echo(format!("Initialized {}", argument).as_str());
+                    }
+                    self.echo(format!("{} arguments initialized", arguments.len()).as_str());
                 }
-                self.emit_debug_info(DebugKeyword::Echo {
-                    message: format!("Function call: {identifier}"),
-                });
+                self.echo(format!("Calling {}", identifier).as_str());
                 self.emit_call(Address::Label(String::from(*identifier)));
-                self.emit_debug_info(DebugKeyword::Stack);
+
+                // Pop the arguments off the stack.
+                if arguments_size > 0 {
+                    self.echo(format!("Popping arguments for {identifier}").as_str());
+                    self.emit_instruction(Instruction::Int { size: -(arguments_size as i32) });
+                }
             }
             _ => todo!("Not implemented"),
         }
@@ -275,7 +286,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         self.emit_debug_info(DebugKeyword::Echo {
             message: String::from("Calling main function."),
         });
-        self.emit_call_with_level(0, Address::Label(String::from("main")));
+        self.emit_call_with_level(1, Address::Label(String::from("main")));
     }
 
     fn emit_call_with_level(&mut self, level: u32, address: Address) {
@@ -318,7 +329,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         vec
     }
 
-    pub fn load_parameters(&mut self, parameters: &Vec<BoundVariable<'a>>) {
+    pub fn load_arguments(&mut self, parameters: &Vec<BoundVariable<'a>>) {
         let total_size = parameters.iter().fold(0, |acc, parameter| {
             acc + parameter.size_in_instructions()
         });
@@ -327,6 +338,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             let size = parameter.size_in_instructions();
             self.load(0, -curr_offset, size);
             curr_offset += size as i32;
+            self.echo(format!("Loaded argument {}", parameter.identifier()).as_str());
         }
     }
 
@@ -437,33 +449,44 @@ impl<'a, T: Write> Emitter<'a, T> {
             Statement::Expression { expression, .. } => {
                 self.emit_expression(expression);
                 if let Expression::FunctionCall { identifier, .. } = expression {
-                    // Drop the value returned by the function call if it returns anything.
-                    let return_type;
+                    // Pop the return value off the stack.
+                    let return_type_size;
                     {
-                        let x = self.global_scope.borrow();
-                        let function = x.get_function(identifier).unwrap();
-                        return_type = function.return_type().clone();
+                        let global_scope = self.global_scope.borrow();
+                        let function = global_scope.get_function(identifier).unwrap();
+                        return_type_size = function.return_type().size_in_instructions();
                     }
-                    if let DataType::Nopp = return_type {
-                        // Do nothing.
-                    } else {
-                        self.emit_instruction(Instruction::Int { size: -1 });
-                        self.emit_debug_info(DebugKeyword::Stack);
+                    if return_type_size > 0 {
+                        self.emit_instruction(Instruction::Int { size: -(return_type_size as i32) });
+                        self.echo(format!("Dropped returned value of {} ({} bytes)",
+                                          identifier, return_type_size * 4)
+                            .as_str());
+                        self.emit_debug_info(DebugKeyword::StackA);
                     }
                 }
             }
             Statement::VariableDeclaration { .. } => {}
-            Statement::VariableDeclarationAndAssignment { expression, .. } => {
+            Statement::VariableDeclarationAndAssignment { expression, variable, .. } => {
+                self.echo(format!("Initializing variable {}", variable.identifier).as_str());
                 self.emit_expression(expression);
-                self.emit_debug_info(DebugKeyword::Stack);
+                self.echo(format!("Variable {} initialized", variable.identifier).as_str());
+                self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
             }
             Statement::Bye { expression, .. } => {
+                let parameters_size;
+                {
+                    let function_scopes = self.function_scopes.borrow();
+                    let global_scope = self.global_scope.borrow();
+                    let current_function = function_scopes.last().unwrap();
+                    let function_identifier = current_function.function_identifier();
+                    let function = global_scope.get_function(function_identifier).unwrap();
+                    parameters_size = function.parameters_size();
+                }
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
-                    self.store(0, -1, 1); // TODO: Offset must be -parameter.len()
+                    self.echo(format!("Returning {}", expression).as_str());
+                    self.store(0, -1 - parameters_size as i32, 1);
                 }
-                self.emit_debug_info(DebugKeyword::Registers);
-                self.emit_debug_info(DebugKeyword::Stack);
                 self.emit_instruction(Instruction::Return);
                 // Don't emit RET. The function `emit_function` will handle this
                 // because in case of main function we want to JMP 0 0 instead of RET 0 0.

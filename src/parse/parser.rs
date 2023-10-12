@@ -11,7 +11,8 @@
 //! Each enum also derives Debug that lets us print the tree structure of the AST.
 
 use std::cell::RefCell;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
+use std::process::id;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -162,11 +163,11 @@ pub enum Expression<'a> {
     },
     Booba {
         position: (u32, u32),
-        booba: bool,
+        value: bool,
     },
     Yarn {
         position: (u32, u32),
-        yarn: &'a str,
+        value: &'a str,
     },
     Unary {
         position: (u32, u32),
@@ -194,6 +195,25 @@ pub enum Expression<'a> {
         expression: Box<Expression<'a>>,
     },
     Invalid,
+}
+
+impl Display for Expression<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let formatted = match self {
+            Expression::Number { value, .. } => { value.to_string() }
+            Expression::P { value, .. } => { value.to_string() }
+            Expression::Booba { value, .. } => { value.to_string() }
+            Expression::Yarn { value, .. } => { value.to_string() }
+            Expression::Unary { operand, .. } => { "Unary expression".to_string() }
+            Expression::Binary { .. } => { "Binary expression".to_string() }
+            Expression::Identifier { identifier, .. } => { identifier.to_string() }
+            Expression::FunctionCall { identifier, .. } => { format!("Function {}", identifier) }
+            Expression::Assignment { identifier, .. } => { identifier.to_string() }
+            Expression::Invalid => { "Invalid expression".to_string() }
+        };
+        write!(f, "{}", formatted)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +256,10 @@ impl<'a> DataType<'a> {
             DataType::Booba => std::mem::size_of::<bool>(),
             _ => panic!("Invalid data type"),
         }
+    }
+
+    pub fn size_in_instructions(&self) -> usize {
+        ((self.size() - 1) / 4) + 1
     }
 }
 
@@ -1031,14 +1055,14 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::YemKeyword)?;
                 Some(Expression::Booba {
                     position: self.position,
-                    booba: true,
+                    value: true,
                 })
             }
             TokenKind::NomKeyword => {
                 self.expect(TokenKind::NomKeyword)?;
                 Some(Expression::Booba {
                     position: self.position,
-                    booba: false,
+                    value: false,
                 })
             }
             TokenKind::Number => {
@@ -1068,7 +1092,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let yarn = self.expect(TokenKind::Yarn)?;
                 Some(Expression::Yarn {
                     position: self.position,
-                    yarn,
+                    value: yarn,
                 })
             }
             TokenKind::OpenParen => {

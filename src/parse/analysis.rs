@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::emit::emitter::{Address, DebugKeyword, Emitter};
+use crate::emit::emitter::{Address, Emitter};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
     DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
@@ -37,13 +37,14 @@ impl<'a> Scope<'a> {
 pub struct FunctionScope<'a> {
     // TODO: Use Vec<Scope<'a>> because we allow nested scopes in functions.
     scope: Scope<'a>,
+    function_identifier: &'a str,
 }
 
 impl<'a> FunctionScope<'a> {
-    pub fn new() -> Self {
+    pub fn new(function_identifier: &'a str) -> Self {
         let mut scope = Scope::default();
         scope.current_position += 3;
-        FunctionScope { scope }
+        FunctionScope { scope, function_identifier }
     }
 
     pub fn has_variable(&self, identifier: &str) -> bool {
@@ -52,6 +53,10 @@ impl<'a> FunctionScope<'a> {
 
     pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<BoundVariable<'a>>> {
         self.scope.get_variable(identifier)
+    }
+
+    pub fn function_identifier(&self) -> &'a str {
+        self.function_identifier
     }
 
     pub fn push_argument(&mut self, variable: BoundVariable<'a>) {}
@@ -148,6 +153,11 @@ impl<'a> BoundFunction<'a> {
     pub fn parameters(&self) -> &Vec<Variable<'a>> {
         &self.parameters
     }
+
+    pub fn parameters_size(&self) -> usize {
+        self.parameters().iter().fold(0, |acc, parameter| acc +
+            parameter.data_type.size_in_instructions())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -203,7 +213,7 @@ impl<'a> BoundVariable<'a> {
     }
 
     pub fn size_in_instructions(&self) -> usize {
-        ((self.size() - 1) / 4) + 1
+        self.data_type.size_in_instructions()
     }
 
     pub fn position_in_scope(&self) -> u32 {
@@ -248,7 +258,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 self.analyze_global_statement(statement);
             }
 
-            self.emitter.emit_debug_info(DebugKeyword::Registers);
             self.emitter.emit_main_call();
 
             // The last instruction will be the JMP to 0 - indicating exit.
@@ -462,8 +471,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         };
     }
 
-    fn begin_function_scope(&mut self) {
-        self.function_scopes.borrow_mut().push(FunctionScope::new());
+    fn begin_function_scope(&mut self, function_identifier: &'a str) {
+        self.function_scopes.borrow_mut().push(FunctionScope::new(function_identifier));
     }
 
     fn end_function_scope(&mut self) {
@@ -487,16 +496,17 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             },
             parameters: function.parameters.clone(),
         });
-        self.begin_function_scope();
+        self.begin_function_scope(function.identifier);
         self.emitter.emit_label(function.identifier);
         self.emitter.emit_int(3);
-        self.load_parameters(&params);
-        self.emitter.emit_debug_info(DebugKeyword::Echo {
-            message: String::from("Loaded parameters"),
-        });
+        if !params.is_empty() {
+            self.emitter.echo(format!("Loading {} arguments", params.len()).as_str());
+            self.load_arguments(&params);
+            self.emitter.echo(format!("{} arguments loaded", params.len()).as_str());
+        }
     }
 
-    fn load_parameters(&mut self, parameters: &Vec<BoundVariable<'a>>) {
+    fn load_arguments(&mut self, parameters: &Vec<BoundVariable<'a>>) {
         // Load the parameters into the stack from the callee function.
         // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
         // To load them we have to get the total size of parameters and subtract it
@@ -516,7 +526,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             .iter()
             .rev()
             .for_each(|parameter| self.push_local_function_variable(parameter.clone()));
-        self.emitter.load_parameters(parameters);
+        self.emitter.load_arguments(parameters);
     }
 
     fn end_function(&mut self) {
