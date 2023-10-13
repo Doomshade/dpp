@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::io::Write;
 
 use crate::parse::analysis::{BoundVariable, FunctionScope, GlobalScope};
-use crate::parse::parser::{BinaryOperator, DataType, Expression, Statement};
+use crate::parse::parser::{BinaryOperator, Expression, Statement};
 
 #[derive(Clone, Debug)]
 pub enum Address {
@@ -122,7 +122,7 @@ pub struct Emitter<'a, T>
         T: Write,
 {
     writer: std::io::BufWriter<T>,
-    // The instructions to be emitted.
+    /// The instructions to be emitted.
     code: Vec<Instruction>,
     /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
     function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
@@ -168,26 +168,17 @@ impl<'a, T: Write> Emitter<'a, T> {
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
         match expression {
             Expression::Number { value, .. } => {
-                self.emit_instruction(Instruction::Literal { value: *value });
+                self.emit_literal(*value);
             }
             Expression::P { value: p, .. } => {
-                self.emit_instruction(Instruction::Literal { value: *p as i32 });
+                self.emit_literal(*p as i32);
             }
-            Expression::Booba { value: booba, .. } => {
-                self.emit_instruction(Instruction::Literal {
-                    value: i32::from(*booba),
-                });
+            Expression::Booba { value, .. } => {
+                self.emit_literal(i32::from(*value));
             }
             Expression::Yarn { value: yarn, .. } => {
-                self.emit_instruction(Instruction::Literal {
-                    value: yarn.len() as i32,
-                });
-                let vec = Self::pack_yarn(yarn);
-                for four_packed_chars in vec {
-                    self.emit_instruction(Instruction::Literal {
-                        value: four_packed_chars,
-                    });
-                }
+                self.emit_literal(yarn.len() as i32);
+                Self::pack_yarn(yarn).into_iter().for_each(|four_packed_chars| self.emit_literal(four_packed_chars));
             }
             Expression::Binary { lhs, rhs, op, .. } => {
                 self.emit_expression(lhs);
@@ -224,7 +215,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                 // Size in instructions.
                 let return_type_size;
                 let arguments_size;
-                {
+                if *identifier == "main" {
+                    (return_type_size, arguments_size) = self.main_function_descriptor();
+                } else {
                     let global_scope = self.global_scope.borrow();
                     let function = global_scope.get_function(identifier).unwrap();
                     return_type_size = function.return_type().size_in_instructions();
@@ -248,6 +241,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                     }
                     self.echo(format!("{} arguments initialized", arguments.len()).as_str());
                 }
+                self.push_current_call_depth();
                 self.echo(format!("Calling {}", identifier).as_str());
                 self.emit_call(Address::Label(String::from(*identifier)));
 
@@ -261,7 +255,11 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
-    pub fn emit_call(&mut self, address: Address) {
+    fn main_function_descriptor(&self) -> (usize, usize) {
+        (1, 0)
+    }
+
+    fn emit_call(&mut self, address: Address) {
         self.emit_call_with_level(1, address);
     }
 
@@ -273,7 +271,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
 
         (
-            1,
+            1000,
             self.global_scope
                 .borrow()
                 .get_variable(identifier)
@@ -283,10 +281,14 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn emit_main_call(&mut self) {
-        self.emit_debug_info(DebugKeyword::Echo {
-            message: String::from("Calling main function."),
-        });
-        self.emit_call_with_level(1, Address::Label(String::from("main")));
+        self.echo("Calling main function.");
+        let main_function_call = Expression::FunctionCall { identifier: "main", arguments: Vec::new(), position: (0, 0) };
+        self.emit_expression(&main_function_call);
+
+        // The last instruction will be the JMP to 0 - indicating exit.
+        self.echo("Program returned with return value:");
+        self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
+        self.emit_jump(Address::Absolute(0));
     }
 
     fn emit_call_with_level(&mut self, level: u32, address: Address) {
@@ -300,6 +302,10 @@ impl<'a, T: Write> Emitter<'a, T> {
     fn emit_ret(&mut self) {
         *self.current_level.borrow_mut() -= 1;
         self.emit_instruction(Instruction::Return);
+    }
+
+    pub fn emit_literal(&mut self, value: i32) {
+        self.emit_instruction(Instruction::Literal { value })
     }
 
     fn get_variable_location(&self, identifier: &str) -> Option<u32> {
@@ -329,18 +335,27 @@ impl<'a, T: Write> Emitter<'a, T> {
         vec
     }
 
-    pub fn load_arguments(&mut self, parameters: &Vec<BoundVariable<'a>>) {
-        let total_size = parameters.iter().fold(0, |acc, parameter| {
+    pub fn emit_load_arguments(&mut self, arguments: &Vec<BoundVariable<'a>>) {
+        let total_size = arguments.iter().fold(0, |acc, parameter| {
             acc + parameter.size_in_instructions()
         });
-        let mut curr_offset = total_size as i32;
-        for parameter in parameters.iter().rev() {
+        let mut curr_offset = total_size as i32 + FunctionScope::added_function_call_padding() as i32;
+        for parameter in arguments.iter().rev() {
             let size = parameter.size_in_instructions();
             self.load(0, -curr_offset, size);
             curr_offset += size as i32;
             self.echo(format!("Loaded argument {}", parameter.identifier()).as_str());
         }
     }
+
+    pub fn load_current_call_depth(&mut self) {
+        self.load(1, -1, 1);
+    }
+
+    pub fn push_current_call_depth(&mut self) {
+        self.load(0, 3, 1);
+    }
+
 
     fn load(&mut self, level: u32, offset: i32, count: usize) {
         for i in 0..count {
@@ -360,7 +375,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
-    pub fn emit_control_label(&mut self, label: &str){
+    pub fn emit_control_label(&mut self, label: &str) {
         self.emit_label(format!("0{label}").as_str());
     }
 

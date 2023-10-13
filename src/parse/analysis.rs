@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::emit::emitter::{Address, Emitter};
+use crate::emit::emitter::{Address, DebugKeyword, Emitter};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
     DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
@@ -43,8 +43,20 @@ pub struct FunctionScope<'a> {
 impl<'a> FunctionScope<'a> {
     pub fn new(function_identifier: &'a str) -> Self {
         let mut scope = Scope::default();
-        scope.current_position += 3;
+        scope.current_position = Self::function_call_padding();
         FunctionScope { scope, function_identifier }
+    }
+
+    pub const fn function_call_padding() -> u32 {
+        Self::default_function_call_padding() + Self::added_function_call_padding()
+    }
+
+    pub const fn default_function_call_padding() -> u32 {
+        3
+    }
+
+    pub const fn added_function_call_padding() -> u32 {
+        1
     }
 
     pub fn has_variable(&self, identifier: &str) -> bool {
@@ -122,11 +134,13 @@ pub struct SemanticAnalyzer<'a, 'b, T>
     where
         T: Write,
 {
+    /// The global scope holding global variables and function identifiers.
     global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
     /// Current stack of function scopes. The initial scope is the global scope that should be
     /// popped
     /// at the end of the analysis.
     function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
+    /// The error diagnosis.
     error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     current_level: std::rc::Rc<std::cell::RefCell<u32>>,
     emitter: Emitter<'a, T>,
@@ -154,6 +168,7 @@ impl<'a> BoundFunction<'a> {
         &self.parameters
     }
 
+    /// The size of parameters in instructions.
     pub fn parameters_size(&self) -> usize {
         self.parameters().iter().fold(0, |acc, parameter| acc +
             parameter.data_type.size_in_instructions())
@@ -258,16 +273,23 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 self.analyze_global_statement(statement);
             }
 
+            // Emit the main call after analyzing all global statements.
+            // This call will not check whether the function declaration exists.
             self.emitter.emit_main_call();
 
-            // The last instruction will be the JMP to 0 - indicating exit.
-            self.emitter.emit_jump(Address::Absolute(0));
+            // Analyze the parsed functions and emit code.
             for function in &translation_unit.functions {
                 self.analyze_function(function);
             }
+
+            // TODO: This could be done earlier.
+            if !self.global_scope.borrow().has_function("main") {
+                self.error_diag.borrow_mut().no_main_method_found_error();
+                return;
+            }
         }
 
-        self.emitter.emit_all().expect("OOF");
+        self.emitter.emit_all().expect("Failed to emit code into the file.");
     }
 
     fn analyze_function(&mut self, function: &Function<'a>) {
@@ -498,7 +520,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         });
         self.begin_function_scope(function.identifier);
         self.emitter.emit_function_label(function.identifier);
-        self.emitter.emit_int(3);
+        self.emitter.emit_int(FunctionScope::function_call_padding() as i32);
+        self.emitter.load_current_call_depth();
         if !params.is_empty() {
             self.emitter.echo(format!("Loading {} arguments", params.len()).as_str());
             self.load_arguments(&params);
@@ -512,21 +535,21 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         // To load them we have to get the total size of parameters and subtract it
         // each time we load a parameter.
         // for example:
-        // ```FUNc foo(argc: pp, argv:xxlpp) {
+        // ```FUNc foo(argc: pp, argv:pp) {
         // ...
         // }
         // foo(1, 2);```
         // The parameters are loaded as follows:
-        // The total size is 4 (pp) + 8 (xxlpp) = 12.
-        // Load the variable at offset 12 (argc) and then subtract 4 from the offset.
-        // Load the variable at offset 8 (argv) and then subtract 8 from the offset.
+        // The total size is 1 (pp) + 1 (pp) = 2.
         // The LOD function only loads 32 bits, so for anything bigger
         // than that we need to LOD again.
+        // NOTE: We have to load with an offset because we pass in some things on stack
+        // like the depth.
         parameters
             .iter()
             .rev()
             .for_each(|parameter| self.push_local_function_variable(parameter.clone()));
-        self.emitter.load_arguments(parameters);
+        self.emitter.emit_load_arguments(parameters);
     }
 
     fn end_function(&mut self) {

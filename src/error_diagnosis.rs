@@ -109,6 +109,10 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(row, col, "Invalid number.");
     }
 
+    pub fn no_main_method_found_error(&mut self) {
+        self.insert_error_message(0, 0, "No main method found.");
+    }
+
     pub fn function_does_not_exist(&mut self, row: u32, col: u32) {
         self.insert_error_message(row, col, "Function does not exist.");
     }
@@ -128,7 +132,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
                 "Invalid number of arguments for function \"{}\". Expected {}, got {}.",
                 identifier, param_len, arg_len
             )
-            .as_str(),
+                .as_str(),
         );
     }
 
@@ -192,7 +196,12 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     }
 
     fn insert_error_message(&mut self, row: u32, col: u32, error: &str) {
-        let error_message = format!("{}:{}:{}: {}", self.file_name, row, col, error);
+        let error_message;
+        if row == 0 && col == 0 {
+            error_message = format!("{}: {}", self.file_name, error);
+        } else {
+            error_message = format!("{}:{}:{}: {}", self.file_name, row, col, error);
+        }
         if self.error_messages.contains_key(&error_message) {
             return;
         }

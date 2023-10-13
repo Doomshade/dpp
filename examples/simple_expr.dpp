@@ -18,7 +18,7 @@ FUNc testt() -> pp {
     bye d;
 }
 
-FUNc main() -> pp {
+FUNc mainn() -> pp {
     pp -> d = 120000;
     pp -> de = d + 4;
     pp -> des = 5000;
@@ -29,7 +29,7 @@ FUNc main() -> pp {
 
     pp -> okay = plswork + 4321;
     pp -> okayy = okay + 54321;
-    bye 0;
+    bye 123;
 }
 pp -> c = 456789;
 # FUNc main(argc: pp, argv: yarn) -> pp {
