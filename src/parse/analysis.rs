@@ -497,7 +497,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             parameters: function.parameters.clone(),
         });
         self.begin_function_scope(function.identifier);
-        self.emitter.emit_label(function.identifier);
+        self.emitter.emit_function_label(function.identifier);
         self.emitter.emit_int(3);
         if !params.is_empty() {
             self.emitter.echo(format!("Loading {} arguments", params.len()).as_str());

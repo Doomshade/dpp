@@ -360,10 +360,18 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
-    pub fn emit_label(&mut self, label: &str) {
+    pub fn emit_control_label(&mut self, label: &str){
+        self.emit_label(format!("0{label}").as_str());
+    }
+
+    pub fn emit_function_label(&mut self, label: &str) {
+        self.emit_label(label);
+    }
+
+    fn emit_label(&mut self, label: &str) {
         self.function_labels
             .insert(label.to_string(), self.code.len() as u32);
-        self.emit_instruction(Instruction::Label(String::from(label)))
+        self.emit_instruction(Instruction::Label(String::from(label)));
     }
 
     pub fn emit_int(&mut self, size: i32) {
