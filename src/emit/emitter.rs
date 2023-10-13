@@ -353,9 +353,14 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn push_current_call_depth(&mut self) {
+        self.echo("Pushing call depth");
         self.load(0, 3, 1);
-    }
 
+        // Add 1 to the depth.
+        self.emit_literal(1);
+        self.emit_instruction(Instruction::Operation { operation: Operation::Add });
+        self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
+    }
 
     fn load(&mut self, level: u32, offset: i32, count: usize) {
         for i in 0..count {

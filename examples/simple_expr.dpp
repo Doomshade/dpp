@@ -18,7 +18,7 @@ FUNc testt() -> pp {
     bye d;
 }
 
-FUNc mainn() -> pp {
+FUNc main() -> pp {
     pp -> d = 120000;
     pp -> de = d + 4;
     pp -> des = 5000;
