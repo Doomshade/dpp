@@ -24,6 +24,10 @@ FUNc main() -> pp {
     testt();
     pp -> main3 = testt();
     pp -> main4 = test(123);
+    while (1) {
+        pp -> main69 = test(123);
+        pp -> main699 = test(123);
+    }
     test(456);
     pp -> main5;
     pp -> main6 = 0;

@@ -131,11 +131,12 @@ pub struct Emitter<'a, T>
     /// The labels of the program.
     labels: std::collections::HashMap<String, u32>,
     control_statement_count: u32,
-    emit_debug: bool,
 
     current_level: std::rc::Rc<std::cell::RefCell<u32>>,
+
 }
 
+const EMIT_DEBUG: bool = false;
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
 impl<'a, T: Write> Emitter<'a, T> {
@@ -151,7 +152,6 @@ impl<'a, T: Write> Emitter<'a, T> {
             labels: std::collections::HashMap::new(),
             function_scopes,
             global_scope,
-            emit_debug: true,
             control_statement_count: 0,
             current_level,
         }
@@ -167,6 +167,13 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     pub fn echo(&mut self, message: &str) {
         self.emit_debug_info(DebugKeyword::Echo { message: String::from(message) });
+    }
+
+
+    fn push_local_function_variable(&mut self, variable: BoundVariable<'a>) {
+        if let Some(function_scope) = self.function_scopes.borrow_mut().last_mut() {
+            function_scope.push_variable(variable);
+        }
     }
 
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
@@ -354,6 +361,26 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn emit_load_arguments(&mut self, arguments: &Vec<BoundVariable<'a>>) {
+        // Load the parameters into the stack from the callee function.
+        // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
+        // To load them we have to get the total size of parameters and subtract it
+        // each time we load a parameter.
+        // for example:
+        // ```FUNc foo(argc: pp, argv:pp) {
+        // ...
+        // }
+        // foo(1, 2);```
+        // The parameters are loaded as follows:
+        // The total size is 1 (pp) + 1 (pp) = 2.
+        // The LOD function only loads 32 bits, so for anything bigger
+        // than that we need to LOD again.
+        // NOTE: We have to load with an offset because we pass in some things on stack
+        // like the depth.
+        arguments
+            .iter()
+            .rev()
+            .for_each(|argument| self.push_local_function_variable(argument.clone()));
+
         let total_size = arguments.iter().fold(0, |acc, parameter| {
             acc + parameter.size_in_instructions()
         });
@@ -471,7 +498,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
                 Instruction::Dbg { debug_keyword } =>
                     {
-                        if self.emit_debug {
+                        if EMIT_DEBUG {
                             match debug_keyword {
                                 DebugKeyword::Registers => {
                                     self.writer.write_all(b"&REGS\r\n")?;
@@ -526,8 +553,11 @@ impl<'a, T: Write> Emitter<'a, T> {
                     }
                 }
             }
-            Statement::VariableDeclaration { .. } => {}
+            Statement::VariableDeclaration { variable, .. } => {
+                self.push_local_function_variable(BoundVariable::new(variable, None));
+            }
             Statement::VariableDeclarationAndAssignment { expression, variable, .. } => {
+                self.push_local_function_variable(BoundVariable::new(variable, Some(expression)));
                 self.echo(format!("Initializing variable {}", variable.identifier).as_str());
                 self.emit_expression(expression);
                 let (level, var_loc) = self.find_variable(variable.identifier);
@@ -558,6 +588,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                 // because in case of main function we want to JMP 0 0 instead of RET 0 0.
             }
             Statement::While { expression, statement, .. } => {
+                self.push_scope();
                 let start = self.create_control_label("while_start");
                 let end = self.create_control_label("while_end");
                 self.control_statement_count += 1;
@@ -566,17 +597,42 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.emit_expression(expression);
                 self.emit_instruction(Instruction::Jmc { address: Address::Label(end.clone()) });
                 self.emit_statement(statement);
+                self.pop_scope();
                 self.emit_instruction(Instruction::Jump { address: Address::Label(start) });
                 self.emit_label(end.as_str());
             }
             Statement::Empty { .. } => {
                 // Emit nothing I guess :)
             }
+
             Statement::Block { block, .. } => {
-                // TODO: Clean after the block (pop the variables).
+                self.push_scope();
                 block.statements.iter().for_each(|statement| self.emit_statement(statement));
+                self.pop_scope();
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };
+    }
+
+    fn push_scope(&mut self) {
+        let mut function_scopes = self.function_scopes.borrow_mut();
+        let function_scope = function_scopes.last_mut().expect("A scope");
+        function_scope.push_scope();
+    }
+
+    fn pop_scope(&mut self) {
+        let total_variable_size;
+        {
+            let mut function_scopes = self.function_scopes.borrow_mut();
+            let function_scope = function_scopes.last_mut().expect("A scope");
+            let mut current_scope = function_scope.current_scope_mut().expect("A block \
+                    scope");
+            let variables = current_scope.get_variables().map(|entry| entry.identifier())
+                                         .collect::<Vec<&str>>();
+            total_variable_size = variables.len();
+            variables.iter().for_each(|ident| current_scope.remove_variable(ident));
+            function_scope.pop_scope();
+        }
+        self.emit_int(-(total_variable_size as i32));
     }
 }

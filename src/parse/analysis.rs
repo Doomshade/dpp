@@ -1,7 +1,9 @@
+use std::collections::hash_map::Values;
 use std::collections::HashMap;
 use std::io::Write;
+use std::rc::Rc;
 
-use crate::emit::emitter::{Address, DebugKeyword, Emitter};
+use crate::emit::emitter::Emitter;
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
     DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
@@ -28,6 +30,14 @@ impl<'a> Scope<'a> {
         self.variables.get(identifier)
     }
 
+    pub fn remove_variable(&mut self, identifier: &str) {
+        self.variables.remove(identifier);
+    }
+
+    pub fn get_variables(&self) -> Values<'_, &'a str, Rc<BoundVariable<'a>>> {
+        self.variables.values()
+    }
+
     pub fn has_variable(&self, identifier: &str) -> bool {
         self.variables.contains_key(identifier)
     }
@@ -36,15 +46,18 @@ impl<'a> Scope<'a> {
 #[derive(Clone, Debug)]
 pub struct FunctionScope<'a> {
     // TODO: Use Vec<Scope<'a>> because we allow nested scopes in functions.
-    scope: Scope<'a>,
+    scopes: Vec<Scope<'a>>,
     function_identifier: &'a str,
 }
 
 impl<'a> FunctionScope<'a> {
     pub fn new(function_identifier: &'a str) -> Self {
+        let mut scopes = Vec::new();
         let mut scope = Scope::default();
         scope.current_position = 1 + Self::function_call_padding();
-        FunctionScope { scope, function_identifier }
+
+        scopes.push(scope);
+        FunctionScope { scopes, function_identifier }
     }
 
     pub const fn function_call_padding() -> u32 {
@@ -60,11 +73,11 @@ impl<'a> FunctionScope<'a> {
     }
 
     pub fn has_variable(&self, identifier: &str) -> bool {
-        self.scope.has_variable(identifier)
+        self.scopes.iter().any(|scope| scope.has_variable(identifier))
     }
 
     pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<BoundVariable<'a>>> {
-        self.scope.get_variable(identifier)
+        self.scopes.iter().find_map(|scope| scope.get_variable(identifier))
     }
 
     pub fn function_identifier(&self) -> &'a str {
@@ -74,15 +87,23 @@ impl<'a> FunctionScope<'a> {
     pub fn push_argument(&mut self, variable: BoundVariable<'a>) {}
 
     pub fn push_variable(&mut self, variable: BoundVariable<'a>) {
-        self.scope.push_variable(variable);
+        self.scopes.last_mut().expect("A scope").push_variable(variable);
     }
 
     pub fn push_scope(&mut self) {
-        todo!("Not yet implemented.");
+        self.scopes.push(Scope::default());
+    }
+
+    pub fn current_scope(&self) -> Option<&Scope<'a>> {
+        self.scopes.last()
+    }
+
+    pub fn current_scope_mut(&mut self) -> Option<&mut Scope<'a>> {
+        self.scopes.last_mut()
     }
 
     pub fn pop_scope(&mut self) {
-        todo!("Not yet implemented.");
+        self.scopes.pop();
     }
 }
 
@@ -200,7 +221,7 @@ pub struct BoundVariable<'a> {
 }
 
 impl<'a> BoundVariable<'a> {
-    fn new(variable: &Variable<'a>, expression: Option<&Expression<'a>>) -> Self {
+    pub(crate) fn new(variable: &Variable<'a>, expression: Option<&Expression<'a>>) -> Self {
         let identifier = variable.identifier.clone();
         let size = variable.data_type.size();
         let data_type = variable.data_type.clone();
@@ -370,12 +391,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             .is_some_and(|scope| scope.has_variable(identifier))
     }
 
-    fn push_local_function_variable(&mut self, variable: BoundVariable<'a>) {
-        if let Some(function_scope) = self.function_scopes.borrow_mut().last_mut() {
-            function_scope.push_variable(variable);
-        }
-    }
-
     fn has_variable_in_global_scope(&self, identifier: &str) -> bool {
         self.global_scope.borrow().has_variable(identifier)
     }
@@ -390,8 +405,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                         variable.identifier,
                     );
                 }
-
-                self.push_local_function_variable(BoundVariable::new(variable, None));
             }
             Statement::VariableDeclarationAndAssignment {
                 variable,
@@ -403,7 +416,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                         variable.position.1,
                         variable.identifier,
                     );
-                    return;
                 }
 
                 let data_type = self.eval(expression);
@@ -417,8 +429,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     );
                 }
                 dbg!(&expression);
-                // TODO: Push the variables at parse state.
-                self.push_local_function_variable(BoundVariable::new(variable, Some(expression)));
             }
             Statement::Expression { expression, .. } => {
                 // Must check whether the function call expression has valid amount of arguments.
@@ -452,7 +462,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 block.statements.iter().for_each(|statement| self.analyze_statement(statement));
             }
             _ => {}
-        }
+        };
+
         self.emitter.emit_statement(statement);
     }
 
@@ -535,32 +546,9 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         self.emitter.load_current_call_depth();
         if !params.is_empty() {
             self.emitter.echo(format!("Loading {} arguments", params.len()).as_str());
-            self.load_arguments(&params);
+            self.emitter.emit_load_arguments(&params);
             self.emitter.echo(format!("{} arguments loaded", params.len()).as_str());
         }
-    }
-
-    fn load_arguments(&mut self, parameters: &Vec<BoundVariable<'a>>) {
-        // Load the parameters into the stack from the callee function.
-        // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
-        // To load them we have to get the total size of parameters and subtract it
-        // each time we load a parameter.
-        // for example:
-        // ```FUNc foo(argc: pp, argv:pp) {
-        // ...
-        // }
-        // foo(1, 2);```
-        // The parameters are loaded as follows:
-        // The total size is 1 (pp) + 1 (pp) = 2.
-        // The LOD function only loads 32 bits, so for anything bigger
-        // than that we need to LOD again.
-        // NOTE: We have to load with an offset because we pass in some things on stack
-        // like the depth.
-        parameters
-            .iter()
-            .rev()
-            .for_each(|parameter| self.push_local_function_variable(parameter.clone()));
-        self.emitter.emit_load_arguments(parameters);
     }
 
     fn end_function(&mut self) {
