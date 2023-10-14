@@ -114,7 +114,8 @@ pub enum TokenKind {
     // function
     PprintKeyword,
     // write()
-    PprintlnKeyword, // writeln()
+    PprintlnKeyword,
+    // writeln()
     PpanicKeyword,
     // panic()
     PpinKeyword,
@@ -510,8 +511,10 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
     fn handle_identifier(&mut self) -> Token<'a> {
         let start = self.cursor;
+        self.advance();
 
-        while self.peek().is_alphabetic() || self.peek() == '_' && !self.peek().is_whitespace() {
+        while self.peek().is_ascii_digit() || self.peek().is_alphabetic() || self.peek() == '_' &&
+            !self.peek().is_whitespace() {
             self.advance();
         }
 

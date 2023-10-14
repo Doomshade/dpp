@@ -43,7 +43,7 @@ pub struct FunctionScope<'a> {
 impl<'a> FunctionScope<'a> {
     pub fn new(function_identifier: &'a str) -> Self {
         let mut scope = Scope::default();
-        scope.current_position = Self::function_call_padding();
+        scope.current_position = 1 + Self::function_call_padding();
         FunctionScope { scope, function_identifier }
     }
 
@@ -56,7 +56,7 @@ impl<'a> FunctionScope<'a> {
     }
 
     pub const fn added_function_call_padding() -> u32 {
-        1
+        0
     }
 
     pub fn has_variable(&self, identifier: &str) -> bool {
@@ -95,7 +95,11 @@ pub struct GlobalScope<'a> {
 impl<'a> GlobalScope<'a> {
     pub fn new() -> Self {
         let mut scope = Scope::default();
-        scope.current_position = 1000;
+        // TODO: Need to offset this because we need the first
+        // thing on the stack to be "1" because we call
+        // main and then it fucking has to read the first thing
+        // on the stack.
+        scope.current_position = 1;
         GlobalScope {
             scope,
             functions: HashMap::new(),
@@ -413,6 +417,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     );
                 }
                 dbg!(&expression);
+                // TODO: Push the variables at parse state.
                 self.push_local_function_variable(BoundVariable::new(variable, Some(expression)));
             }
             Statement::Expression { expression, .. } => {
@@ -439,6 +444,12 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                             .function_does_not_exist(position.0, position.1);
                     }
                 }
+            }
+            Statement::While { expression, statement, .. } => {
+                self.analyze_statement(statement);
+            }
+            Statement::Block { block, .. } => {
+                block.statements.iter().for_each(|statement| self.analyze_statement(statement));
             }
             _ => {}
         }

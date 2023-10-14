@@ -152,7 +152,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             labels: std::collections::HashMap::new(),
             function_scopes,
             global_scope,
-            emit_debug: false,
+            emit_debug: true,
             control_statement_count: 0,
             current_level,
         }
@@ -211,6 +211,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                 let (level, var_loc) = self.find_variable(identifier);
                 self.echo(format!("Loading {}", identifier).as_str());
                 self.load(level, var_loc as i32, 1);
+                self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
             }
             Expression::FunctionCall {
                 arguments,
@@ -246,7 +247,6 @@ impl<'a, T: Write> Emitter<'a, T> {
                     }
                     self.echo(format!("{} arguments initialized", arguments.len()).as_str());
                 }
-                self.push_current_call_depth();
                 self.echo(format!("Calling {}", identifier).as_str());
                 self.emit_call(Address::Label(String::from(*identifier)));
 
@@ -256,8 +256,10 @@ impl<'a, T: Write> Emitter<'a, T> {
                     self.emit_instruction(Instruction::Int { size: -(arguments_size as i32) });
                 }
             }
-            Expression::Assignment {identifier, expression, ..} => {
-
+            Expression::Assignment { identifier, expression, .. } => {
+                let (level, var_loc) = self.find_variable(identifier);
+                self.emit_expression(expression);
+                self.store(level, var_loc as i32, 1);
             }
             _ => todo!("Not implemented"),
         }
@@ -268,7 +270,11 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     fn emit_call(&mut self, address: Address) {
+        self.push_current_call_depth();
+        self.emit_debug_info(DebugKeyword::StackA);
+
         self.emit_call_with_level(1, address);
+        self.emit_int(-1); // Drop the depth.
     }
 
     fn find_variable(&self, identifier: &str) -> (u32, u32) {
@@ -279,7 +285,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
 
         (
-            1000,
+            0,
             self.global_scope
                 .borrow()
                 .get_variable(identifier)
@@ -295,7 +301,7 @@ impl<'a, T: Write> Emitter<'a, T> {
 
         // The last instruction will be the JMP to 0 - indicating exit.
         self.echo("Program returned with return value:");
-        self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
+        self.emit_debug_info(DebugKeyword::StackN { amount: 2 });
         self.emit_jump(Address::Absolute(0));
     }
 
@@ -347,7 +353,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         let total_size = arguments.iter().fold(0, |acc, parameter| {
             acc + parameter.size_in_instructions()
         });
-        let mut curr_offset = total_size as i32 + FunctionScope::added_function_call_padding() as i32;
+        let mut curr_offset = total_size as i32 + 1;
         for parameter in arguments.iter().rev() {
             let size = parameter.size_in_instructions();
             self.load(0, -curr_offset, size);
@@ -357,7 +363,8 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn load_current_call_depth(&mut self) {
-        self.load(1, -1, 1);
+        self.load(0, -1, 1);
+        self.emit_debug_info(DebugKeyword::StackA);
     }
 
     pub fn push_current_call_depth(&mut self) {
@@ -418,6 +425,8 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     pub fn emit_all(&mut self) -> std::io::Result<()> {
+        // First emit the base
+        self.writer.write_all(b"LIT 0 1\n")?;
         for instruction in &self.code {
             match instruction {
                 Instruction::Load { level, offset } => {
@@ -505,7 +514,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                         return_type_size = function.return_type().size_in_instructions();
                     }
                     if return_type_size > 0 {
-                        self.emit_instruction(Instruction::Int { size: -(return_type_size as i32) });
+                        // TODO: Dropping the depth as well. Make this better...
+                        self.emit_int(-(return_type_size as i32));
+                        self.emit_int(-1);
                         self.echo(format!("Dropped returned value of {} ({} bytes)",
                                           identifier, return_type_size * 4)
                             .as_str());
@@ -517,8 +528,12 @@ impl<'a, T: Write> Emitter<'a, T> {
             Statement::VariableDeclarationAndAssignment { expression, variable, .. } => {
                 self.echo(format!("Initializing variable {}", variable.identifier).as_str());
                 self.emit_expression(expression);
+                let (level, var_loc) = self.find_variable(variable.identifier);
+                self.store(level, var_loc as i32, 1);
+                self.emit_int(1);
+
                 self.echo(format!("Variable {} initialized", variable.identifier).as_str());
-                self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
+                self.emit_debug_info(DebugKeyword::StackN { amount: 5 });
             }
             Statement::Bye { expression, .. } => {
                 let parameters_size;
@@ -533,7 +548,8 @@ impl<'a, T: Write> Emitter<'a, T> {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
                     self.echo(format!("Returning {}", expression).as_str());
-                    self.store(0, -1 - parameters_size as i32, 1);
+                    // TODO: The return value offset should consider the size of the return value.
+                    self.store(0, -2 - parameters_size as i32, 1);
                 }
                 self.emit_instruction(Instruction::Return);
                 // Don't emit RET. The function `emit_function` will handle this
@@ -551,8 +567,12 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.emit_instruction(Instruction::Jump { address: Address::Label(start) });
                 self.emit_label(end.as_str());
             }
-            Statement::Empty {..} => {
+            Statement::Empty { .. } => {
                 // Emit nothing I guess :)
+            }
+            Statement::Block { block, .. } => {
+                // TODO: Clean after the block (pop the variables).
+                block.statements.iter().for_each(|statement| self.emit_statement(statement));
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };
