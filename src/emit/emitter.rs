@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
+use std::ops::Add;
 
 use crate::parse::analysis::{BoundVariable, FunctionScope, GlobalScope};
 use crate::parse::parser::{BinaryOperator, Expression, Statement};
@@ -128,8 +129,10 @@ pub struct Emitter<'a, T>
     function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
     /// The global scope.
     global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-    /// The labels of the functions.
-    function_labels: std::collections::HashMap<String, u32>,
+    /// The labels of the program.
+    labels: std::collections::HashMap<String, u32>,
+    control_statement_count: u32,
+    emit_debug: bool,
 
     current_level: std::rc::Rc<std::cell::RefCell<u32>>,
 }
@@ -146,9 +149,11 @@ impl<'a, T: Write> Emitter<'a, T> {
         Self {
             writer,
             code: Vec::new(),
-            function_labels: std::collections::HashMap::new(),
+            labels: std::collections::HashMap::new(),
             function_scopes,
             global_scope,
+            emit_debug: false,
+            control_statement_count: 0,
             current_level,
         }
     }
@@ -250,6 +255,9 @@ impl<'a, T: Write> Emitter<'a, T> {
                     self.echo(format!("Popping arguments for {identifier}").as_str());
                     self.emit_instruction(Instruction::Int { size: -(arguments_size as i32) });
                 }
+            }
+            Expression::Assignment {identifier, expression, ..} => {
+
             }
             _ => todo!("Not implemented"),
         }
@@ -380,8 +388,15 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
-    pub fn emit_control_label(&mut self, label: &str) {
-        self.emit_label(format!("0{label}").as_str());
+    fn emit_start_while_label(&mut self) {}
+
+    fn create_control_label(&mut self, label: &str) -> String {
+        let function_ident;
+        {
+            let function_scopes = self.function_scopes.borrow();
+            function_ident = function_scopes.last().expect("Must be in a function to use control statements").function_identifier();
+        }
+        format!("0_{function_ident}_{label}_{}", self.control_statement_count)
     }
 
     pub fn emit_function_label(&mut self, label: &str) {
@@ -389,7 +404,7 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     fn emit_label(&mut self, label: &str) {
-        self.function_labels
+        self.labels
             .insert(label.to_string(), self.code.len() as u32);
         self.emit_instruction(Instruction::Label(String::from(label)));
     }
@@ -441,31 +456,36 @@ impl<'a, T: Write> Emitter<'a, T> {
                     self.writer
                         .write_all(format!("INT 0 {size}\r\n").as_bytes())?;
                 }
-                Instruction::Dbg { debug_keyword } => match debug_keyword {
-                    DebugKeyword::Registers => {
-                        self.writer.write_all(b"&REGS\r\n")?;
+                Instruction::Dbg { debug_keyword } =>
+                    {
+                        if self.emit_debug {
+                            match debug_keyword {
+                                DebugKeyword::Registers => {
+                                    self.writer.write_all(b"&REGS\r\n")?;
+                                }
+                                DebugKeyword::Stack => {
+                                    self.writer.write_all(b"&STK\r\n")?;
+                                }
+                                DebugKeyword::StackA => {
+                                    self.writer.write_all(b"&STKA\r\n")?;
+                                }
+                                DebugKeyword::StackRg { start, end } => {
+                                    self.writer
+                                        .write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+                                }
+                                DebugKeyword::StackN { amount } => {
+                                    self.writer
+                                        .write_all(format!("&STKN {amount}\r\n").as_bytes())?;
+                                }
+                                DebugKeyword::Echo { message } => {
+                                    self.writer
+                                        .write_all(format!("&ECHO {message}\r\n").as_bytes())?;
+                                }
+                            }
+                        }
                     }
-                    DebugKeyword::Stack => {
-                        self.writer.write_all(b"&STK\r\n")?;
-                    }
-                    DebugKeyword::StackA => {
-                        self.writer.write_all(b"&STKA\r\n")?;
-                    }
-                    DebugKeyword::StackRg { start, end } => {
-                        self.writer
-                            .write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
-                    }
-                    DebugKeyword::StackN { amount } => {
-                        self.writer
-                            .write_all(format!("&STKN {amount}\r\n").as_bytes())?;
-                    }
-                    DebugKeyword::Echo { message } => {
-                        self.writer
-                            .write_all(format!("&ECHO {message}\r\n").as_bytes())?;
-                    }
-                },
                 Instruction::Label(label) => {
-                    self.writer.write_all(format!("@{label} ").as_bytes())?;
+                    self.writer.write_all(format!("\n@{label} ").as_bytes())?;
                 }
             }
         }
@@ -518,6 +538,21 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.emit_instruction(Instruction::Return);
                 // Don't emit RET. The function `emit_function` will handle this
                 // because in case of main function we want to JMP 0 0 instead of RET 0 0.
+            }
+            Statement::While { expression, statement, .. } => {
+                let start = self.create_control_label("while_start");
+                let end = self.create_control_label("while_end");
+                self.control_statement_count += 1;
+
+                self.emit_label(start.as_str());
+                self.emit_expression(expression);
+                self.emit_instruction(Instruction::Jmc { address: Address::Label(end.clone()) });
+                self.emit_statement(statement);
+                self.emit_instruction(Instruction::Jump { address: Address::Label(start) });
+                self.emit_label(end.as_str());
+            }
+            Statement::Empty {..} => {
+                // Emit nothing I guess :)
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };

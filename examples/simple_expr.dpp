@@ -27,6 +27,8 @@ FUNc main() -> pp {
     pp -> plswork = test(123);
     test(456);
 
+    while(1) pp -> mmm = 0;
+
     pp -> okay = plswork + 4321;
     pp -> okayy = okay + 54321;
     bye 123;
