@@ -128,7 +128,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     const OUTPUT: &str = "out/dpp/test.pl0";
 
     analyze_and_emit(translation_unit, &error_diag, OUTPUT)?;
-    let child = Command::new("resources/pl0_interpret.exe")
+    let child = Command::new("resources/pl0_interpret/bin/refint_pl0_ext.exe")
         .args(["-a", "+d", "+l", "+i", "+t", "+s", OUTPUT])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
