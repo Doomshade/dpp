@@ -1,9 +1,8 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
-use std::ops::Add;
 
 use crate::parse::analysis::{BoundVariable, FunctionScope, GlobalScope};
-use crate::parse::parser::{BinaryOperator, Expression, Statement};
+use crate::parse::parser::{BinaryOperator, Expression, Statement, Variable};
 
 #[derive(Clone, Debug)]
 pub enum Address {
@@ -218,43 +217,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                 identifier,
                 ..
             } => {
-                // Size in instructions.
-                let return_type_size;
-                let arguments_size;
-                if *identifier == "main" {
-                    (return_type_size, arguments_size) = self.main_function_descriptor();
-                } else {
-                    let global_scope = self.global_scope.borrow();
-                    let function = global_scope.get_function(identifier).unwrap();
-                    return_type_size = function.return_type().size_in_instructions();
-                    arguments_size = function.parameters_size();
-                }
-
-                // If the function has a return type we need to allocate
-                // extra space on the stack for the thing it returns.
-                if return_type_size > 0 {
-                    self.echo(format!("Reserving {} bytes for return value of {}", return_type_size *
-                        4, identifier).as_str());
-                    self.emit_instruction(Instruction::Int { size: return_type_size as i32 });
-                }
-
-                // Emit arguments AFTER the return type.
-                if arguments.len() > 0 {
-                    self.echo(format!("Initializing {} arguments", arguments.len()).as_str());
-                    for argument in arguments {
-                        self.emit_expression(argument);
-                        self.echo(format!("Initialized {}", argument).as_str());
-                    }
-                    self.echo(format!("{} arguments initialized", arguments.len()).as_str());
-                }
-                self.echo(format!("Calling {}", identifier).as_str());
-                self.emit_call(Address::Label(String::from(*identifier)));
-
-                // Pop the arguments off the stack.
-                if arguments_size > 0 {
-                    self.echo(format!("Popping arguments for {identifier}").as_str());
-                    self.emit_instruction(Instruction::Int { size: -(arguments_size as i32) });
-                }
+                self.emit_function_call(arguments, identifier);
             }
             Expression::Assignment { identifier, expression, .. } => {
                 let (level, var_loc) = self.find_variable(identifier);
@@ -269,12 +232,53 @@ impl<'a, T: Write> Emitter<'a, T> {
         (1, 0)
     }
 
-    fn emit_call(&mut self, address: Address) {
+    fn emit_function_call(&mut self, arguments: &Vec<Expression<'a>>, identifier: &str) {
+        // Size in instructions.
+        let mut return_type_size: usize = 0;
+        let mut arguments_size: usize = 0;
+        if identifier == "main" {
+            (return_type_size, arguments_size) = self.main_function_descriptor();
+        } else {
+            let global_scope = self.global_scope.borrow();
+            let function = global_scope.get_function(identifier).unwrap();
+            return_type_size = function.return_type().size_in_instructions();
+            arguments_size = function.parameters_size();
+        }
+
+        // If the function has a return type we need to allocate
+        // extra space on the stack for the thing it returns.
+        if return_type_size > 0 {
+            self.echo(format!("Reserving {} bytes for return value of {}", return_type_size *
+                4, identifier).as_str());
+            self.emit_instruction(Instruction::Int { size: return_type_size as i32 });
+        }
+
+        // Emit arguments AFTER the return type.
+        if arguments.len() > 0 {
+            self.echo(format!("Initializing {} arguments", arguments.len()).as_str());
+            for argument in arguments {
+                self.emit_expression(argument);
+                self.echo(format!("Initialized {}", argument).as_str());
+            }
+            self.echo(format!("{} arguments initialized", arguments.len()).as_str());
+        }
+
+        // Push the current call depth. This is needed to access global variables.
         self.push_current_call_depth();
         self.emit_debug_info(DebugKeyword::StackA);
 
-        self.emit_call_with_level(1, address);
-        self.emit_int(-1); // Drop the depth.
+        // Call the function finally.
+        self.echo(format!("Calling {}", identifier).as_str());
+        self.emit_call_with_level(1, Address::Label(String::from(identifier)));
+
+        // Once we return, drop the depth.
+        self.emit_int(-1);
+
+        // Pop the arguments off the stack.
+        if arguments_size > 0 {
+            self.echo(format!("Popping arguments for {identifier}").as_str());
+            self.emit_instruction(Instruction::Int { size: -(arguments_size as i32) });
+        }
     }
 
     fn find_variable(&self, identifier: &str) -> (u32, u32) {
@@ -301,7 +305,7 @@ impl<'a, T: Write> Emitter<'a, T> {
 
         // The last instruction will be the JMP to 0 - indicating exit.
         self.echo("Program returned with return value:");
-        self.emit_debug_info(DebugKeyword::StackN { amount: 2 });
+        self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
         self.emit_jump(Address::Absolute(0));
     }
 
@@ -506,7 +510,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             Statement::Expression { expression, .. } => {
                 self.emit_expression(expression);
                 if let Expression::FunctionCall { identifier, .. } = expression {
-                    // Pop the return value off the stack.
+                    // Pop the return value off the stack because it's not assigned to anything.
                     let return_type_size;
                     {
                         let global_scope = self.global_scope.borrow();
@@ -514,9 +518,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                         return_type_size = function.return_type().size_in_instructions();
                     }
                     if return_type_size > 0 {
-                        // TODO: Dropping the depth as well. Make this better...
                         self.emit_int(-(return_type_size as i32));
-                        self.emit_int(-1);
                         self.echo(format!("Dropped returned value of {} ({} bytes)",
                                           identifier, return_type_size * 4)
                             .as_str());
