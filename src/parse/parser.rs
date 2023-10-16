@@ -18,6 +18,13 @@ use std::rc::Rc;
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};
 
+
+pub trait Pos {
+    fn row(&self) -> u32;
+    fn col(&self) -> u32;
+}
+
+
 #[derive(Clone, Debug)]
 pub struct Parser<'a, 'b> {
     tokens: Rc<Vec<Token<'a>>>,
@@ -35,6 +42,16 @@ pub struct TranslationUnit<'a> {
     pub global_statements: Vec<Statement<'a>>,
 }
 
+impl Pos for TranslationUnit<'_> {
+    fn row(&self) -> u32 {
+        1
+    }
+
+    fn col(&self) -> u32 {
+        1
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Function<'a> {
     pub position: (u32, u32),
@@ -42,6 +59,16 @@ pub struct Function<'a> {
     pub return_type: DataType<'a>,
     pub parameters: Vec<Variable<'a>>,
     pub block: Block<'a>,
+}
+
+impl Pos for Function<'_> {
+    fn row(&self) -> u32 {
+        self.position.0
+    }
+
+    fn col(&self) -> u32 {
+        self.position.0
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -100,12 +127,7 @@ pub enum Statement<'a> {
     For {
         position: (u32, u32),
         index_ident: &'a str,
-        length_expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-    },
-    ForWithIdentExpression {
-        position: (u32, u32),
-        ident: Expression<'a>,
+        ident_expression: Option<Expression<'a>>,
         length_expression: Expression<'a>,
         statement: Box<Statement<'a>>,
     },
@@ -241,6 +263,21 @@ impl PartialEq for DataType<'_> {
                 | (DataType::Booba, DataType::Booba)
                 | (DataType::Nopp, DataType::Nopp)
         )
+    }
+}
+
+impl Display for DataType<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataType::Number(_) => write!(f, "number")?,
+            DataType::P => write!(f, "p")?,
+            DataType::Yarn => write!(f, "yarn")?,
+            DataType::Booba => write!(f, "booba")?,
+            DataType::Nopp => write!(f, "nopp")?,
+            DataType::Struct { name } => write!(f, "struct {name}")?,
+        };
+
+        Ok(())
     }
 }
 
@@ -630,7 +667,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::ForKeyword => {
                 self.expect(TokenKind::ForKeyword)?;
                 self.expect(TokenKind::OpenParen)?;
-                let ident = self.expect(TokenKind::Identifier)?;
+                let index_ident = self.expect(TokenKind::Identifier)?;
                 let ident_expression = if self.matches_token_kind(TokenKind::Equal) {
                     self.expect(TokenKind::Equal)?;
                     Some(self.expr()?)
@@ -638,23 +675,15 @@ impl<'a, 'b> Parser<'a, 'b> {
                     None
                 };
                 self.expect(TokenKind::ToKeyword)?;
-                let expression = self.expr()?;
+                let length_expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
                 let statement = self.statement()?;
 
-                if let Some(ident_expression) = ident_expression {
-                    return Some(Statement::ForWithIdentExpression {
-                        position: self.position,
-                        ident: ident_expression,
-                        length_expression: expression,
-                        statement: Box::new(statement),
-                    });
-                }
-
                 return Some(Statement::For {
                     position: self.position,
-                    index_ident: ident,
-                    length_expression: expression,
+                    index_ident,
+                    ident_expression,
+                    length_expression,
                     statement: Box::new(statement),
                 });
             }

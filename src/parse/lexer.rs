@@ -325,20 +325,27 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.chars[self.cursor + ahead]
     }
 
-    fn advance(&mut self) {
+    #[must_use]
+    fn advance(&mut self) -> usize {
+        let advanced_bytes = self.peek().len_utf8();
+        if advanced_bytes > 1 {
+            println!("YO");
+        }
         self.col += 1;
         self.cursor += 1;
+        advanced_bytes
     }
 
     fn handle_p(&mut self) -> Token<'a> {
         let start = self.cursor;
+        let mut end = start;
 
-        self.advance(); // Consume opening quote.
+        end += self.advance(); // Consume opening quote.
         if self.peek() == '\\' {
             // TODO: Handle escaped characters.
-            self.advance(); // Consume the escaped character.
+            end += self.advance(); // Consume the escaped character.
         }
-        self.advance(); // Consume the character.
+        end += self.advance(); // Consume the character.
 
         if self.peek() != '\'' {
             self.error_diag
@@ -347,53 +354,55 @@ impl<'a, 'b> Lexer<'a, 'b> {
             return self.new_token(TokenKind::Eof, "EOF");
         }
 
-        self.advance(); // Consume closing quote.
-        self.new_token(TokenKind::P, &self.raw_input[start + 1..self.cursor - 1])
+        end += self.advance(); // Consume closing quote.
+        self.new_token(TokenKind::P, &self.raw_input[start + 1..end - 1])
     }
 
     fn handle_unknown(&mut self) -> Token<'a> {
-        self.advance();
+        let end = self.advance();
 
         self.new_token(
             TokenKind::Unknown,
-            &self.raw_input[self.cursor - 1..self.cursor],
+            &self.raw_input[self.cursor - 1..end],
         )
     }
 
     fn handle_comment(&mut self) -> Token<'a> {
         let start = self.cursor;
+        let mut end = start;
 
-        self.advance(); // Consume the '#' comment tag.
+        end += self.advance(); // Consume the '#' comment tag.
 
         while self.peek() != '\n' {
-            self.advance();
+            end += self.advance();
         }
 
-        self.new_token(TokenKind::Comment, &self.raw_input[start..self.cursor])
+        self.new_token(TokenKind::Comment, &self.raw_input[start..end])
     }
 
     fn handle_operator(&mut self) -> Token<'a> {
         let start = self.cursor;
+        let mut end = start;
 
         match self.peek() {
             '-' => {
-                self.advance();
+                end += self.advance();
                 if self.peek() == '=' || self.peek() == '>' {
-                    self.advance();
+                    end += self.advance();
                 }
             }
             '>' | '<' | '!' | '=' | '+' | '*' | '/' | '%' => {
-                self.advance();
+                end += self.advance();
                 if self.peek() == '=' {
-                    self.advance();
+                    end += self.advance();
                 }
             }
             _ => {
-                self.advance();
+                end += self.advance();
             }
         }
 
-        let op = &self.raw_input[start..self.cursor];
+        let op = &self.raw_input[start..end];
         let kind: TokenKind = match op {
             "->" => TokenKind::Arrow,
             ">" => TokenKind::Greater,
@@ -419,6 +428,8 @@ impl<'a, 'b> Lexer<'a, 'b> {
     }
 
     fn handle_punctuation(&mut self) -> Token<'a> {
+        let start = self.cursor;
+        let mut end = start;
         let kind = match self.peek() {
             '(' => TokenKind::OpenParen,
             ')' => TokenKind::CloseParen,
@@ -431,18 +442,20 @@ impl<'a, 'b> Lexer<'a, 'b> {
             ';' => TokenKind::Semicolon,
             _ => unreachable!("Unknown punctuation: {}", self.peek()),
         };
-        self.advance();
+        end += self.advance();
 
-        self.new_token(kind, &self.raw_input[self.cursor - 1..self.cursor])
+        self.new_token(kind, &self.raw_input[start..end])
     }
 
     fn handle_whitespace(&mut self) -> Token<'a> {
+        let start = self.cursor;
+        let mut end = start;
         while self.peek().is_whitespace() {
             if self.peek() == '\n' {
                 self.row += 1;
                 self.col = 1;
             }
-            self.advance();
+            end += self.advance();
         }
 
         self.new_token(TokenKind::Whitespace, "")
@@ -450,13 +463,14 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
     fn handle_yarn(&mut self) -> Token<'a> {
         let start = self.cursor;
-        self.advance(); // Consume the opening quote.
+        let mut end = start;
+        end += self.advance(); // Consume the opening quote.
 
         while self.peek() != char::default() && self.peek() != '"' && self.peek() != '\n' {
-            self.advance(); // Add the character.
+            end += self.advance(); // Add the character.
 
             if self.peek() == '\\' {
-                self.advance();
+                end += self.advance();
                 let _x = match self.peek() {
                     'n' => '\n',
                     'r' => '\r',
@@ -472,13 +486,13 @@ impl<'a, 'b> Lexer<'a, 'b> {
                         self.peek()
                     }
                 };
-                self.advance();
+                end += self.advance();
             }
         }
 
-        let token = self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..self.cursor]);
+        let token = self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..end]);
         if self.peek() == '"' {
-            self.advance(); // Consume the closing quote.
+            let _ = self.advance(); // Consume the closing quote.
         } else {
             self.error_diag
                 .borrow_mut()
@@ -490,9 +504,10 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
     fn handle_number(&mut self) -> Token<'a> {
         let start = self.cursor;
+        let mut end = start;
 
         while self.peek().is_ascii_digit() {
-            self.advance();
+            end += self.advance();
         }
 
         if self.peek() == '.' {
@@ -502,23 +517,24 @@ impl<'a, 'b> Lexer<'a, 'b> {
                     .invalid_number(self.row, self.col);
             }
             while self.peek().is_ascii_digit() {
-                self.advance();
+                end += self.advance();
             }
         }
 
-        self.new_token(TokenKind::Number, &self.raw_input[start..self.cursor])
+        self.new_token(TokenKind::Number, &self.raw_input[start..end])
     }
 
     fn handle_identifier(&mut self) -> Token<'a> {
         let start = self.cursor;
-        self.advance();
+        let mut end = start;
+        end += self.advance();
 
         while self.peek().is_ascii_digit() || self.peek().is_alphabetic() || self.peek() == '_' &&
             !self.peek().is_whitespace() {
-            self.advance();
+            end += self.advance();
         }
 
-        let ident_value = &self.raw_input[start..self.cursor];
+        let ident_value = &self.raw_input[start..end];
         let kind = match ident_value {
             "xxlpp" => TokenKind::XxlppKeyword,
             "pp" => TokenKind::PpKeyword,

@@ -5,9 +5,7 @@ use std::rc::Rc;
 
 use crate::emit::emitter::Emitter;
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::parser::{
-    DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable,
-};
+use crate::parse::parser::{BinaryOperator, DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable};
 
 #[derive(Clone, Debug, Default)]
 pub struct Scope<'a> {
@@ -455,13 +453,28 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     }
                 }
             }
-            Statement::While { expression, statement, .. } => {
+            Statement::While { expression, statement, position } => {
+                let data_type = self.eval(expression);
+                if !matches!(data_type, DataType::Booba) {
+                    self.error_diag.borrow_mut().invalid_data_type(position.0, position.1,
+                                                                   DataType::Booba, &data_type);
+                }
                 self.analyze_statement(statement);
             }
             Statement::Block { block, .. } => {
                 block.statements.iter().for_each(|statement| self.analyze_statement(statement));
             }
-            _ => {}
+            Statement::Bye { .. } => {}
+            Statement::If { expression, statement, position } => {
+                let data_type = self.eval(expression);
+
+                if !matches!(data_type, DataType::Booba) {
+                    self.error_diag.borrow_mut().invalid_data_type(position.0, position.1,
+                                                                   DataType::Booba, &data_type)
+                }
+                self.analyze_statement(statement);
+            }
+            _ => { todo!("Analyzing {:?}", statement) }
         };
 
         self.emitter.emit_statement(statement);
@@ -486,12 +499,17 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     },
                 };
             }
-            Expression::Binary { lhs, rhs, .. } => {
+            Expression::Binary { lhs, rhs, op, .. } => {
                 let lhs_data_type = self.eval(lhs);
                 let rhs_data_type = self.eval(rhs);
                 assert_eq!(lhs_data_type, rhs_data_type, "Data types do not match");
                 // TODO: Check whether the binary operator is available for the given data type.
-                lhs_data_type
+                use BinaryOperator::*;
+                match op {
+                    Add | Subtract | Multiply | Divide => lhs_data_type,
+                    NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan |
+                    LessThanOrEqual => DataType::Booba
+                }
             }
             Expression::Identifier { identifier, .. } => {
                 let function_scopes = self.function_scopes.borrow_mut();

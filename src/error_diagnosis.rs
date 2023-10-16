@@ -3,6 +3,7 @@ use core::cmp::Ordering;
 use core::fmt::{Debug, Display, Formatter};
 use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;
+use crate::parse::parser::DataType;
 
 pub struct SyntaxError {
     error_messages: Vec<String>,
@@ -192,6 +193,15 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             row,
             col,
             format!("Invalid type for variable \"{var_name}\".").as_str(),
+        );
+    }
+
+    pub fn invalid_data_type(&mut self, row: u32, col: u32,
+                             expected_data_type: DataType<'a>, got: &DataType<'a>) {
+        self.insert_error_message(
+            row,
+            col,
+            format!("Invalid data type - expected {expected_data_type} got {got}.").as_str(),
         );
     }
 

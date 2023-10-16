@@ -13,6 +13,13 @@ FUNc test(par: pp) -> pp {
     bye test2;
 }
 
+FUNc fibonacci(num: pp) -> pp {
+    if (num == 1) {
+        bye 1;
+    }
+    bye fibonacci(num - 1);
+}
+
 FUNc testt() -> pp {
     pp -> testt0 = 111;
     bye testt0;
@@ -24,10 +31,11 @@ FUNc main() -> pp {
     testt();
     pp -> main3 = testt();
     pp -> main4 = test(123);
-    while (1) {
-        pp -> main69 = test(123);
-        pp -> main699 = test(123);
+    pp -> i = 10;
+    while (i > 0) {
+        i = i - 1;
     }
+
     test(456);
     pp -> main5;
     pp -> main6 = 0;
@@ -35,7 +43,7 @@ FUNc main() -> pp {
 
     pp -> main8 = main3 + 4321;
     pp -> main9 = main8 + 54321;
-    bye 123 + testt();
+    bye 123 + testt() + 5;
 }
 pp -> c = 456789;
 # FUNc main(argc: pp, argv: yarn) -> pp {

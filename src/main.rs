@@ -134,8 +134,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    let output = String::from_utf8(child.wait_with_output()?.stdout)?;
-    println!("{output}");
+    let out = child.wait_with_output()?;
+    let stdout = String::from_utf8(out.stdout)?;
+    let stderr = String::from_utf8(out.stderr)?;
+    println!("{stdout}");
+
+    if !stderr.is_empty() {
+        eprintln!("ERROR: {stderr}");
+    }
     Ok(())
 }
 

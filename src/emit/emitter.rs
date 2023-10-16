@@ -210,7 +210,17 @@ impl<'a, T: Write> Emitter<'a, T> {
                             operation: Operation::Multiply,
                         });
                     }
-                    _ => {}
+                    BinaryOperator::Equal => {
+                        self.emit_instruction(Instruction::Operation {
+                            operation: Operation::Equal
+                        })
+                    }
+                    BinaryOperator::GreaterThan => {
+                        self.emit_instruction(Instruction::Operation {
+                            operation: Operation::GreaterThan
+                        })
+                    }
+                    _ => todo!("Binary operator {:?}", op)
                 }
             }
             Expression::Identifier { identifier, .. } => {
@@ -428,13 +438,15 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     fn emit_start_while_label(&mut self) {}
 
-    fn create_control_label(&mut self, label: &str) -> String {
-        let function_ident;
-        {
-            let function_scopes = self.function_scopes.borrow();
-            function_ident = function_scopes.last().expect("Must be in a function to use control statements").function_identifier();
+    fn create_label(&mut self, label: &str) -> String {
+        let control_label;
+        if EMIT_DEBUG {
+            control_label = format!("0{label}_{}", self.control_statement_count);
+        } else {
+            control_label = format!("{}", self.control_statement_count);
         }
-        format!("0_{function_ident}_{label}_{}", self.control_statement_count)
+        self.control_statement_count += 1;
+        control_label
     }
 
     pub fn emit_function_label(&mut self, label: &str) {
@@ -589,9 +601,8 @@ impl<'a, T: Write> Emitter<'a, T> {
             }
             Statement::While { expression, statement, .. } => {
                 self.push_scope();
-                let start = self.create_control_label("while_start");
-                let end = self.create_control_label("while_end");
-                self.control_statement_count += 1;
+                let start = self.create_label("while_s");
+                let end = self.create_label("while_e");
 
                 self.emit_label(start.as_str());
                 self.emit_expression(expression);
@@ -609,6 +620,19 @@ impl<'a, T: Write> Emitter<'a, T> {
                 self.push_scope();
                 block.statements.iter().for_each(|statement| self.emit_statement(statement));
                 self.pop_scope();
+            }
+            Statement::If { expression, statement, .. } => {
+                self.push_scope();
+                let start = self.create_label("if_s");
+                let end = self.create_label("if_e");
+                self.control_statement_count += 1;
+
+                self.emit_label(start.as_str());
+                self.emit_expression(expression);
+                self.emit_instruction(Instruction::Jmc { address: Address::Label(end.clone()) });
+                self.emit_statement(statement);
+                self.pop_scope();
+                self.emit_label(end.as_str());
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };
