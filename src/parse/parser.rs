@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
+use dpp_macros_derive::HelloMacro;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};
@@ -70,7 +71,8 @@ impl Pos for Function<'_> {
     }
 }
 
-#[derive(Clone, Debug)]
+use dpp_macros::HelloMacro;
+#[derive(Clone, Debug, HelloMacro)]
 pub struct Block<'a> {
     pub position: (u32, u32),
     pub statements: Vec<Statement<'a>>,
