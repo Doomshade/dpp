@@ -12,7 +12,6 @@
 
 use std::cell::RefCell;
 use std::fmt::{Debug, Display, Formatter};
-use std::process::id;
 use std::rc::Rc;
 
 use crate::error_diagnosis::ErrorDiagnosis;
@@ -67,7 +66,7 @@ impl Pos for Function<'_> {
     }
 
     fn col(&self) -> u32 {
-        self.position.0
+        self.position.1
     }
 }
 
