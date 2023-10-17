@@ -8,7 +8,7 @@ pp -> b = 1 + 2 + 3*6;
 
 FUNc test(par: pp) -> pp {
     pp -> test0 = par + 40000;
-    pp -> test1 = 50000;
+    pp -> test1 = testt + 50000;
     pp -> test2 = test0 + test1;
     bye test2;
 }
@@ -36,14 +36,18 @@ FUNc main() -> pp {
         i = i - 1;
     }
 
-    test(456);
+    if (i == 0) {
+        i = 69;
+    }
+
+    test(i);
     pp -> main5;
     pp -> main6 = 0;
     pp -> main7;
 
     pp -> main8 = main3 + 4321;
     pp -> main9 = main8 + 54321;
-    bye 123 + testt() + 5;
+    bye 123 + testt() + 5 + testt;
 }
 pp -> c = 456789;
 # FUNc main(argc: pp, argv: yarn) -> pp {

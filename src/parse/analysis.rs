@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::rc::Rc;
 
-use crate::emit::emitter::Emitter;
+use crate::emit::emitter::{DebugKeyword, Emitter};
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::parser::{BinaryOperator, DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator, Variable};
+use crate::parse::parser::{
+    BinaryOperator, DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator,
+    Variable,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct Scope<'a> {
@@ -52,10 +55,13 @@ impl<'a> FunctionScope<'a> {
     pub fn new(function_identifier: &'a str) -> Self {
         let mut scopes = Vec::new();
         let mut scope = Scope::default();
-        scope.current_position = 1 + Self::function_call_padding();
+        scope.current_position = Self::function_call_padding();
 
         scopes.push(scope);
-        FunctionScope { scopes, function_identifier }
+        FunctionScope {
+            scopes,
+            function_identifier,
+        }
     }
 
     pub const fn function_call_padding() -> u32 {
@@ -71,11 +77,15 @@ impl<'a> FunctionScope<'a> {
     }
 
     pub fn has_variable(&self, identifier: &str) -> bool {
-        self.scopes.iter().any(|scope| scope.has_variable(identifier))
+        self.scopes
+            .iter()
+            .any(|scope| scope.has_variable(identifier))
     }
 
     pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<BoundVariable<'a>>> {
-        self.scopes.iter().find_map(|scope| scope.get_variable(identifier))
+        self.scopes
+            .iter()
+            .find_map(|scope| scope.get_variable(identifier))
     }
 
     pub fn function_identifier(&self) -> &'a str {
@@ -85,7 +95,10 @@ impl<'a> FunctionScope<'a> {
     pub fn push_argument(&mut self, variable: BoundVariable<'a>) {}
 
     pub fn push_variable(&mut self, variable: BoundVariable<'a>) {
-        self.scopes.last_mut().expect("A scope").push_variable(variable);
+        self.scopes
+            .last_mut()
+            .expect("A scope")
+            .push_variable(variable);
     }
 
     pub fn push_scope(&mut self) {
@@ -154,8 +167,8 @@ impl<'a> GlobalScope<'a> {
 }
 
 pub struct SemanticAnalyzer<'a, 'b, T>
-    where
-        T: Write,
+where
+    T: Write,
 {
     /// The global scope holding global variables and function identifiers.
     global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
@@ -193,8 +206,9 @@ impl<'a> BoundFunction<'a> {
 
     /// The size of parameters in instructions.
     pub fn parameters_size(&self) -> usize {
-        self.parameters().iter().fold(0, |acc, parameter| acc +
-            parameter.data_type.size_in_instructions())
+        self.parameters().iter().fold(0, |acc, parameter| {
+            acc + parameter.data_type.size_in_instructions()
+        })
     }
 }
 
@@ -312,7 +326,9 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             }
         }
 
-        self.emitter.emit_all().expect("Failed to emit code into the file.");
+        self.emitter
+            .emit_all()
+            .expect("Failed to emit code into the file.");
     }
 
     fn analyze_function(&mut self, function: &Function<'a>) {
@@ -426,7 +442,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                         variable.identifier,
                     );
                 }
-                dbg!(&expression);
+                // dbg!(&expression);
             }
             Statement::Expression { expression, .. } => {
                 // Must check whether the function call expression has valid amount of arguments.
@@ -453,28 +469,49 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                     }
                 }
             }
-            Statement::While { expression, statement, position } => {
+            Statement::While {
+                expression,
+                statement,
+                position,
+            } => {
                 let data_type = self.eval(expression);
                 if !matches!(data_type, DataType::Booba) {
-                    self.error_diag.borrow_mut().invalid_data_type(position.0, position.1,
-                                                                   DataType::Booba, &data_type);
+                    self.error_diag.borrow_mut().invalid_data_type(
+                        position.0,
+                        position.1,
+                        DataType::Booba,
+                        &data_type,
+                    );
                 }
                 self.analyze_statement(statement);
             }
             Statement::Block { block, .. } => {
-                block.statements.iter().for_each(|statement| self.analyze_statement(statement));
+                block
+                    .statements
+                    .iter()
+                    .for_each(|statement| self.analyze_statement(statement));
             }
             Statement::Bye { .. } => {}
-            Statement::If { expression, statement, position } => {
+            Statement::If {
+                expression,
+                statement,
+                position,
+            } => {
                 let data_type = self.eval(expression);
 
                 if !matches!(data_type, DataType::Booba) {
-                    self.error_diag.borrow_mut().invalid_data_type(position.0, position.1,
-                                                                   DataType::Booba, &data_type)
+                    self.error_diag.borrow_mut().invalid_data_type(
+                        position.0,
+                        position.1,
+                        DataType::Booba,
+                        &data_type,
+                    )
                 }
                 self.analyze_statement(statement);
             }
-            _ => { todo!("Analyzing {:?}", statement) }
+            _ => {
+                todo!("Analyzing {:?}", statement)
+            }
         };
 
         self.emitter.emit_statement(statement);
@@ -507,8 +544,8 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 use BinaryOperator::*;
                 match op {
                     Add | Subtract | Multiply | Divide => lhs_data_type,
-                    NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan |
-                    LessThanOrEqual => DataType::Booba
+                    NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan
+                    | LessThanOrEqual => DataType::Booba,
                 }
             }
             Expression::Identifier { identifier, .. } => {
@@ -534,7 +571,9 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     }
 
     fn begin_function_scope(&mut self, function_identifier: &'a str) {
-        self.function_scopes.borrow_mut().push(FunctionScope::new(function_identifier));
+        self.function_scopes
+            .borrow_mut()
+            .push(FunctionScope::new(function_identifier));
     }
 
     fn end_function_scope(&mut self) {
@@ -560,13 +599,16 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         });
         self.begin_function_scope(function.identifier);
         self.emitter.emit_function_label(function.identifier);
-        self.emitter.emit_int(FunctionScope::function_call_padding() as i32);
-        self.emitter.load_current_call_depth();
+        self.emitter
+            .emit_int(FunctionScope::function_call_padding() as i32);
         if !params.is_empty() {
-            self.emitter.echo(format!("Loading {} arguments", params.len()).as_str());
+            self.emitter
+                .echo(format!("Loading {} arguments", params.len()).as_str());
             self.emitter.emit_load_arguments(&params);
-            self.emitter.echo(format!("{} arguments loaded", params.len()).as_str());
+            self.emitter
+                .echo(format!("{} arguments loaded", params.len()).as_str());
         }
+        self.emitter.emit_debug_info(DebugKeyword::StackA);
     }
 
     fn end_function(&mut self) {
