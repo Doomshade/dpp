@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 
-use crate::parse::analysis::{BoundVariable, FunctionScope, GlobalScope};
+use crate::parse::analysis::{FunctionScope, GlobalScope};
 use crate::parse::parser::{BinaryOperator, Expression, Statement, Variable};
 
 #[derive(Clone, Debug)]
@@ -170,7 +170,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         });
     }
 
-    fn push_local_function_variable(&mut self, variable: BoundVariable<'a>) {
+    fn push_local_function_variable(&mut self, variable: Variable<'a>) {
         if let Some(function_scope) = self.function_scopes.borrow_mut().last_mut() {
             function_scope.push_variable(variable);
         }
@@ -377,7 +377,7 @@ impl<'a, T: Write> Emitter<'a, T> {
         vec
     }
 
-    pub fn emit_load_arguments(&mut self, arguments: &Vec<BoundVariable<'a>>) {
+    pub fn emit_load_arguments(&mut self, arguments: &Vec<Variable<'a>>) {
         // Load the parameters into the stack from the callee function.
         // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
         // To load them we have to get the total size of parameters and subtract it
@@ -562,21 +562,16 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
             }
             Statement::VariableDeclaration { variable, .. } => {
-                self.push_local_function_variable(BoundVariable::new(variable, None));
-            }
-            Statement::VariableDeclarationAndAssignment {
-                expression,
-                variable,
-                ..
-            } => {
-                self.push_local_function_variable(BoundVariable::new(variable, Some(expression)));
-                self.echo(format!("Initializing variable {}", variable.identifier).as_str());
-                self.emit_expression(expression);
-                let (level, var_loc) = self.find_variable(variable.identifier);
-                self.store(level, var_loc as i32, 1);
-                self.emit_int(1);
+                self.push_local_function_variable(variable.clone());
+                if let Some(expression) = variable.value() {
+                    self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
+                    self.emit_expression(expression);
+                    let (level, var_loc) = self.find_variable(variable.identifier());
+                    self.store(level, var_loc as i32, 1);
+                    self.emit_int(1);
 
-                self.echo(format!("Variable {} initialized", variable.identifier).as_str());
+                    self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
+                }
             }
             Statement::Bye { expression, .. } => {
                 let parameters_size;
@@ -626,7 +621,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             Statement::Block { block, .. } => {
                 self.push_scope();
                 block
-                    .statements
+                    .statements()
                     .iter()
                     .for_each(|statement| self.emit_statement(statement));
                 self.pop_scope();

@@ -13,17 +13,17 @@
 use std::cell::RefCell;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
+
+use dpp_macros::HelloMacro;
 use dpp_macros_derive::HelloMacro;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};
 
-
 pub trait Pos {
     fn row(&self) -> u32;
     fn col(&self) -> u32;
 }
-
 
 #[derive(Clone, Debug)]
 pub struct Parser<'a, 'b> {
@@ -54,11 +54,49 @@ impl Pos for TranslationUnit<'_> {
 
 #[derive(Clone, Debug)]
 pub struct Function<'a> {
-    pub position: (u32, u32),
-    pub identifier: &'a str,
-    pub return_type: DataType<'a>,
-    pub parameters: Vec<Variable<'a>>,
-    pub block: Block<'a>,
+    position: (u32, u32),
+    identifier: &'a str,
+    return_type: DataType<'a>,
+    parameters: Vec<Variable<'a>>,
+    block: Block<'a>,
+}
+
+impl<'a> Function<'a> {
+    pub fn new(
+        position: (u32, u32),
+        identifier: &'a str,
+        return_type: DataType<'a>,
+        parameters: Vec<Variable<'a>>,
+        block: Block<'a>,
+    ) -> Self {
+        Function {
+            position,
+            identifier,
+            return_type,
+            parameters,
+            block,
+        }
+    }
+
+    pub fn identifier(&self) -> &'a str {
+        self.identifier
+    }
+    pub fn return_type(&self) -> &DataType<'a> {
+        &self.return_type
+    }
+    pub fn block(&self) -> &Block<'a> {
+        &self.block
+    }
+    pub fn parameters(&self) -> &Vec<Variable<'a>> {
+        &self.parameters
+    }
+
+    /// The size of parameters in instructions.
+    pub fn parameters_size(&self) -> usize {
+        self.parameters().iter().fold(0, |acc, parameter| {
+            acc + parameter.data_type().size_in_instructions()
+        })
+    }
 }
 
 impl Pos for Function<'_> {
@@ -71,28 +109,80 @@ impl Pos for Function<'_> {
     }
 }
 
-use dpp_macros::HelloMacro;
 #[derive(Clone, Debug, HelloMacro)]
 pub struct Block<'a> {
-    pub position: (u32, u32),
-    pub statements: Vec<Statement<'a>>,
+    position: (u32, u32),
+    statements: Vec<Statement<'a>>,
+}
+
+impl<'a> Block<'a> {
+    pub fn position(&self) -> (u32, u32) {
+        self.position
+    }
+    pub fn statements(&self) -> &Vec<Statement<'a>> {
+        &self.statements
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Variable<'a> {
-    pub position: (u32, u32),
-    pub identifier: &'a str,
-    pub data_type: DataType<'a>,
+    position: (u32, u32),
+    position_in_scope: u32,
+    identifier: &'a str,
+    data_type: DataType<'a>,
+    size: usize,
+    value: Option<Expression<'a>>,
+}
+
+impl<'a> Variable<'a> {
+    pub fn new(
+        position: (u32, u32),
+        identifier: &'a str,
+        data_type: DataType<'a>,
+        value: Option<Expression<'a>>,
+    ) -> Self {
+        Variable {
+            position,
+            position_in_scope: 0,
+            identifier,
+            size: data_type.size(),
+            data_type,
+            value,
+        }
+    }
+
+    pub fn position(&self) -> (u32, u32) {
+        self.position
+    }
+    pub fn position_in_scope(&self) -> u32 {
+        self.position_in_scope
+    }
+    pub fn identifier(&self) -> &'a str {
+        self.identifier
+    }
+    pub fn data_type(&self) -> &DataType<'a> {
+        &self.data_type
+    }
+    pub fn size(&self) -> usize {
+        self.size
+    }
+    pub fn value(&self) -> Option<&Expression<'a>> {
+        self.value.as_ref()
+    }
+
+    pub fn set_position_in_scope(&mut self, position_in_scope: u32) {
+        self.position_in_scope = position_in_scope;
+    }
+
+    pub fn size_in_instructions(&self) -> usize {
+        ((self.size() - 1) / 4) + 1
+    }
 }
 
 #[derive(Clone, Debug)]
 pub enum Statement<'a> {
     VariableDeclaration {
         variable: Variable<'a>,
-    },
-    VariableDeclarationAndAssignment {
-        variable: Variable<'a>,
-        expression: Expression<'a>,
     },
     If {
         position: (u32, u32),
@@ -223,16 +313,18 @@ pub enum Expression<'a> {
 impl Display for Expression<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let formatted = match self {
-            Expression::Number { value, .. } => { value.to_string() }
-            Expression::P { value, .. } => { value.to_string() }
-            Expression::Booba { value, .. } => { value.to_string() }
-            Expression::Yarn { value, .. } => { value.to_string() }
-            Expression::Unary { operand, .. } => { "Unary expression".to_string() }
-            Expression::Binary { .. } => { "Binary expression".to_string() }
-            Expression::Identifier { identifier, .. } => { identifier.to_string() }
-            Expression::FunctionCall { identifier, .. } => { format!("Function {}", identifier) }
-            Expression::Assignment { identifier, .. } => { identifier.to_string() }
-            Expression::Invalid => { "Invalid expression".to_string() }
+            Expression::Number { value, .. } => value.to_string(),
+            Expression::P { value, .. } => value.to_string(),
+            Expression::Booba { value, .. } => value.to_string(),
+            Expression::Yarn { value, .. } => value.to_string(),
+            Expression::Unary { operand, .. } => "Unary expression".to_string(),
+            Expression::Binary { .. } => "Binary expression".to_string(),
+            Expression::Identifier { identifier, .. } => identifier.to_string(),
+            Expression::FunctionCall { identifier, .. } => {
+                format!("Function {}", identifier)
+            }
+            Expression::Assignment { identifier, .. } => identifier.to_string(),
+            Expression::Invalid => "Invalid expression".to_string(),
         };
         write!(f, "{}", formatted)?;
         Ok(())
@@ -603,11 +695,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
         let data_type = self.data_type()?;
-        Some(Variable {
-            position: self.position,
-            identifier,
-            data_type,
-        })
+        Some(Variable::new(self.position, identifier, data_type, None))
     }
 
     fn block(&mut self) -> Option<Block<'a>> {
@@ -863,21 +951,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         let statement = if self.matches_token_kind(TokenKind::Equal) {
             self.expect(TokenKind::Equal);
             let expression = self.expr()?;
-            Statement::VariableDeclarationAndAssignment {
-                variable: Variable {
-                    position: self.position,
-                    identifier,
-                    data_type,
-                },
-                expression,
+            Statement::VariableDeclaration {
+                variable: Variable::new(self.position, identifier, data_type, Some(expression)),
             }
         } else {
             Statement::VariableDeclaration {
-                variable: Variable {
-                    position: self.position,
-                    identifier,
-                    data_type,
-                },
+                variable: Variable::new(self.position, identifier, data_type, None),
             }
         };
 
