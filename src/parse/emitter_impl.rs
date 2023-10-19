@@ -1,145 +1,28 @@
-use std::fmt::{Display, Formatter};
 use std::io::Write;
-use crate::emit::Emitter;
 
-use crate::parse::{Expression, Function, FunctionScope, GlobalScope, TranslationUnit, Variable};
-use crate::parse::parser::{BinaryOperator, Statement};
+use crate::parse::{BinaryOperator, Emitter, Expression, Function, FunctionScope, GlobalScope, Statement, Variable};
+use crate::parse::emitter::{Address, DebugKeyword, EMIT_DEBUG, Instruction, Operation};
+use crate::parse::parser::TranslationUnit;
 
-#[derive(Clone, Debug)]
-pub enum Address {
-    Absolute(u32),
-    Label(String),
-}
-
-impl Display for Address {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
-            Self::Label(label) => write!(f, "@{label} ")?,
-        };
-
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug)]
-enum Instruction {
-    /// Push the literal value arg onto the stack.
-    Literal {
-        value: i32,
-    },
-    /// Return from a subroutine. This instruction uses the stack frame (or block mark) from the current invocation of the subroutine to clear the stack of all data local to the current subroutine, restore the base register, and restore the program counter. Like all operations which require no arguments, it uses the op code OPR, with a second argument (here zero) indicating which of the zero-argument operations to perform.
-    Operation {
-        operation: Operation,
-    },
-    /// Load (i.e. push onto the stack) the value of the cell identified by level and offset. A level value of 0 means the variable is in the currently executing procedure; 1 means it's in the immediately enclosing region of the program. 2 means it's the region outside that (in PL/0 as in Pascal procedures can nest indefinitely). The offset distinguishes among the variables declared at that level.
-    Load {
-        level: u32,
-        offset: i32,
-    },
-    /// Store the value currently at the top of the stack to the memory cell identified by level and offset, popping the value off the stack in the process.
-    Store {
-        level: u32,
-        offset: i32,
-    },
-    /// Call the subroutine at location address, which is level nesting levels different from the nesting level of the currently executing code. This instruction pushes a stack frame (or block mark) onto the stack, storing
-    ///
-    ///     the base address for variables, level blocks down on the stack (so that variables in outer blocks can be referred to and modified)
-    ///     the current base address (so that it can be restored when the subroutine returns)
-    ///     the current program counter (so that it can be restored when the subroutine returns)
-    Call {
-        level: u32,
-        address: Address,
-    },
-    Return,
-    Int {
-        size: i32,
-    },
-    /// Jump to the instruction at address.
-    Jump {
-        address: Address,
-    },
-    /// Pop the current value from the top of the stack. If it's 0 (false), jump to the instruction at address. Otherwise, continue with the current location of the program counter.
-    Jmc {
-        address: Address,
-    },
-    // TODO: Those aren't instructions! Make a new enum.
-    Dbg {
-        debug_keyword: DebugKeyword,
-    },
-    Label(String),
-}
-
-impl std::fmt::Display for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
-        // or, alternatively:
-        // fmt::Debug::fmt(self, f)
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Operation {
-    Return = 0,
-    /// Negate the value on the top of the stack (i.e. multiply by -1).
-    Negate = 1,
-    /// Add the two values at the top of the stack and replace them with their sum.
-    Add = 2,
-    /// Subtract the value at the top of the stack from the value below it; replace the diminuend and the subtrahend with their difference.
-    Subtract = 3,
-    /// Multiply the two values at the top of the stack and replace them with their product.
-    Multiply = 4,
-    /// Perform integer division on the two values at the top of the stack. The value on top of the stack becomes the divisor, the value below it the dividend. Replace the two values with their integer quotient.
-    Divide = 5,
-    Mod = 6,
-    /// Test the value at the top of the stack to see if it's odd or not.
-    Odd = 7,
-    /// Test the two values at the top of the stack to see if they are equal or not.
-    Equal = 8,
-    /// Test the two values at the top of the stack to see if they are unequal or not.
-    NotEqual = 9,
-    /// Test the two values x and y at the top of the stack to see if x is less than y or not.
-    LessThan = 10,
-    /// Test the two values x and y at the top of the stack to see if x is greater than y or not.
-    GreaterThanOrEqualTo = 11,
-    /// Test the two values x and y at the top of the stack to see if x is greater than or equal to y, or not.
-    GreaterThan = 12,
-    /// Test the two values x and y at the top of the stack to see if x is less than or equal to y, or not.
-    LessThanOrEqualTo = 13,
-}
-
-#[derive(Clone, Debug)]
-pub enum DebugKeyword {
-    Registers,
-    Stack,
-    StackA,
-    StackRg { start: u32, end: u32 },
-    StackN { amount: u32 },
-    Echo { message: String },
-}
-
-pub struct Pl0Emitter<'a, T>
-    where
-        T: Write,
-{
-    writer: std::io::BufWriter<T>,
-    /// The instructions to be emitted.
-    code: Vec<Instruction>,
-    /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
-    function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
-    /// The global scope.
-    global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-    /// The labels of the program.
-    labels: std::collections::HashMap<String, u32>,
-    control_statement_count: u32,
-}
-
-const EMIT_DEBUG: bool = true;
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
-impl<'a, T: Write> Emitter<'a, T> for Pl0Emitter<'a, T> {
-    fn emit_all(&mut self, writer: &mut std::io::BufWriter<T>, translation_unit: &TranslationUnit<'a>) ->
-                std::io::Result<()> {
+impl<'a, T: Write> Emitter<'a, T> {
+    pub fn new(
+        writer: std::io::BufWriter<T>,
+        function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
+        global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
+    ) -> Self {
+        Self {
+            writer,
+            code: Vec::new(),
+            labels: std::collections::HashMap::new(),
+            function_scopes,
+            global_scope,
+            control_statement_count: 0,
+        }
+    }
+    pub fn emit_all(&mut self, writer: &mut std::io::BufWriter<T>, translation_unit: &TranslationUnit<'a>) ->
+                    std::io::Result<()> {
         self.emit_translation_unit(translation_unit);
         // First emit the base
         writer.write_all(b"LIT 0 1\n")?;
@@ -205,30 +88,14 @@ impl<'a, T: Write> Emitter<'a, T> for Pl0Emitter<'a, T> {
         }
         Ok(())
     }
-}
 
-impl<'a, T: Write> Pl0Emitter<'a, T> {
-    pub fn new(
-        writer: std::io::BufWriter<T>,
-        function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
-        global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-    ) -> Self {
-        Self {
-            writer,
-            code: Vec::new(),
-            labels: std::collections::HashMap::new(),
-            function_scopes,
-            global_scope,
-            control_statement_count: 0,
-        }
-    }
     fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
         translation_unit.global_statements().iter().for_each(|stmt| self.emit_statement(stmt));
         self.emit_main_call();
         translation_unit.functions().iter().for_each(|func| self.emit_function(func))
     }
 
-    fn emit_function(&mut self, function: &Function) {}
+    fn emit_function(&mut self, function: &Function<'a>) {}
 
     fn begin_function() {
         // self.emitter.emit_function_label(function.identifier());
@@ -544,82 +411,6 @@ impl<'a, T: Write> Pl0Emitter<'a, T> {
 
     fn emit_instruction(&mut self, instruction: Instruction) {
         self.code.push(instruction);
-    }
-
-    pub fn emit_all(&mut self) -> std::io::Result<()> {
-        // First emit the base
-        self.writer.write_all(b"LIT 0 1\n")?;
-        for instruction in &self.code {
-            match instruction {
-                Instruction::Load { level, offset } => {
-                    self.writer
-                        .write_all(format!("LOD {level} {offset}\r\n").as_bytes())?;
-                }
-                Instruction::Store { level, offset } => {
-                    self.writer
-                        .write_all(format!("STO {level} {offset}\r\n").as_bytes())?;
-                }
-                Instruction::Literal { value } => {
-                    self.writer
-                        .write_all(format!("LIT 0 {value}\r\n").as_bytes())?;
-                }
-                Instruction::Jump { address } => {
-                    let str = format!("JMP 0 {address}\r\n");
-                    self.writer.write_all(str.as_bytes())?;
-                }
-                Instruction::Jmc { address } => {
-                    self.writer
-                        .write_all(format!("JMC 0 {address}\r\n").as_bytes())?;
-                }
-                Instruction::Call { level, address } => {
-                    self.writer
-                        .write_all(format!("CAL {level} {address}\r\n").as_bytes())?;
-                }
-                Instruction::Operation { operation } => {
-                    // Stupid usage of clone because we get the reference to the enum.
-                    self.writer
-                        .write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
-                }
-                Instruction::Return => {
-                    self.writer.write_all(b"RET 0 0\r\n")?;
-                }
-                Instruction::Int { size } => {
-                    self.writer
-                        .write_all(format!("INT 0 {size}\r\n").as_bytes())?;
-                }
-                Instruction::Dbg { debug_keyword } => {
-                    if EMIT_DEBUG {
-                        match debug_keyword {
-                            DebugKeyword::Registers => {
-                                self.writer.write_all(b"&REGS\r\n")?;
-                            }
-                            DebugKeyword::Stack => {
-                                self.writer.write_all(b"&STK\r\n")?;
-                            }
-                            DebugKeyword::StackA => {
-                                self.writer.write_all(b"&STKA\r\n")?;
-                            }
-                            DebugKeyword::StackRg { start, end } => {
-                                self.writer
-                                    .write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
-                            }
-                            DebugKeyword::StackN { amount } => {
-                                self.writer
-                                    .write_all(format!("&STKN {amount}\r\n").as_bytes())?;
-                            }
-                            DebugKeyword::Echo { message } => {
-                                self.writer
-                                    .write_all(format!("&ECHO {message}\r\n").as_bytes())?;
-                            }
-                        }
-                    }
-                }
-                Instruction::Label(label) => {
-                    self.writer.write_all(format!("\n@{label} ").as_bytes())?;
-                }
-            }
-        }
-        Ok(())
     }
 
     pub fn emit_statement(&mut self, statement: &Statement<'a>) {

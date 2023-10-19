@@ -2,7 +2,9 @@ use core::cmp::Ordering;
 use core::fmt::{Debug, Display, Formatter};
 use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;
-use crate::parse::{DataType, Token, TokenKind};
+
+use crate::parse::lexer::{Token, TokenKind};
+use crate::parse::parser::DataType;
 
 pub struct SyntaxError {
     error_messages: Vec<String>,
@@ -195,8 +197,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn invalid_data_type(&mut self, row: u32, col: u32,
-                             expected_data_type: DataType<'a>, got: &DataType<'a>) {
+    pub fn invalid_data_type(&mut self, row: u32, col: u32, expected_data_type: DataType<'a>, got: &DataType<'a>) {
         self.insert_error_message(
             row,
             col,

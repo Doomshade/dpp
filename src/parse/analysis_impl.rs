@@ -1,31 +1,18 @@
-use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::{DataType, Expression, Function, FunctionScope, GlobalScope, SemanticAnalyzer, TranslationUnit};
-use crate::parse::parser::{
-    BinaryOperator, Statement, UnaryOperator,
-};
+use crate::parse::{Expression, Function, FunctionScope, GlobalScope, SemanticAnalyzer, Statement, UnaryOperator};
+use crate::parse::analysis::SymbolTable;
+use crate::parse::error_diagnosis::ErrorDiagnosis;
+use crate::parse::parser::{DataType, TranslationUnit};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
-    pub fn new(
-        error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
-        function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
-        global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-    ) -> Self {
-        Self {
-            function_scopes,
-            global_scope,
-            error_diag,
-        }
-    }
-
     pub fn analyze(&mut self, translation_unit: &TranslationUnit<'a>) {
-
         // Analyze global statements.
         translation_unit.global_statements().iter().for_each(|statement| self.analyze_global_statement(statement));
 
         // Analyze the parsed functions.
         translation_unit.functions().iter().for_each(|function| self.analyze_function(function));
 
-        if !self.global_scope.borrow().has_function("main") {
+
+        if !self.find_function("main").is_some() {
             self.error_diag.borrow_mut().no_main_method_found_error();
             return;
         }
@@ -57,7 +44,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_global_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.has_variable_in_local_function_scope(variable.identifier()) {
+                if self.find_local_variable(variable.identifier()).is_some() {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position().0,
                         variable.position().1,
@@ -87,9 +74,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                                 variable.identifier(),
                             );
                         }
-                        self.global_scope
+                        self.symbol_table
                             .borrow_mut()
-                            .push_variable(variable.clone());
+                            .push_global_variable(variable.clone());
                     }
                 }
             }
@@ -97,21 +84,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
     }
 
-    fn has_variable_in_local_function_scope(&self, identifier: &str) -> bool {
-        self.function_scopes
-            .borrow()
-            .last()
-            .is_some_and(|scope| scope.find_variable(identifier).is_some())
-    }
-
-    fn has_variable_in_global_scope(&self, identifier: &str) -> bool {
-        self.global_scope.borrow().has_variable(identifier)
-    }
-
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.has_variable_in_local_function_scope(variable.identifier()) {
+                if self.find_local_variable(variable.identifier()).is_some() {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position().0,
                         variable.position().1,
@@ -141,7 +117,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     position,
                 } = expression
                 {
-                    if let Some(function) = self.global_scope.borrow().get_function(identifier) {
+                    if let Some(function) = self.symbol_table.borrow().find_function(identifier) {
                         if function.parameters().len() != arguments.len() {
                             self.error_diag.borrow_mut().invalid_number_of_arguments(
                                 position.0,
@@ -228,7 +204,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let rhs_data_type = self.eval(rhs);
                 assert_eq!(lhs_data_type, rhs_data_type, "Data types do not match");
                 // TODO: Check whether the binary operator is available for the given data type.
-                use BinaryOperator::*;
+                use crate::parse::BinaryOperator::*;
                 match op {
                     Add | Subtract | Multiply | Divide => lhs_data_type,
                     NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan
@@ -236,19 +212,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                let function_scopes = self.function_scopes.borrow_mut();
-                if let Some(current_function_scope) = function_scopes.last() {
-                    if let Some(variable) = current_function_scope.find_variable(identifier) {
-                        return variable.data_type().clone();
-                    }
-                }
-                if let Some(global_variable) = self.global_scope.borrow().get_variable(identifier) {
-                    return global_variable.data_type().clone();
+                if let Some(variable) = self.find_variable(identifier) {
+                    return variable.data_type().clone();
                 }
                 panic!("{}", format!("Variable {identifier} not found"));
             }
             Expression::FunctionCall { identifier, .. } => {
-                if let Some(global_function) = self.global_scope.borrow().get_function(identifier) {
+                if let Some(global_function) = self.find_function(identifier) {
                     return global_function.return_type().clone();
                 }
                 panic!("{}", format!("Function {identifier} not found"));
@@ -257,32 +227,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         };
     }
 
-    fn begin_function_scope(&mut self, function_identifier: &'a str) {
-        self.function_scopes
-            .borrow_mut()
-            .push(FunctionScope::new(function_identifier));
-    }
-
-    fn end_function_scope(&mut self) {
-        self.function_scopes
-            .borrow_mut()
-            .pop()
-            .expect("A scope to pop");
-    }
-
     fn begin_function(&mut self, function: &Function<'a>) {
         let mut params = Vec::new();
         for parameter in function.parameters() {
             params.push(parameter.clone());
         }
 
-        self.global_scope
-            .borrow_mut()
-            .push_function(function.clone());
-        self.begin_function_scope(function.identifier());
+        self.symbol_table.borrow_mut().push_function(function.clone());
     }
 
     fn end_function(&mut self) {
-        self.end_function_scope();
+        self.symbol_table
+            .borrow_mut()
+            .pop_function();
     }
 }

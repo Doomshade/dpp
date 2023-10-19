@@ -1,11 +1,11 @@
 //! The tokenizer for the dpp language.
 
 use std::cell::RefCell;
-use std::fmt::Display;
 use std::rc::Rc;
+use crate::parse::error_diagnosis::ErrorDiagnosis;
 
-use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::{Lexer, Token, TokenKind};
+use crate::parse::Lexer;
+use crate::parse::lexer::{Token, TokenKind};
 
 impl<'a, 'b> Lexer<'a, 'b> {
     /// # Arguments
@@ -90,7 +90,8 @@ impl<'a, 'b> Lexer<'a, 'b> {
         // If it's a whitespace or a comment, try to parse the next token as this one is useless
         // to the parser. The Comment token could be useful for error handling later on,
         // but we don't need it for now.
-        if matches!(token.kind, TokenKind::Whitespace) || matches!(token.kind, TokenKind::Comment) {
+        if matches!(token.kind(), TokenKind::Whitespace) || matches!(token.kind(),
+            TokenKind::Comment) {
             return self.parse_token();
         }
         token

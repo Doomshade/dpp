@@ -11,11 +11,13 @@
 //! Each enum also derives Debug that lets us print the tree structure of the AST.
 
 use std::cell::RefCell;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::rc::Rc;
 
-use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::{Block, DataType, Expression, Function, Token, TokenKind, TranslationUnit, Variable};
+use crate::parse::{BinaryOperator, Block, Case, Expression, Function, Number, Statement, UnaryOperator, Variable};
+use crate::parse::error_diagnosis::ErrorDiagnosis;
+use crate::parse::lexer::{Token, TokenKind};
+use crate::parse::parser::{DataType, TranslationUnit};
 
 #[derive(Clone, Debug)]
 pub struct Parser<'a, 'b> {
@@ -26,112 +28,6 @@ pub struct Parser<'a, 'b> {
     error: bool,
     // TODO: rename this
     fixing_parsing: bool,
-}
-
-#[derive(Clone, Debug)]
-pub enum Statement<'a> {
-    VariableDeclaration {
-        variable: Variable<'a>,
-    },
-    If {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-    },
-    IfElse {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-        else_statement: Box<Statement<'a>>,
-    },
-    Bye {
-        position: (u32, u32),
-        expression: Option<Expression<'a>>,
-    },
-    Print {
-        position: (u32, u32),
-        print_function: fn(&str),
-        expression: Expression<'a>,
-    },
-    Block {
-        position: (u32, u32),
-        block: Box<Block<'a>>,
-    },
-    Expression {
-        position: (u32, u32),
-        expression: Expression<'a>,
-    },
-    Empty {
-        position: (u32, u32),
-    },
-    For {
-        position: (u32, u32),
-        index_ident: &'a str,
-        ident_expression: Option<Expression<'a>>,
-        length_expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-    },
-    While {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-    },
-    DoWhile {
-        position: (u32, u32),
-        block: Block<'a>,
-        expression: Expression<'a>,
-    },
-    Loop {
-        position: (u32, u32),
-        block: Box<Block<'a>>,
-    },
-    Break {
-        position: (u32, u32),
-    },
-    Continue {
-        position: (u32, u32),
-    },
-    Switch {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        cases: Vec<Case<'a>>,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub struct Case<'a> {
-    expression: Expression<'a>,
-    block: Box<Block<'a>>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Number {
-    Pp,
-    Spp,
-    Xspp,
-}
-
-#[derive(Clone, Debug)]
-pub struct Struct {}
-
-#[derive(Clone, Debug)]
-pub enum BinaryOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    NotEqual,
-    Equal,
-    GreaterThan,
-    GreaterThanOrEqual,
-    LessThan,
-    LessThanOrEqual,
-}
-
-#[derive(Clone, Debug)]
-pub enum UnaryOperator {
-    Not,
-    Negate,
 }
 
 impl<'a, 'b> Parser<'a, 'b> {

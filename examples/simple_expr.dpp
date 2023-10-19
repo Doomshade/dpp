@@ -7,7 +7,7 @@ pp -> b = 1 + 2 + 3*6;
 # yarn -> asd = "0000";
 
 FUNc test(par: pp) -> pp {
-    pp -> test0 = par + 40000;
+    pp -> test0 = 69 + 40000;
     pp -> test1 = testt + 50000;
     pp -> test2 = test0 + test1;
     bye test2;
