@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::io::Write;
 use crate::emit::Emitter;
 
-use crate::parse::analysis::{FunctionScope, GlobalScope};
-use crate::parse::parser::{BinaryOperator, Expression, Statement, TranslationUnit, Variable};
+use crate::parse::{Expression, Function, FunctionScope, GlobalScope, TranslationUnit, Variable};
+use crate::parse::parser::{BinaryOperator, Statement};
 
 #[derive(Clone, Debug)]
 pub enum Address {
@@ -132,16 +132,13 @@ pub struct Pl0Emitter<'a, T>
     /// The labels of the program.
     labels: std::collections::HashMap<String, u32>,
     control_statement_count: u32,
-
-    current_level: std::rc::Rc<std::cell::RefCell<u32>>,
 }
 
 const EMIT_DEBUG: bool = true;
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
 impl<'a, T: Write> Emitter<'a, T> for Pl0Emitter<'a, T> {
-    fn emit_all(&mut self, writer: &mut std::io::BufWriter<T>, translation_unit:
-    TranslationUnit<'a>) ->
+    fn emit_all(&mut self, writer: &mut std::io::BufWriter<T>, translation_unit: &TranslationUnit<'a>) ->
                 std::io::Result<()> {
         self.emit_translation_unit(translation_unit);
         // First emit the base
@@ -215,7 +212,6 @@ impl<'a, T: Write> Pl0Emitter<'a, T> {
         writer: std::io::BufWriter<T>,
         function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
         global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-        current_level: std::rc::Rc<std::cell::RefCell<u32>>,
     ) -> Self {
         Self {
             writer,
@@ -224,11 +220,29 @@ impl<'a, T: Write> Pl0Emitter<'a, T> {
             function_scopes,
             global_scope,
             control_statement_count: 0,
-            current_level,
         }
     }
-    fn emit_translation_unit(&mut self, translation_unit: TranslationUnit<'a>) {}
+    fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
+        translation_unit.global_statements().iter().for_each(|stmt| self.emit_statement(stmt));
+        self.emit_main_call();
+        translation_unit.functions().iter().for_each(|func| self.emit_function(func))
+    }
 
+    fn emit_function(&mut self, function: &Function) {}
+
+    fn begin_function() {
+        // self.emitter.emit_function_label(function.identifier());
+        // self.emitter
+        //     .emit_int(LocalScope::function_call_padding() as i32);
+        // if !params.is_empty() {
+        //     self.emitter
+        //         .echo(format!("Loading {} arguments", params.len()).as_str());
+        //     self.emitter.emit_load_arguments(&params);
+        //     self.emitter
+        //         .echo(format!("{} arguments loaded", params.len()).as_str());
+        // }
+        // self.emitter.emit_debug_info(DebugKeyword::StackA);
+    }
     pub fn emit_jump(&mut self, address: Address) {
         self.emit_instruction(Instruction::Jump { address });
     }
@@ -380,7 +394,7 @@ impl<'a, T: Write> Pl0Emitter<'a, T> {
     fn find_variable(&self, identifier: &str) -> (u32, u32) {
         // Find the variable in the current scope.
         if let Some(function_scope) = self.function_scopes.borrow().last() {
-            if let Some(variable) = function_scope.get_variable(identifier) {
+            if let Some(variable) = function_scope.find_variable(identifier) {
                 return (0, variable.position_in_scope().expect("Initialized variable position"));
             }
         }
@@ -412,12 +426,10 @@ impl<'a, T: Write> Pl0Emitter<'a, T> {
     }
 
     fn emit_call_with_level(&mut self, level: u32, address: Address) {
-        *self.current_level.borrow_mut() += level;
         self.emit_instruction(Instruction::Call { level, address });
     }
 
     fn emit_ret(&mut self) {
-        *self.current_level.borrow_mut() -= 1;
         self.emit_instruction(Instruction::Return);
     }
 

@@ -1,234 +1,34 @@
-use std::collections::hash_map::Values;
-use std::collections::HashMap;
-use std::io::Write;
-use std::rc::Rc;
-
-use crate::emit::emitter::{DebugKeyword, Pl0Emitter};
 use crate::error_diagnosis::ErrorDiagnosis;
+use crate::parse::{DataType, Expression, Function, FunctionScope, GlobalScope, SemanticAnalyzer, TranslationUnit};
 use crate::parse::parser::{
-    BinaryOperator, DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator,
-    Variable,
+    BinaryOperator, Statement, UnaryOperator,
 };
 
-#[derive(Clone, Debug, Default)]
-pub struct Scope<'a> {
-    /// The current position in the stack frame. This is used to calculate the absolute position
-    /// of the variable in the stack frame.
-    current_position: u32,
-    /// This is basically the symbol table.
-    variables: HashMap<&'a str, std::rc::Rc<Variable<'a>>>,
-}
-
-impl<'a> Scope<'a> {
-    fn push_variable(&mut self, mut variable: Variable<'a>) {
-        variable.set_position_in_scope(self.current_position);
-        self.current_position += variable.size_in_instructions() as u32;
-        self.variables
-            .insert(variable.identifier(), std::rc::Rc::new(variable));
-    }
-
-    pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-        self.variables.get(identifier)
-    }
-
-    pub fn remove_variable(&mut self, identifier: &str) {
-        self.variables.remove(identifier);
-    }
-
-    pub fn get_variables(&self) -> Values<'_, &'a str, Rc<Variable<'a>>> {
-        self.variables.values()
-    }
-
-    pub fn has_variable(&self, identifier: &str) -> bool {
-        self.variables.contains_key(identifier)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct FunctionScope<'a> {
-    // TODO: Use Vec<Scope<'a>> because we allow nested scopes in functions.
-    scopes: Vec<Scope<'a>>,
-    function_identifier: &'a str,
-}
-
-impl<'a> FunctionScope<'a> {
-    pub fn new(function_identifier: &'a str) -> Self {
-        let mut scopes = Vec::new();
-        let mut scope = Scope::default();
-        scope.current_position = Self::function_call_padding();
-
-        scopes.push(scope);
-        FunctionScope {
-            scopes,
-            function_identifier,
-        }
-    }
-
-    pub const fn function_call_padding() -> u32 {
-        Self::default_function_call_padding() + Self::added_function_call_padding()
-    }
-
-    pub const fn default_function_call_padding() -> u32 {
-        3
-    }
-
-    pub const fn added_function_call_padding() -> u32 {
-        0
-    }
-
-    pub fn has_variable(&self, identifier: &str) -> bool {
-        self.scopes
-            .iter()
-            .any(|scope| scope.has_variable(identifier))
-    }
-
-    pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-        self.scopes
-            .iter()
-            .find_map(|scope| scope.get_variable(identifier))
-    }
-
-    pub fn function_identifier(&self) -> &'a str {
-        self.function_identifier
-    }
-
-    pub fn push_argument(&mut self, variable: Variable<'a>) {}
-
-    pub fn push_variable(&mut self, variable: Variable<'a>) {
-        self.scopes
-            .last_mut()
-            .expect("A scope")
-            .push_variable(variable);
-    }
-
-    pub fn push_scope(&mut self) {
-        self.scopes.push(Scope::default());
-    }
-
-    pub fn current_scope(&self) -> Option<&Scope<'a>> {
-        self.scopes.last()
-    }
-
-    pub fn current_scope_mut(&mut self) -> Option<&mut Scope<'a>> {
-        self.scopes.last_mut()
-    }
-
-    pub fn pop_scope(&mut self) {
-        self.scopes.pop();
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct GlobalScope<'a> {
-    scope: Scope<'a>,
-    functions: HashMap<&'a str, Function<'a>>,
-}
-
-impl<'a> GlobalScope<'a> {
-    pub fn new() -> Self {
-        let mut scope = Scope::default();
-        // TODO: Need to offset this because we need the first
-        // thing on the stack to be "1" because we call
-        // main and then it fucking has to read the first thing
-        // on the stack.
-        scope.current_position = 1;
-        GlobalScope {
-            scope,
-            functions: HashMap::new(),
-        }
-    }
-    fn push_function(&mut self, function: Function<'a>) {
-        self.functions.insert(function.identifier(), function);
-    }
-
-    fn push_variable(&mut self, variable: Variable<'a>) {
-        self.scope.push_variable(variable);
-    }
-
-    pub fn has_variable(&self, identifier: &str) -> bool {
-        self.scope.has_variable(identifier)
-    }
-
-    pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-        self.scope.get_variable(identifier)
-    }
-
-    pub fn scope(&self) -> &Scope<'a> {
-        &self.scope
-    }
-
-    pub fn get_function(&self, identifier: &str) -> Option<&Function<'a>> {
-        self.functions.get(identifier)
-    }
-
-    pub fn has_function(&self, identifier: &str) -> bool {
-        self.functions.contains_key(identifier)
-    }
-}
-
-pub struct SemanticAnalyzer<'a, 'b, T>
-where
-    T: Write,
-{
-    /// The global scope holding global variables and function identifiers.
-    global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-    /// Current stack of function scopes. The initial scope is the global scope that should be
-    /// popped
-    /// at the end of the analysis.
-    function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
-    /// The error diagnosis.
-    error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
-    current_level: std::rc::Rc<std::cell::RefCell<u32>>,
-    emitter: Pl0Emitter<'a, T>,
-}
-
-impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
+impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     pub fn new(
         error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
         function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
         global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
-        current_level: std::rc::Rc<std::cell::RefCell<u32>>,
-        emitter: Pl0Emitter<'a, T>,
     ) -> Self {
         Self {
             function_scopes,
             global_scope,
             error_diag,
-            current_level,
-            emitter,
         }
-    }
-
-    fn is_in_function_scope(&self) -> bool {
-        self.function_scopes.borrow().last().is_some()
     }
 
     pub fn analyze(&mut self, translation_unit: &TranslationUnit<'a>) {
-        {
-            // Analyze global statements and functions.
-            for statement in translation_unit.global_statements() {
-                self.analyze_global_statement(statement);
-            }
 
-            // Emit the main call after analyzing all global statements.
-            // This call will not check whether the function declaration exists.
-            self.emitter.emit_main_call();
+        // Analyze global statements.
+        translation_unit.global_statements().iter().for_each(|statement| self.analyze_global_statement(statement));
 
-            // Analyze the parsed functions and emit code.
-            for function in translation_unit.functions() {
-                self.analyze_function(function);
-            }
+        // Analyze the parsed functions.
+        translation_unit.functions().iter().for_each(|function| self.analyze_function(function));
 
-            // TODO: This could be done earlier.
-            if !self.global_scope.borrow().has_function("main") {
-                self.error_diag.borrow_mut().no_main_method_found_error();
-                return;
-            }
+        if !self.global_scope.borrow().has_function("main") {
+            self.error_diag.borrow_mut().no_main_method_found_error();
+            return;
         }
-
-        self.emitter
-            .emit_all()
-            .expect("Failed to emit code into the file.");
     }
 
     fn analyze_function(&mut self, function: &Function<'a>) {
@@ -290,13 +90,10 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                         self.global_scope
                             .borrow_mut()
                             .push_variable(variable.clone());
-                        self.emitter.emit_statement(statement);
                     }
                 }
             }
-            _ => {
-                self.emitter.emit_statement(statement);
-            }
+            _ => {}
         }
     }
 
@@ -304,7 +101,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         self.function_scopes
             .borrow()
             .last()
-            .is_some_and(|scope| scope.has_variable(identifier))
+            .is_some_and(|scope| scope.find_variable(identifier).is_some())
     }
 
     fn has_variable_in_global_scope(&self, identifier: &str) -> bool {
@@ -405,8 +202,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
                 todo!("Analyzing {:?}", statement)
             }
         };
-
-        self.emitter.emit_statement(statement);
     }
 
     pub fn eval(&self, expr: &Expression<'a>) -> DataType<'a> {
@@ -443,7 +238,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             Expression::Identifier { identifier, .. } => {
                 let function_scopes = self.function_scopes.borrow_mut();
                 if let Some(current_function_scope) = function_scopes.last() {
-                    if let Some(variable) = current_function_scope.get_variable(identifier) {
+                    if let Some(variable) = current_function_scope.find_variable(identifier) {
                         return variable.data_type().clone();
                     }
                 }
@@ -485,17 +280,6 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             .borrow_mut()
             .push_function(function.clone());
         self.begin_function_scope(function.identifier());
-        self.emitter.emit_function_label(function.identifier());
-        self.emitter
-            .emit_int(FunctionScope::function_call_padding() as i32);
-        if !params.is_empty() {
-            self.emitter
-                .echo(format!("Loading {} arguments", params.len()).as_str());
-            self.emitter.emit_load_arguments(&params);
-            self.emitter
-                .echo(format!("{} arguments loaded", params.len()).as_str());
-        }
-        self.emitter.emit_debug_info(DebugKeyword::StackA);
     }
 
     fn end_function(&mut self) {

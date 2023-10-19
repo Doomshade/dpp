@@ -79,12 +79,11 @@ use std::fmt::{Debug, Display, Formatter};
 
 use std::process::{Command, Stdio};
 use std::{env, fs};
+use parse::{GlobalScope, Lexer, SemanticAnalyzer, Token, TranslationUnit};
 
 use crate::emit::emitter::Pl0Emitter;
 use crate::error_diagnosis::ErrorDiagnosis;
-use crate::parse::analysis::{GlobalScope, SemanticAnalyzer};
-use crate::parse::lexer::{Lexer, Token};
-use crate::parse::parser::{Parser, TranslationUnit};
+use crate::parse::parser::Parser;
 
 mod emit;
 pub mod error_diagnosis;
@@ -177,21 +176,16 @@ fn analyze_and_emit<'a>(
     let function_scopes = std::rc::Rc::new(std::cell::RefCell::new(Vec::default()));
     let global_scope = std::rc::Rc::new(std::cell::RefCell::new(GlobalScope::new()));
 
-    let base_level = std::rc::Rc::new(std::cell::RefCell::new(0u32));
-
     let emitter = Pl0Emitter::new(
         writer,
         std::rc::Rc::clone(&function_scopes),
         std::rc::Rc::clone(&global_scope),
-        std::rc::Rc::clone(&base_level),
     );
 
     let mut analyzer = SemanticAnalyzer::new(
         std::rc::Rc::clone(&error_diag),
         std::rc::Rc::clone(&function_scopes),
         std::rc::Rc::clone(&global_scope),
-        std::rc::Rc::clone(&base_level),
-        emitter,
     );
     analyzer.analyze(&translation_unit);
     error_diag.borrow().check_errors()?;

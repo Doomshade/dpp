@@ -13,9 +13,12 @@ fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
         impl<'a> PosMacro for #name<'a> {
+            #[must_use]
             fn row(&self) -> u32 {
                 self.position.0
             }
+
+            #[must_use]
             fn col(&self) -> u32 {
                 self.position.1
             }
