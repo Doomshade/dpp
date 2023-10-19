@@ -6,8 +6,8 @@ where
 {
     fn emit_all(
         &mut self,
-        writer: std::io::BufWriter<T>,
-        translation_unit: TranslationUnit,
+        writer: &mut std::io::BufWriter<T>,
+        translation_unit: TranslationUnit<'a>,
     ) -> std::io::Result<()>;
 }
 

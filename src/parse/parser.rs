@@ -13,9 +13,8 @@
 use std::cell::RefCell;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
-
-use dpp_macros::HelloMacro;
-use dpp_macros_derive::HelloMacro;
+use dpp_macros::PosMacro;
+use dpp_macros_derive::PosMacro;
 
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};
@@ -36,23 +35,32 @@ pub struct Parser<'a, 'b> {
     fixing_parsing: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PosMacro)]
 pub struct TranslationUnit<'a> {
-    pub functions: Vec<Function<'a>>,
-    pub global_statements: Vec<Statement<'a>>,
+    position: (u32, u32),
+    functions: Vec<Function<'a>>,
+    global_statements: Vec<Statement<'a>>,
 }
 
-impl Pos for TranslationUnit<'_> {
-    fn row(&self) -> u32 {
-        1
+impl<'a> TranslationUnit<'a> {
+    pub fn new(functions: Vec<Function<'a>>,
+               global_statements: Vec<Statement<'a>>) -> Self {
+        TranslationUnit {
+            position: (1, 1),
+            functions,
+            global_statements,
+        }
     }
 
-    fn col(&self) -> u32 {
-        1
+    pub fn functions(&self) -> &Vec<Function<'a>> {
+        &self.functions
+    }
+    pub fn global_statements(&self) -> &Vec<Statement<'a>> {
+        &self.global_statements
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PosMacro)]
 pub struct Function<'a> {
     position: (u32, u32),
     identifier: &'a str,
@@ -99,23 +107,20 @@ impl<'a> Function<'a> {
     }
 }
 
-impl Pos for Function<'_> {
-    fn row(&self) -> u32 {
-        self.position.0
-    }
-
-    fn col(&self) -> u32 {
-        self.position.1
-    }
-}
-
-#[derive(Clone, Debug, HelloMacro)]
+#[derive(Clone, Debug)]
 pub struct Block<'a> {
     position: (u32, u32),
     statements: Vec<Statement<'a>>,
 }
 
 impl<'a> Block<'a> {
+    pub fn new(position: (u32, u32), statements: Vec<Statement<'a>>) -> Self {
+        Block {
+            position,
+            statements,
+        }
+    }
+
     pub fn position(&self) -> (u32, u32) {
         self.position
     }
@@ -127,7 +132,7 @@ impl<'a> Block<'a> {
 #[derive(Clone, Debug)]
 pub struct Variable<'a> {
     position: (u32, u32),
-    position_in_scope: u32,
+    position_in_scope: Option<u32>,
     identifier: &'a str,
     data_type: DataType<'a>,
     size: usize,
@@ -143,7 +148,7 @@ impl<'a> Variable<'a> {
     ) -> Self {
         Variable {
             position,
-            position_in_scope: 0,
+            position_in_scope: None,
             identifier,
             size: data_type.size(),
             data_type,
@@ -154,7 +159,7 @@ impl<'a> Variable<'a> {
     pub fn position(&self) -> (u32, u32) {
         self.position
     }
-    pub fn position_in_scope(&self) -> u32 {
+    pub fn position_in_scope(&self) -> Option<u32> {
         self.position_in_scope
     }
     pub fn identifier(&self) -> &'a str {
@@ -171,7 +176,7 @@ impl<'a> Variable<'a> {
     }
 
     pub fn set_position_in_scope(&mut self, position_in_scope: u32) {
-        self.position_in_scope = position_in_scope;
+        self.position_in_scope = Some(position_in_scope);
     }
 
     pub fn size_in_instructions(&self) -> usize {
@@ -632,13 +637,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 panic!("Something unexpected happened :( (compiler error)")
             }
         }
-        TranslationUnit {
-            functions,
-            global_statements: variable_declarations,
-        }
+        TranslationUnit::new(functions, variable_declarations)
     }
 
     fn function(&mut self) -> Option<Function<'a>> {
+        let position = self.position;
         self.expect(TokenKind::FUNcKeyword)?;
 
         let identifier = self.expect(TokenKind::Identifier)?;
@@ -647,16 +650,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         let return_type = self.data_type()?;
         let block = self.block()?;
 
-        Some(Function {
-            position: self.position,
-            identifier,
-            return_type,
-            parameters,
-            block,
-        })
+        Some(Function::new(position, identifier, return_type, parameters, block))
     }
 
     fn params(&mut self) -> Option<Vec<Variable<'a>>> {
+        // TODO: Create a params variant.
         self.expect(TokenKind::OpenParen)?;
         let mut parameters = Vec::<Variable<'a>>::new();
 
@@ -692,10 +690,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn parameter(&mut self) -> Option<Variable<'a>> {
+        let position = self.position;
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
         let data_type = self.data_type()?;
-        Some(Variable::new(self.position, identifier, data_type, None))
+        Some(Variable::new(position, identifier, data_type, None))
     }
 
     fn block(&mut self) -> Option<Block<'a>> {
@@ -710,10 +709,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         self.expect(TokenKind::CloseBrace)?;
 
-        Some(Block {
-            position,
-            statements,
-        })
+        Some(Block::new(position, statements))
     }
 
     // Wrappers for print! and println! macros to use

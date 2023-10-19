@@ -1,8 +1,9 @@
 use std::fmt::{Display, Formatter};
 use std::io::Write;
+use crate::emit::Emitter;
 
 use crate::parse::analysis::{FunctionScope, GlobalScope};
-use crate::parse::parser::{BinaryOperator, Expression, Statement, Variable};
+use crate::parse::parser::{BinaryOperator, Expression, Statement, TranslationUnit, Variable};
 
 #[derive(Clone, Debug)]
 pub enum Address {
@@ -117,9 +118,9 @@ pub enum DebugKeyword {
     Echo { message: String },
 }
 
-pub struct Emitter<'a, T>
-where
-    T: Write,
+pub struct Pl0Emitter<'a, T>
+    where
+        T: Write,
 {
     writer: std::io::BufWriter<T>,
     /// The instructions to be emitted.
@@ -138,7 +139,78 @@ where
 const EMIT_DEBUG: bool = true;
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
-impl<'a, T: Write> Emitter<'a, T> {
+impl<'a, T: Write> Emitter<'a, T> for Pl0Emitter<'a, T> {
+    fn emit_all(&mut self, writer: &mut std::io::BufWriter<T>, translation_unit:
+    TranslationUnit<'a>) ->
+                std::io::Result<()> {
+        self.emit_translation_unit(translation_unit);
+        // First emit the base
+        writer.write_all(b"LIT 0 1\n")?;
+        for instruction in &self.code {
+            match instruction {
+                Instruction::Load { level, offset } => {
+                    writer.write_all(format!("LOD {level} {offset}\r\n").as_bytes())?;
+                }
+                Instruction::Store { level, offset } => {
+                    writer.write_all(format!("STO {level} {offset}\r\n").as_bytes())?;
+                }
+                Instruction::Literal { value } => {
+                    writer.write_all(format!("LIT 0 {value}\r\n").as_bytes())?;
+                }
+                Instruction::Jump { address } => {
+                    let str = format!("JMP 0 {address}\r\n");
+                    writer.write_all(str.as_bytes())?;
+                }
+                Instruction::Jmc { address } => {
+                    writer.write_all(format!("JMC 0 {address}\r\n").as_bytes())?;
+                }
+                Instruction::Call { level, address } => {
+                    writer.write_all(format!("CAL {level} {address}\r\n").as_bytes())?;
+                }
+                Instruction::Operation { operation } => {
+                    // Stupid usage of clone because we get the reference to the enum.
+                    writer.write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
+                }
+                Instruction::Return => {
+                    writer.write_all(b"RET 0 0\r\n")?;
+                }
+                Instruction::Int { size } => {
+                    writer.write_all(format!("INT 0 {size}\r\n").as_bytes())?;
+                }
+                Instruction::Dbg { debug_keyword } => {
+                    if EMIT_DEBUG {
+                        match debug_keyword {
+                            DebugKeyword::Registers => {
+                                writer.write_all(b"&REGS\r\n")?;
+                            }
+                            DebugKeyword::Stack => {
+                                writer.write_all(b"&STK\r\n")?;
+                            }
+                            DebugKeyword::StackA => {
+                                writer.write_all(b"&STKA\r\n")?;
+                            }
+                            DebugKeyword::StackRg { start, end } => {
+                                writer.write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+                            }
+                            DebugKeyword::StackN { amount } => {
+                                writer.write_all(format!("&STKN {amount}\r\n").as_bytes())?;
+                            }
+                            DebugKeyword::Echo { message } => {
+                                writer.write_all(format!("&ECHO {message}\r\n").as_bytes())?;
+                            }
+                        }
+                    }
+                }
+                Instruction::Label(label) => {
+                    writer.write_all(format!("\n@{label} ").as_bytes())?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a, T: Write> Pl0Emitter<'a, T> {
     pub fn new(
         writer: std::io::BufWriter<T>,
         function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
@@ -155,6 +227,7 @@ impl<'a, T: Write> Emitter<'a, T> {
             current_level,
         }
     }
+    fn emit_translation_unit(&mut self, translation_unit: TranslationUnit<'a>) {}
 
     pub fn emit_jump(&mut self, address: Address) {
         self.emit_instruction(Instruction::Jump { address });
@@ -276,7 +349,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                     return_type_size * 4,
                     identifier
                 )
-                .as_str(),
+                    .as_str(),
             );
             self.emit_debug_info(DebugKeyword::Stack);
         }
@@ -305,19 +378,21 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     fn find_variable(&self, identifier: &str) -> (u32, u32) {
+        // Find the variable in the current scope.
         if let Some(function_scope) = self.function_scopes.borrow().last() {
             if let Some(variable) = function_scope.get_variable(identifier) {
-                return (0, variable.position_in_scope());
+                return (0, variable.position_in_scope().expect("Initialized variable position"));
             }
         }
 
+        // If not found, try to find it in the global scope.
         (
             1,
             self.global_scope
                 .borrow()
                 .get_variable(identifier)
                 .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
-                .position_in_scope(),
+                .position_in_scope().expect("Initialized variable position"),
         )
     }
 
@@ -555,7 +630,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                                 identifier,
                                 return_type_size * 4
                             )
-                            .as_str(),
+                                .as_str(),
                         );
                         self.emit_debug_info(DebugKeyword::StackA);
                     }

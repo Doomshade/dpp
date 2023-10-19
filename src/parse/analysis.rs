@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::rc::Rc;
 
-use crate::emit::emitter::{DebugKeyword, Emitter};
+use crate::emit::emitter::{DebugKeyword, Pl0Emitter};
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{
     BinaryOperator, DataType, Expression, Function, Statement, TranslationUnit, UnaryOperator,
@@ -179,7 +179,7 @@ where
     /// The error diagnosis.
     error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     current_level: std::rc::Rc<std::cell::RefCell<u32>>,
-    emitter: Emitter<'a, T>,
+    emitter: Pl0Emitter<'a, T>,
 }
 
 impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
@@ -188,7 +188,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
         function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
         global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
         current_level: std::rc::Rc<std::cell::RefCell<u32>>,
-        emitter: Emitter<'a, T>,
+        emitter: Pl0Emitter<'a, T>,
     ) -> Self {
         Self {
             function_scopes,
@@ -206,7 +206,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
     pub fn analyze(&mut self, translation_unit: &TranslationUnit<'a>) {
         {
             // Analyze global statements and functions.
-            for statement in &translation_unit.global_statements {
+            for statement in translation_unit.global_statements() {
                 self.analyze_global_statement(statement);
             }
 
@@ -215,7 +215,7 @@ impl<'a, 'b, T: Write> SemanticAnalyzer<'a, 'b, T> {
             self.emitter.emit_main_call();
 
             // Analyze the parsed functions and emit code.
-            for function in &translation_unit.functions {
+            for function in translation_unit.functions() {
                 self.analyze_function(function);
             }
 

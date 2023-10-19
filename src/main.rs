@@ -80,7 +80,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::process::{Command, Stdio};
 use std::{env, fs};
 
-use crate::emit::emitter::Emitter;
+use crate::emit::emitter::Pl0Emitter;
 use crate::error_diagnosis::ErrorDiagnosis;
 use crate::parse::analysis::{GlobalScope, SemanticAnalyzer};
 use crate::parse::lexer::{Lexer, Token};
@@ -179,7 +179,7 @@ fn analyze_and_emit<'a>(
 
     let base_level = std::rc::Rc::new(std::cell::RefCell::new(0u32));
 
-    let emitter = Emitter::new(
+    let emitter = Pl0Emitter::new(
         writer,
         std::rc::Rc::clone(&function_scopes),
         std::rc::Rc::clone(&global_scope),
