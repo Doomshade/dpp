@@ -1,28 +1,28 @@
-use std::io::Write;
+use std::cell::{Ref, RefMut};
+use std::fs::File;
+use std::io::{BufWriter, Write};
 
-use crate::parse::{BinaryOperator, Emitter, Expression, Function, FunctionScope, GlobalScope, Statement, Variable};
+use crate::parse::{BinaryOperator, Emitter, Expression, Function, Statement, Variable};
+use crate::parse::analysis::{FunctionScope, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, EMIT_DEBUG, Instruction, Operation};
 use crate::parse::parser::TranslationUnit;
 
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
-impl<'a, T: Write> Emitter<'a, T> {
+impl<'a> Emitter<'a> {
     pub fn new(
-        writer: std::io::BufWriter<T>,
-        function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
-        global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
+        symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
     ) -> Self {
         Self {
-            writer,
             code: Vec::new(),
             labels: std::collections::HashMap::new(),
-            function_scopes,
-            global_scope,
             control_statement_count: 0,
+            symbol_table,
+            function_scope_depth: std::collections::HashMap::new(),
         }
     }
-    pub fn emit_all(&mut self, writer: &mut std::io::BufWriter<T>, translation_unit: &TranslationUnit<'a>) ->
-                    std::io::Result<()> {
+    pub fn emit_all(&mut self, writer: &mut BufWriter<File>, translation_unit:
+    &TranslationUnit<'a>) -> std::io::Result<()> {
         self.emit_translation_unit(translation_unit);
         // First emit the base
         writer.write_all(b"LIT 0 1\n")?;
@@ -95,10 +95,25 @@ impl<'a, T: Write> Emitter<'a, T> {
         translation_unit.functions().iter().for_each(|func| self.emit_function(func))
     }
 
-    fn emit_function(&mut self, function: &Function<'a>) {}
+    fn emit_function(&mut self, function: &Function<'a>) {
+        self.emit_function_label(function.identifier());
+
+        // Shift the stack pointer by 3.
+        self.emit_int(FunctionScope::ACTIVATION_RECORD_SIZE as i32);
+
+        // Load arguments.
+        let args = function.parameters();
+        if !args.is_empty() {
+            self.echo(format!("Loading {} arguments", args.len()).as_str());
+            self.emit_load_arguments(&args);
+            self.echo(format!("{} arguments loaded", args.len()).as_str());
+        }
+
+
+        self.emit_debug_info(DebugKeyword::StackA);
+    }
 
     fn begin_function() {
-        // self.emitter.emit_function_label(function.identifier());
         // self.emitter
         //     .emit_int(LocalScope::function_call_padding() as i32);
         // if !params.is_empty() {
@@ -124,10 +139,17 @@ impl<'a, T: Write> Emitter<'a, T> {
         });
     }
 
+    fn symbol_table(&self) -> Ref<'_, SymbolTable<'a>> {
+        self.symbol_table.borrow()
+    }
+
+    fn symbol_table_mut(&self) -> RefMut<'_, SymbolTable<'a>> {
+        self.symbol_table.borrow_mut()
+    }
+
     fn push_local_function_variable(&mut self, variable: Variable<'a>) {
-        if let Some(function_scope) = self.function_scopes.borrow_mut().last_mut() {
-            function_scope.push_variable(variable);
-        }
+        let mut ref_mut = self.symbol_table_mut();
+        ref_mut.push_local_variable(variable);
     }
 
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
@@ -176,7 +198,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                let (level, var_loc) = self.find_variable(identifier);
+                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier);
                 self.load(level, var_loc as i32, 1);
                 self.echo(format!("Loaded {}", identifier).as_str());
                 self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
@@ -193,7 +215,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                 expression,
                 ..
             } => {
-                let (level, var_loc) = self.find_variable(identifier);
+                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier);
                 self.emit_expression(expression);
                 self.store(level, var_loc as i32, 1);
             }
@@ -212,8 +234,8 @@ impl<'a, T: Write> Emitter<'a, T> {
         if identifier == "main" {
             (return_type_size, arguments_size) = self.main_function_descriptor();
         } else {
-            let global_scope = self.global_scope.borrow();
-            let function = global_scope.get_function(identifier).unwrap();
+            let symbol_table = self.symbol_table();
+            let function = symbol_table.find_function(identifier).expect("Function to exist");
             return_type_size = function.return_type().size_in_instructions();
             arguments_size = function.parameters_size();
         }
@@ -258,25 +280,6 @@ impl<'a, T: Write> Emitter<'a, T> {
         }
     }
 
-    fn find_variable(&self, identifier: &str) -> (u32, u32) {
-        // Find the variable in the current scope.
-        if let Some(function_scope) = self.function_scopes.borrow().last() {
-            if let Some(variable) = function_scope.find_variable(identifier) {
-                return (0, variable.position_in_scope().expect("Initialized variable position"));
-            }
-        }
-
-        // If not found, try to find it in the global scope.
-        (
-            1,
-            self.global_scope
-                .borrow()
-                .get_variable(identifier)
-                .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
-                .position_in_scope().expect("Initialized variable position"),
-        )
-    }
-
     pub fn emit_main_call(&mut self) {
         self.echo("Calling main function.");
         let main_function_call = Expression::FunctionCall {
@@ -302,11 +305,6 @@ impl<'a, T: Write> Emitter<'a, T> {
 
     pub fn emit_literal(&mut self, value: i32) {
         self.emit_instruction(Instruction::Literal { value })
-    }
-
-    fn get_variable_location(&self, identifier: &str) -> Option<u32> {
-        self.global_scope.borrow().get_variable(identifier);
-        Some(1)
     }
 
     fn pack_yarn(yarn: &str) -> Vec<i32> {
@@ -421,8 +419,8 @@ impl<'a, T: Write> Emitter<'a, T> {
                     // Pop the return  value off the stack because it's not assigned to anything.
                     let return_type_size;
                     {
-                        let global_scope = self.global_scope.borrow();
-                        let function = global_scope.get_function(identifier).unwrap();
+                        let symbol_table = self.symbol_table();
+                        let function = symbol_table.find_function(identifier).expect("A function");
                         return_type_size = function.return_type().size_in_instructions();
                     }
                     if return_type_size > 0 {
@@ -444,7 +442,7 @@ impl<'a, T: Write> Emitter<'a, T> {
                 if let Some(expression) = variable.value() {
                     self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
                     self.emit_expression(expression);
-                    let (level, var_loc) = self.find_variable(variable.identifier());
+                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(variable.identifier());
                     self.store(level, var_loc as i32, 1);
                     self.emit_int(1);
 
@@ -454,11 +452,10 @@ impl<'a, T: Write> Emitter<'a, T> {
             Statement::Bye { expression, .. } => {
                 let parameters_size;
                 {
-                    let function_scopes = self.function_scopes.borrow();
-                    let global_scope = self.global_scope.borrow();
-                    let current_function = function_scopes.last().unwrap();
+                    let symbol_table = self.symbol_table();
+                    let current_function = symbol_table.current_function_scope();
                     let function_identifier = current_function.function_identifier();
-                    let function = global_scope.get_function(function_identifier).unwrap();
+                    let function = symbol_table.find_function(function_identifier).unwrap();
                     parameters_size = function.parameters_size();
                 }
                 if let Some(expression) = expression {
@@ -528,30 +525,14 @@ impl<'a, T: Write> Emitter<'a, T> {
     }
 
     fn push_scope(&mut self) {
-        let mut function_scopes = self.function_scopes.borrow_mut();
-        let function_scope = function_scopes.last_mut().expect("A scope");
-        function_scope.push_scope();
+        let current_function_ident = self.symbol_table().current_function_scope().function_identifier();
+        self.function_scope_depth.insert(current_function_ident, self.function_scope_depth.get
+        (current_function_ident).unwrap_or(&0) + 1);
     }
 
     fn pop_scope(&mut self) {
-        let total_variable_size;
-        {
-            let mut function_scopes = self.function_scopes.borrow_mut();
-            let function_scope = function_scopes.last_mut().expect("A scope");
-            let mut current_scope = function_scope.current_scope_mut().expect(
-                "A block \
-                    scope",
-            );
-            let variables = current_scope
-                .get_variables()
-                .map(|entry| entry.identifier())
-                .collect::<Vec<&str>>();
-            total_variable_size = variables.len();
-            variables
-                .iter()
-                .for_each(|ident| current_scope.remove_variable(ident));
-            function_scope.pop_scope();
-        }
-        self.emit_int(-(total_variable_size as i32));
+        let current_function_ident = self.symbol_table().current_function_scope().function_identifier();
+        self.function_scope_depth.insert(current_function_ident, self.function_scope_depth.get
+        (current_function_ident).unwrap() - 1);
     }
 }

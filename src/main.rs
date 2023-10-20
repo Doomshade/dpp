@@ -96,8 +96,8 @@ impl Display for ArgsError {
 impl Error for ArgsError {}
 
 fn main() -> Result<(), Box<dyn Error>> {
-    const OUTPUT: &str = "out/dpp/test.pl0";
-    const PL0_INTERPRET_PATH: &str = "resources/pl0_interpret/bin/refint_pl0_ext.exe";
+    const OUTPUT: &'static str = "out/dpp/test.pl0";
+    const PL0_INTERPRET_PATH: &'static str = "resources/pl0_interpret/bin/refint_pl0_ext.exe";
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         let error = ArgsError { args };

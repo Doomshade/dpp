@@ -26,7 +26,7 @@ FUNc testt() -> pp {
 }
 
 FUNc main() -> pp {
-    pp -> main0 = 120000;
+    pp -> main0 = test + 120000;
     pp -> main1 = main0 + 4;
     testt();
     pp -> main3 = testt();

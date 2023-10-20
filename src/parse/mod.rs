@@ -1,4 +1,6 @@
-use crate::parse::analysis::{FunctionScope, GlobalScope, SymbolTable};
+use std::cell::{Ref, RefMut};
+
+use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::Instruction;
 use crate::parse::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{Block, Expression, Function, Variable};
@@ -538,6 +540,26 @@ mod analysis {
     }
 
     impl<'a> SymbolTable<'a> {
+        pub fn get_variable_level_and_offset(&self, identifier: &str) -> (u32, u32) {
+            if let Some(function_scope) = self.function_scopes.last() {
+                if let Some(variable) = function_scope.find_variable(identifier) {
+                    return (0, variable.position_in_scope().expect("Initialized variable position"));
+                }
+            }
+
+
+            use std::borrow::Borrow;
+            // If not found, try to find it in the global scope.
+            (
+                1,
+                self.global_scope
+                    .borrow()
+                    .get_variable(identifier)
+                    .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
+                    .position_in_scope().expect("Initialized variable position"),
+            )
+        }
+
         pub fn push_global_variable(&mut self, variable: Variable<'a>) {
             self.global_scope.push_variable(variable);
         }
@@ -603,11 +625,21 @@ mod analysis {
             variables
         }
 
-        fn current_function_scope(&self) -> &FunctionScope<'a> {
+        // TODO: This could be done in O(1) but w/e.
+        pub fn function_scope(&self, function_identifier: &str) -> Option<&FunctionScope<'a>> {
+            self.function_scopes.iter().find(move |func| func.function_identifier ==
+                function_identifier)
+        }
+
+        pub fn function_scope_at(&self, index: usize) -> Option<&FunctionScope<'a>> {
+            self.function_scopes.get(index)
+        }
+
+        pub fn current_function_scope(&self) -> &FunctionScope<'a> {
             self.function_scopes.last().expect("Inside function scope")
         }
 
-        fn current_function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
+        pub fn current_function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
             self.function_scopes.last_mut().expect("Inside function scope")
         }
     }
@@ -803,16 +835,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
     }
 
-    pub fn find_function<'r>(&self, identifier: &str) -> Option<&'r std::rc::Rc<Function<'a>>> {
-        self.symbol_table.borrow().find_function(identifier)
+    pub fn symbol_table_mut(&self) -> RefMut<'_, SymbolTable<'a>> {
+        self.symbol_table.borrow_mut()
     }
 
-    pub fn find_local_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-        self.symbol_table.borrow().find_local_variable(identifier)
-    }
-
-    pub fn find_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-        self.symbol_table.borrow().find_variable(identifier)
+    pub fn symbol_table(&self) -> Ref<'_, SymbolTable<'a>> {
+        self.symbol_table.borrow()
     }
 }
 
@@ -1041,19 +1069,15 @@ mod emitter {
 }
 
 
-pub struct Emitter<'a, T>
-    where
-        T: std::io::Write,
+pub struct Emitter<'a>
 {
-    writer: std::io::BufWriter<T>,
     /// The instructions to be emitted.
     code: Vec<Instruction>,
     /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
-    function_scopes: std::rc::Rc<std::cell::RefCell<Vec<FunctionScope<'a>>>>,
-    /// The global scope.
-    global_scope: std::rc::Rc<std::cell::RefCell<GlobalScope<'a>>>,
+    symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
     /// The labels of the program.
     labels: std::collections::HashMap<String, u32>,
+    function_scope_depth: std::collections::HashMap<&'a str, u32>,
     control_statement_count: u32,
 }
 
@@ -1125,18 +1149,8 @@ pub mod compiler {
             error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
             output: &str,
         ) -> Result<(), Box<dyn Error>> {
-            let file = fs::File::create(output).expect("Unable to create file");
-            let writer = std::io::BufWriter::new(file);
 
             let symbol_table = std::rc::Rc::new(std::cell::RefCell::new(SymbolTable::default()));
-            let function_scopes = std::rc::Rc::new(std::cell::RefCell::new(Vec::default()));
-            let global_scope = std::rc::Rc::new(std::cell::RefCell::new(GlobalScope::new()));
-
-            let emitter = Emitter::new(
-                writer,
-                std::rc::Rc::clone(&function_scopes),
-                std::rc::Rc::clone(&global_scope),
-            );
 
             let mut analyzer = SemanticAnalyzer::new(
                 std::rc::Rc::clone(&error_diag),
@@ -1144,6 +1158,14 @@ pub mod compiler {
             );
             analyzer.analyze(&translation_unit);
             error_diag.borrow().check_errors()?;
+
+            let file = fs::File::create(output).expect("Unable to create file");
+            let mut writer = std::io::BufWriter::new(file);
+
+            let mut emitter = Emitter::new(
+                std::rc::Rc::clone(&symbol_table),
+            );
+            emitter.emit_all(&mut writer, &translation_unit)?;
             Ok(())
         }
     }
