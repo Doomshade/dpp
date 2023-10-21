@@ -540,10 +540,12 @@ mod analysis {
     }
 
     impl<'a> SymbolTable<'a> {
-        pub fn get_variable_level_and_offset(&self, identifier: &str) -> (u32, u32) {
-            if let Some(function_scope) = self.function_scopes.last() {
-                if let Some(variable) = function_scope.find_variable(identifier) {
-                    return (0, variable.position_in_scope().expect("Initialized variable position"));
+        pub fn get_variable_level_and_offset(&self, identifier: &str, function_ident: Option<&'a str>) -> (u32, u32) {
+            if let Some(function_ident) = function_ident {
+                if let Some(function_scope) = self.function_scope(function_ident) {
+                    if let Some(variable) = function_scope.find_variable(identifier) {
+                        return (0, variable.position_in_scope().expect("Initialized variable position"));
+                    }
                 }
             }
 
@@ -572,12 +574,8 @@ mod analysis {
             self.global_scope.push_function(function);
         }
 
-        pub fn push_function_scope(&mut self, function_identifier: &'a str) {
-            self.function_scopes.push(FunctionScope::new(function_identifier));
-        }
-
-        pub fn pop_function_scope(&mut self) {
-            self.function_scopes.pop();
+        fn push_function_scope(&mut self, function_identifier: &'a str) {
+            self.function_scopes.push(FunctionScope::new(function_identifier))
         }
 
         pub fn push_scope(&mut self) {
@@ -592,25 +590,22 @@ mod analysis {
             self.global_scope.get_function(identifier)
         }
 
-        pub fn find_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.find_local_variable(identifier).or_else(|| self.find_global_variable(identifier))
+        pub fn find_variable(&self, identifier: &str, function_ident: Option<&'a str>) ->
+        Option<&std::rc::Rc<Variable<'a>>> {
+            self.find_local_variable(identifier, function_ident).or_else(|| self.find_global_variable(identifier))
         }
 
         pub fn push_function(&mut self, function: Function<'a>) {
-            self.function_scopes.push(FunctionScope::new(function.identifier()));
+            self.push_function_scope(function.identifier());
             self.global_scope.push_function(function);
-        }
-
-        pub fn pop_function(&mut self) {
-            self.function_scopes.pop();
         }
 
         pub fn find_global_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
             self.global_scope.get_variable(identifier)
         }
 
-        pub fn find_local_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.function_scopes.last()?.find_variable(identifier)
+        pub fn find_local_variable(&self, identifier: &str, function_ident: Option<&'a str>) -> Option<&std::rc::Rc<Variable<'a>>> {
+            self.function_scope(function_ident?)?.find_variable(identifier)
         }
 
         pub fn get_variables(&self) -> HashMap<&str, &std::rc::Rc<Variable<'a>>> {
@@ -627,8 +622,7 @@ mod analysis {
 
         // TODO: This could be done in O(1) but w/e.
         pub fn function_scope(&self, function_identifier: &str) -> Option<&FunctionScope<'a>> {
-            self.function_scopes.iter().find(move |func| func.function_identifier ==
-                function_identifier)
+            self.function_scopes.iter().find(move |func| func.function_identifier == function_identifier)
         }
 
         pub fn function_scope_at(&self, index: usize) -> Option<&FunctionScope<'a>> {
@@ -738,6 +732,7 @@ mod analysis {
         pub fn find_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
             self.scopes
                 .iter()
+                .rev()
                 .find_map(|scope| scope.get_variable(identifier))
         }
 
@@ -822,6 +817,7 @@ pub struct SemanticAnalyzer<'a, 'b>
 {
     symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
     error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    current_function: Option<&'a str>,
 }
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -832,6 +828,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         Self {
             symbol_table,
             error_diag,
+            current_function: None,
         }
     }
 
@@ -962,7 +959,7 @@ mod emitter {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Self::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
-                Self::Label(label) => write!(f, "@{label} ")?,
+                Self::Label(label) => write!(f, "@{label}")?,
             };
 
             Ok(())
@@ -1077,6 +1074,7 @@ pub struct Emitter<'a>
     symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
     /// The labels of the program.
     labels: std::collections::HashMap<String, u32>,
+    current_function: Option<&'a str>,
     function_scope_depth: std::collections::HashMap<&'a str, u32>,
     control_statement_count: u32,
 }
@@ -1086,7 +1084,7 @@ pub mod compiler {
     use std::fs;
 
     use crate::parse::{Emitter, Lexer, SemanticAnalyzer};
-    use crate::parse::analysis::{GlobalScope, SymbolTable};
+    use crate::parse::analysis::SymbolTable;
     use crate::parse::error_diagnosis::ErrorDiagnosis;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
@@ -1149,7 +1147,6 @@ pub mod compiler {
             error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
             output: &str,
         ) -> Result<(), Box<dyn Error>> {
-
             let symbol_table = std::rc::Rc::new(std::cell::RefCell::new(SymbolTable::default()));
 
             let mut analyzer = SemanticAnalyzer::new(
@@ -1159,12 +1156,12 @@ pub mod compiler {
             analyzer.analyze(&translation_unit);
             error_diag.borrow().check_errors()?;
 
-            let file = fs::File::create(output).expect("Unable to create file");
-            let mut writer = std::io::BufWriter::new(file);
-
             let mut emitter = Emitter::new(
                 std::rc::Rc::clone(&symbol_table),
             );
+
+            let file = fs::File::create(output).expect("Unable to create file");
+            let mut writer = std::io::BufWriter::new(file);
             emitter.emit_all(&mut writer, &translation_unit)?;
             Ok(())
         }

@@ -12,28 +12,25 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
         if !self.symbol_table().find_function("main").is_some() {
             self.error_diag.borrow_mut().no_main_method_found_error();
-            return;
         }
     }
 
     fn analyze_function(&mut self, function: &Function<'a>) {
         self.begin_function(&function);
-        {
-            for statement in function.block().statements() {
-                self.analyze_statement(statement);
-            }
-            if function.return_type() != &DataType::Nopp {
-                // If it's anything other than Nopp, then we require the function to have
-                // a return statement at the very end.
-                let last_statement = function.block().statements().last();
-                if let Some(Statement::Bye { .. }) = last_statement {
-                    // Do nothing.
-                } else {
-                    self.error_diag.borrow_mut().missing_return_statement(
-                        function.block().position().0,
-                        function.block().position().1,
-                    );
-                }
+        for statement in function.block().statements() {
+            self.analyze_statement(statement);
+        }
+        if function.return_type() != &DataType::Nopp {
+            // If it's anything other than Nopp, then we require the function to have
+            // a return statement at the very end.
+            let last_statement = function.block().statements().last();
+            if let Some(Statement::Bye { .. }) = last_statement {
+                // Do nothing.
+            } else {
+                self.error_diag.borrow_mut().missing_return_statement(
+                    function.block().position().0,
+                    function.block().position().1,
+                );
             }
         }
         self.end_function();
@@ -42,7 +39,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_global_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.symbol_table().find_local_variable(variable.identifier()).is_some() {
+                if self.symbol_table().find_local_variable(variable.identifier(), self.current_function).is_some() {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position().0,
                         variable.position().1,
@@ -73,7 +70,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.symbol_table().find_local_variable(variable.identifier()).is_some() {
+                if self.symbol_table().find_local_variable(variable.identifier(), self.current_function).is_some
+                () {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position().0,
                         variable.position().1,
@@ -199,7 +197,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                if let Some(variable) = self.symbol_table().find_variable(identifier) {
+                if let Some(variable) = self.symbol_table().find_variable(identifier, self.current_function) {
                     return variable.data_type().clone();
                 }
                 panic!("{}", format!("Variable {identifier} not found"));
@@ -215,13 +213,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
-        self.symbol_table_mut().push_function(function.clone());
-        for parameter in function.parameters() {
-            self.symbol_table_mut().push_local_variable(parameter.clone());
-        }
+        self.current_function = Some(function.identifier());
+        let mut ref_mut = self.symbol_table_mut();
+        ref_mut.push_function(function.clone());
+        function.parameters().iter().for_each(|parameter| ref_mut.push_local_variable(parameter.clone()));
     }
 
     fn end_function(&mut self) {
-        self.symbol_table_mut().pop_function();
+        self.current_function = None;
     }
 }

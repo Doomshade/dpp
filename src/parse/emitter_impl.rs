@@ -1,11 +1,11 @@
-use std::cell::{Ref, RefMut};
+use std::cell::Ref;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
 use crate::parse::{BinaryOperator, Emitter, Expression, Function, Statement, Variable};
 use crate::parse::analysis::{FunctionScope, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, EMIT_DEBUG, Instruction, Operation};
-use crate::parse::parser::TranslationUnit;
+use crate::parse::parser::{Block, TranslationUnit};
 
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
@@ -19,11 +19,13 @@ impl<'a> Emitter<'a> {
             control_statement_count: 0,
             symbol_table,
             function_scope_depth: std::collections::HashMap::new(),
+            current_function: None,
         }
     }
-    pub fn emit_all(&mut self, writer: &mut BufWriter<File>, translation_unit:
-    &TranslationUnit<'a>) -> std::io::Result<()> {
+    pub fn emit_all(&mut self, writer: &mut BufWriter<File>, translation_unit: &TranslationUnit<'a>) -> std::io::Result<()> {
+        println!("Emitting translation unit.");
         self.emit_translation_unit(translation_unit);
+
         // First emit the base
         writer.write_all(b"LIT 0 1\n")?;
         for instruction in &self.code {
@@ -90,12 +92,18 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
+        println!("Emitting global statements.");
         translation_unit.global_statements().iter().for_each(|stmt| self.emit_statement(stmt));
+        println!("Emitting main call.");
         self.emit_main_call();
+        println!("Emitting functions.");
         translation_unit.functions().iter().for_each(|func| self.emit_function(func))
     }
 
     fn emit_function(&mut self, function: &Function<'a>) {
+        println!("Emitting function");
+        dbg!(function);
+        self.current_function = Some(function.identifier());
         self.emit_function_label(function.identifier());
 
         // Shift the stack pointer by 3.
@@ -108,23 +116,16 @@ impl<'a> Emitter<'a> {
             self.emit_load_arguments(&args);
             self.echo(format!("{} arguments loaded", args.len()).as_str());
         }
-
+        self.emit_block(function.block());
 
         self.emit_debug_info(DebugKeyword::StackA);
     }
 
-    fn begin_function() {
-        // self.emitter
-        //     .emit_int(LocalScope::function_call_padding() as i32);
-        // if !params.is_empty() {
-        //     self.emitter
-        //         .echo(format!("Loading {} arguments", params.len()).as_str());
-        //     self.emitter.emit_load_arguments(&params);
-        //     self.emitter
-        //         .echo(format!("{} arguments loaded", params.len()).as_str());
-        // }
-        // self.emitter.emit_debug_info(DebugKeyword::StackA);
+    fn emit_block(&mut self, block: &Block<'a>) {
+        block.statements().iter().for_each(|statement| self.emit_statement(statement));
     }
+
+
     pub fn emit_jump(&mut self, address: Address) {
         self.emit_instruction(Instruction::Jump { address });
     }
@@ -141,15 +142,6 @@ impl<'a> Emitter<'a> {
 
     fn symbol_table(&self) -> Ref<'_, SymbolTable<'a>> {
         self.symbol_table.borrow()
-    }
-
-    fn symbol_table_mut(&self) -> RefMut<'_, SymbolTable<'a>> {
-        self.symbol_table.borrow_mut()
-    }
-
-    fn push_local_function_variable(&mut self, variable: Variable<'a>) {
-        let mut ref_mut = self.symbol_table_mut();
-        ref_mut.push_local_variable(variable);
     }
 
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
@@ -198,7 +190,7 @@ impl<'a> Emitter<'a> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier);
+                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier, self.current_function);
                 self.load(level, var_loc as i32, 1);
                 self.echo(format!("Loaded {}", identifier).as_str());
                 self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
@@ -215,7 +207,7 @@ impl<'a> Emitter<'a> {
                 expression,
                 ..
             } => {
-                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier);
+                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier, self.current_function);
                 self.emit_expression(expression);
                 self.store(level, var_loc as i32, 1);
             }
@@ -345,11 +337,6 @@ impl<'a> Emitter<'a> {
         // than that we need to LOD again.
         // NOTE: We have to load with an offset because we pass in some things on stack
         // like the depth.
-        arguments
-            .iter()
-            .rev()
-            .for_each(|argument| self.push_local_function_variable(argument.clone()));
-
         let total_size = arguments
             .iter()
             .fold(0, |acc, parameter| acc + parameter.size_in_instructions());
@@ -398,8 +385,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_label(&mut self, label: &str) {
-        self.labels
-            .insert(label.to_string(), self.code.len() as u32);
+        self.labels.insert(label.to_string(), self.code.len() as u32);
         self.emit_instruction(Instruction::Label(String::from(label)));
     }
 
@@ -412,6 +398,8 @@ impl<'a> Emitter<'a> {
     }
 
     pub fn emit_statement(&mut self, statement: &Statement<'a>) {
+        println!("Emitting statement");
+        dbg!(statement);
         match statement {
             Statement::Expression { expression, .. } => {
                 self.emit_expression(expression);
@@ -438,11 +426,10 @@ impl<'a> Emitter<'a> {
                 }
             }
             Statement::VariableDeclaration { variable, .. } => {
-                self.push_local_function_variable(variable.clone());
                 if let Some(expression) = variable.value() {
                     self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
                     self.emit_expression(expression);
-                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(variable.identifier());
+                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(variable.identifier(), self.current_function);
                     self.store(level, var_loc as i32, 1);
                     self.emit_int(1);
 
@@ -488,6 +475,11 @@ impl<'a> Emitter<'a> {
                     address: Address::Label(start),
                 });
                 self.emit_label(end.as_str());
+                // Need to emit an empty instruction because of a situation like
+                // @while_end_0
+                // @if_start_1 LOD ...
+                // The PL0 interpret cannot interpret two labels properly..
+                self.emit_int(0);
             }
             Statement::Empty { .. } => {
                 // Emit nothing I guess :)
@@ -519,6 +511,11 @@ impl<'a> Emitter<'a> {
                 self.emit_statement(statement);
                 self.pop_scope();
                 self.emit_label(end.as_str());
+                // Need to emit an empty instruction because of a situation like
+                // @while_end_0
+                // @if_start_1 LOD ...
+                // The PL0 interpret cannot interpret two labels properly..
+                self.emit_int(0);
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };
