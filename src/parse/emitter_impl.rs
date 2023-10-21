@@ -1,6 +1,6 @@
-use std::cell::Ref;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::rc::Rc;
 
 use crate::parse::{BinaryOperator, Emitter, Expression, Function, Statement, Variable};
 use crate::parse::analysis::{FunctionScope, SymbolTable};
@@ -11,7 +11,7 @@ const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
 impl<'a> Emitter<'a> {
     pub fn new(
-        symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
+        symbol_table: Rc<SymbolTable<'a>>,
     ) -> Self {
         Self {
             code: Vec::new(),
@@ -22,6 +22,7 @@ impl<'a> Emitter<'a> {
             current_function: None,
         }
     }
+
     pub fn emit_all(&mut self, writer: &mut BufWriter<File>, translation_unit: &TranslationUnit<'a>) -> std::io::Result<()> {
         println!("Emitting translation unit.");
         self.emit_translation_unit(translation_unit);
@@ -50,7 +51,6 @@ impl<'a> Emitter<'a> {
                     writer.write_all(format!("CAL {level} {address}\r\n").as_bytes())?;
                 }
                 Instruction::Operation { operation } => {
-                    // Stupid usage of clone because we get the reference to the enum.
                     writer.write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
                 }
                 Instruction::Return => {
@@ -92,22 +92,19 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
-        println!("Emitting global statements.");
         translation_unit.global_statements().iter().for_each(|stmt| self.emit_statement(stmt));
-        println!("Emitting main call.");
         self.emit_main_call();
-        println!("Emitting functions.");
         translation_unit.functions().iter().for_each(|func| self.emit_function(func))
     }
 
     fn emit_function(&mut self, function: &Function<'a>) {
-        println!("Emitting function");
-        dbg!(function);
         self.current_function = Some(function.identifier());
         self.emit_function_label(function.identifier());
 
-        // Shift the stack pointer by 3.
-        self.emit_int(FunctionScope::ACTIVATION_RECORD_SIZE as i32);
+        let sym_table = self.symbol_table();
+        let function_scope = sym_table.function_scope(function.identifier()).unwrap();
+        // Shift the stack pointer by activation record + declared variable count.
+        self.emit_int((FunctionScope::ACTIVATION_RECORD_SIZE + function_scope.variable_count()) as i32);
 
         // Load arguments.
         let args = function.parameters();
@@ -140,8 +137,8 @@ impl<'a> Emitter<'a> {
         });
     }
 
-    fn symbol_table(&self) -> Ref<'_, SymbolTable<'a>> {
-        self.symbol_table.borrow()
+    fn symbol_table(&self) -> &SymbolTable<'a> {
+        &self.symbol_table
     }
 
     pub fn emit_expression(&mut self, expression: &Expression<'a>) {
@@ -384,6 +381,16 @@ impl<'a> Emitter<'a> {
         self.emit_label(label);
     }
 
+    fn emit_finishing_label(&mut self, label: &str) {
+        self.emit_label(label);
+
+        // Need to emit an empty instruction because of a situation like
+        // @while_end_0
+        // @if_start_1 LOD ...
+        // The PL0 interpret cannot interpret two labels properly..
+        self.emit_int(0);
+    }
+
     fn emit_label(&mut self, label: &str) {
         self.labels.insert(label.to_string(), self.code.len() as u32);
         self.emit_instruction(Instruction::Label(String::from(label)));
@@ -431,7 +438,6 @@ impl<'a> Emitter<'a> {
                     self.emit_expression(expression);
                     let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(variable.identifier(), self.current_function);
                     self.store(level, var_loc as i32, 1);
-                    self.emit_int(1);
 
                     self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
                 }
@@ -474,12 +480,7 @@ impl<'a> Emitter<'a> {
                 self.emit_instruction(Instruction::Jump {
                     address: Address::Label(start),
                 });
-                self.emit_label(end.as_str());
-                // Need to emit an empty instruction because of a situation like
-                // @while_end_0
-                // @if_start_1 LOD ...
-                // The PL0 interpret cannot interpret two labels properly..
-                self.emit_int(0);
+                self.emit_finishing_label(end.as_str());
             }
             Statement::Empty { .. } => {
                 // Emit nothing I guess :)
@@ -499,23 +500,15 @@ impl<'a> Emitter<'a> {
                 ..
             } => {
                 self.push_scope();
-                let start = self.create_label("if_s");
                 let end = self.create_label("if_e");
-                self.control_statement_count += 1;
 
-                self.emit_label(start.as_str());
                 self.emit_expression(expression);
                 self.emit_instruction(Instruction::Jmc {
                     address: Address::Label(end.clone()),
                 });
                 self.emit_statement(statement);
                 self.pop_scope();
-                self.emit_label(end.as_str());
-                // Need to emit an empty instruction because of a situation like
-                // @while_end_0
-                // @if_start_1 LOD ...
-                // The PL0 interpret cannot interpret two labels properly..
-                self.emit_int(0);
+                self.emit_finishing_label(end.as_str());
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };
@@ -523,8 +516,7 @@ impl<'a> Emitter<'a> {
 
     fn push_scope(&mut self) {
         let current_function_ident = self.symbol_table().current_function_scope().function_identifier();
-        self.function_scope_depth.insert(current_function_ident, self.function_scope_depth.get
-        (current_function_ident).unwrap_or(&0) + 1);
+        self.function_scope_depth.insert(current_function_ident, self.function_scope_depth.get(current_function_ident).unwrap_or(&0) + 1);
     }
 
     fn pop_scope(&mut self) {

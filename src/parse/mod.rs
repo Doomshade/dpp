@@ -1,5 +1,3 @@
-use std::cell::{Ref, RefMut};
-
 use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::Instruction;
 use crate::parse::error_diagnosis::ErrorDiagnosis;
@@ -342,7 +340,7 @@ mod parser {
     #[derive(Clone, Debug)]
     pub struct Variable<'a> {
         position: (u32, u32),
-        position_in_scope: Option<u32>,
+        position_in_scope: Option<usize>,
         identifier: &'a str,
         data_type: DataType<'a>,
         size: usize,
@@ -369,7 +367,7 @@ mod parser {
         pub fn position(&self) -> (u32, u32) {
             self.position
         }
-        pub fn position_in_scope(&self) -> Option<u32> {
+        pub fn position_in_scope(&self) -> Option<usize> {
             self.position_in_scope
         }
         pub fn identifier(&self) -> &'a str {
@@ -385,7 +383,7 @@ mod parser {
             self.value.as_ref()
         }
 
-        pub fn set_position_in_scope(&mut self, position_in_scope: u32) {
+        pub fn set_position_in_scope(&mut self, position_in_scope: usize) {
             self.position_in_scope = Some(position_in_scope);
         }
 
@@ -540,7 +538,8 @@ mod analysis {
     }
 
     impl<'a> SymbolTable<'a> {
-        pub fn get_variable_level_and_offset(&self, identifier: &str, function_ident: Option<&'a str>) -> (u32, u32) {
+        pub fn get_variable_level_and_offset(&self, identifier: &str, function_ident: Option<&'a
+        str>) -> (u32, usize) {
             if let Some(function_ident) = function_ident {
                 if let Some(function_scope) = self.function_scope(function_ident) {
                     if let Some(variable) = function_scope.find_variable(identifier) {
@@ -574,29 +573,20 @@ mod analysis {
             self.global_scope.push_function(function);
         }
 
-        fn push_function_scope(&mut self, function_identifier: &'a str) {
+        fn new_function_scope(&mut self, function_identifier: &'a str) {
             self.function_scopes.push(FunctionScope::new(function_identifier))
-        }
-
-        pub fn push_scope(&mut self) {
-            self.current_function_scope_mut().push_scope();
-        }
-
-        pub fn pop_scope(&mut self) {
-            self.current_function_scope_mut().pop_scope();
         }
 
         pub fn find_function(&self, identifier: &str) -> Option<&std::rc::Rc<Function<'a>>> {
             self.global_scope.get_function(identifier)
         }
 
-        pub fn find_variable(&self, identifier: &str, function_ident: Option<&'a str>) ->
-        Option<&std::rc::Rc<Variable<'a>>> {
+        pub fn find_variable(&self, identifier: &str, function_ident: Option<&'a str>) -> Option<&std::rc::Rc<Variable<'a>>> {
             self.find_local_variable(identifier, function_ident).or_else(|| self.find_global_variable(identifier))
         }
 
         pub fn push_function(&mut self, function: Function<'a>) {
-            self.push_function_scope(function.identifier());
+            self.new_function_scope(function.identifier());
             self.global_scope.push_function(function);
         }
 
@@ -642,7 +632,7 @@ mod analysis {
     pub struct Scope<'a> {
         /// The current position in the stack frame. This is used to calculate the absolute position
         /// of the variable in the stack frame.
-        current_position: u32,
+        current_position: usize,
         /// Variable symbol table.
         variables: std::collections::HashMap<&'a str, std::rc::Rc<Variable<'a>>>,
         /// Function symbol table.
@@ -652,7 +642,7 @@ mod analysis {
     impl<'a> Scope<'a> {
         fn push_variable(&mut self, mut variable: Variable<'a>) {
             variable.set_position_in_scope(self.current_position);
-            self.current_position += variable.size_in_instructions() as u32;
+            self.current_position += variable.size_in_instructions();
             self.variables
                 .insert(variable.identifier(), std::rc::Rc::new(variable));
         }
@@ -695,7 +685,7 @@ mod analysis {
         pub fn has_function(&self, identifier: &str) -> bool {
             self.functions.contains_key(identifier)
         }
-        pub fn current_position(&self) -> u32 {
+        pub fn current_position(&self) -> usize {
             self.current_position
         }
         pub fn variables(&self) -> &std::collections::HashMap<&'a str, std::rc::Rc<Variable<'a>>> {
@@ -713,7 +703,7 @@ mod analysis {
     }
 
     impl<'a> FunctionScope<'a> {
-        pub const ACTIVATION_RECORD_SIZE: u32 = 3;
+        pub const ACTIVATION_RECORD_SIZE: usize = 3;
 
         pub fn new(function_identifier: &'a str) -> Self {
             let mut scopes = Vec::new();
@@ -734,6 +724,10 @@ mod analysis {
                 .iter()
                 .rev()
                 .find_map(|scope| scope.get_variable(identifier))
+        }
+
+        pub fn variable_count(&self) -> usize {
+            self.scopes.iter().fold(0, |accum, scope| accum + scope.variables.len())
         }
 
         pub fn function_identifier(&self) -> &'a str {
@@ -815,7 +809,7 @@ mod analysis {
 
 pub struct SemanticAnalyzer<'a, 'b>
 {
-    symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
+    symbol_table: SymbolTable<'a>,
     error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     current_function: Option<&'a str>,
 }
@@ -823,21 +817,20 @@ pub struct SemanticAnalyzer<'a, 'b>
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     pub fn new(
         error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
-        symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
     ) -> Self {
         Self {
-            symbol_table,
+            symbol_table: SymbolTable::default(),
             error_diag,
             current_function: None,
         }
     }
 
-    pub fn symbol_table_mut(&self) -> RefMut<'_, SymbolTable<'a>> {
-        self.symbol_table.borrow_mut()
+    pub fn symbol_table_mut(&mut self) -> &mut SymbolTable<'a> {
+        &mut self.symbol_table
     }
 
-    pub fn symbol_table(&self) -> Ref<'_, SymbolTable<'a>> {
-        self.symbol_table.borrow()
+    pub fn symbol_table(&self) -> &SymbolTable<'a> {
+        &self.symbol_table
     }
 }
 
@@ -1071,7 +1064,7 @@ pub struct Emitter<'a>
     /// The instructions to be emitted.
     code: Vec<Instruction>,
     /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
-    symbol_table: std::rc::Rc<std::cell::RefCell<SymbolTable<'a>>>,
+    symbol_table: std::rc::Rc<SymbolTable<'a>>,
     /// The labels of the program.
     labels: std::collections::HashMap<String, u32>,
     current_function: Option<&'a str>,
@@ -1084,7 +1077,6 @@ pub mod compiler {
     use std::fs;
 
     use crate::parse::{Emitter, Lexer, SemanticAnalyzer};
-    use crate::parse::analysis::SymbolTable;
     use crate::parse::error_diagnosis::ErrorDiagnosis;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
@@ -1147,17 +1139,16 @@ pub mod compiler {
             error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
             output: &str,
         ) -> Result<(), Box<dyn Error>> {
-            let symbol_table = std::rc::Rc::new(std::cell::RefCell::new(SymbolTable::default()));
-
             let mut analyzer = SemanticAnalyzer::new(
                 std::rc::Rc::clone(&error_diag),
-                std::rc::Rc::clone(&symbol_table),
             );
             analyzer.analyze(&translation_unit);
             error_diag.borrow().check_errors()?;
 
+            // Create a Rc<T> because the emitter is NOT allowed to modify the symbol table.
+            // The emitter is only allowed to look up functions, variables etc.
             let mut emitter = Emitter::new(
-                std::rc::Rc::clone(&symbol_table),
+                std::rc::Rc::new(analyzer.into_symbol_table()),
             );
 
             let file = fs::File::create(output).expect("Unable to create file");

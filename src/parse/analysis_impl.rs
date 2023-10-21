@@ -1,4 +1,5 @@
 use crate::parse::{Expression, Function, SemanticAnalyzer, Statement, UnaryOperator};
+use crate::parse::analysis::SymbolTable;
 use crate::parse::parser::{DataType, TranslationUnit};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -9,10 +10,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         // Analyze the parsed functions.
         translation_unit.functions().iter().for_each(|function| self.analyze_function(function));
 
-
         if !self.symbol_table().find_function("main").is_some() {
             self.error_diag.borrow_mut().no_main_method_found_error();
         }
+    }
+
+    pub fn into_symbol_table(self) -> SymbolTable<'a> {
+        self.symbol_table
     }
 
     fn analyze_function(&mut self, function: &Function<'a>) {
