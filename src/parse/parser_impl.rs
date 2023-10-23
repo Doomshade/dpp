@@ -331,7 +331,8 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn statement(&mut self) -> Option<Statement<'a>> {
-        let token_kind = self.token()?.kind();
+        let token = self.token()?;
+        let token_kind = token.kind();
 
         return match token_kind {
             TokenKind::IfKeyword => {
@@ -531,6 +532,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 return Some(variable_declaration);
             }
             _ => {
+                self.error_diag.borrow_mut().unexpected_token_error(token);
                 self.error = true;
                 self.go_into_panic_mode();
                 return self.statement();
