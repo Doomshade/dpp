@@ -37,8 +37,15 @@ FUNc main() -> pp {
         i = i - 1;
     }
 
+    i = 3;
     if (i == 0) {
         i = 69;
+    } else if (i == 1) {
+        i = 420;
+    } else if (i == 2) {
+        i = 123;
+    } else {
+        i = 0;
     }
 
     test(i);
@@ -48,7 +55,8 @@ FUNc main() -> pp {
 
     pp -> main8 = main3 + 4321;
     pp -> main9 = main8 + 54321;
-    bye 123 + testt() + 5 + testt;
+    bye i;
+    # bye 123 + testt() + 5 + testt;
 }
 pp -> c = 456789;
 # FUNc main(argc: pp, argv: yarn) -> pp {

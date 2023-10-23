@@ -1096,6 +1096,7 @@ pub mod compiler {
             // Pass error diag to each step.
             let tokens = Self::lex(&file_contents, &error_diag)?;
             let translation_unit = Self::parse(tokens, &error_diag)?;
+            dbg!(&translation_unit);
             Self::analyze_and_emit(translation_unit, &error_diag, output_file)?;
             let child = std::process::Command::new(pl0_interpret_path)
                 .args(["-a", "+d", "+l", "+i", "+t", "+s", output_file])

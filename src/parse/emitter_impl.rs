@@ -405,8 +405,6 @@ impl<'a> Emitter<'a> {
     }
 
     pub fn emit_statement(&mut self, statement: &Statement<'a>) {
-        println!("Emitting statement");
-        dbg!(statement);
         match statement {
             Statement::Expression { expression, .. } => {
                 self.emit_expression(expression);
@@ -509,6 +507,24 @@ impl<'a> Emitter<'a> {
                 self.emit_statement(statement);
                 self.pop_scope();
                 self.emit_finishing_label(end.as_str());
+            }
+            Statement::IfElse { expression, statement, else_statement, .. } => {
+                self.push_scope();
+                let end_if = self.create_label("if_e");
+                let else_block = self.create_label("else");
+
+                self.emit_expression(expression);
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(else_block.clone()),
+                });
+                self.emit_statement(statement);
+                self.pop_scope();
+                self.emit_instruction(Instruction::Jump {
+                    address: Address::Label(end_if.clone())
+                });
+                self.emit_finishing_label(else_block.as_str());
+                self.emit_statement(else_statement);
+                self.emit_finishing_label(end_if.as_str());
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };

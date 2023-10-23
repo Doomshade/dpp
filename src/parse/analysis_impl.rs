@@ -163,6 +163,20 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
                 self.analyze_statement(statement);
             }
+            Statement::IfElse {expression, statement, position, else_statement} => {
+                let data_type = self.eval(expression);
+
+                if !matches!(data_type, DataType::Booba) {
+                    self.error_diag.borrow_mut().invalid_data_type(
+                        position.0,
+                        position.1,
+                        DataType::Booba,
+                        &data_type,
+                    )
+                }
+                self.analyze_statement(statement);
+                self.analyze_statement(else_statement);
+            }
             _ => {
                 todo!("Analyzing {:?}", statement)
             }
