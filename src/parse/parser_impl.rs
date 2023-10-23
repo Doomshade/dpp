@@ -504,14 +504,34 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::NomKeyword
             | TokenKind::Number
             | TokenKind::Yarn
-            | TokenKind::OpenParen
-            | TokenKind::Identifier => {
+            | TokenKind::OpenParen => {
                 let expression = self.expr()?;
                 self.expect(TokenKind::Semicolon)?;
                 return Some(Statement::Expression {
                     position: self.position,
                     expression,
                 });
+            }
+            TokenKind::Identifier => {
+                // Identifier can also be an expression. Need to look ahead,
+                // if present, then it's assignment. If not, it's expression.
+                return if self.token_offset(1)?.kind() == TokenKind::Equal {
+                    let identifier = self.expect(TokenKind::Identifier)?;
+                    self.expect(TokenKind::Equal)?;
+                    let expression = self.expr()?;
+                    Some(Statement::Assignment {
+                        position: self.position,
+                        identifier,
+                        expression
+                    })
+                } else {
+                    let expression = self.expr()?;
+                    self.expect(TokenKind::Semicolon)?;
+                    Some(Statement::Expression {
+                        position: self.position,
+                        expression,
+                    })
+                }
             }
             TokenKind::OpenBrace => {
                 let block = self.block()?;
@@ -750,15 +770,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                             position: self.position,
                             identifier,
                             arguments,
-                        })
-                    }
-                    TokenKind::Equal => {
-                        self.expect(TokenKind::Equal)?;
-                        let expression = self.expr()?;
-                        Some(Expression::Assignment {
-                            position: self.position,
-                            identifier,
-                            expression: Box::new(expression),
                         })
                     }
                     _ => Some(Expression::Identifier {

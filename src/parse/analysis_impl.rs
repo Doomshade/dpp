@@ -99,29 +99,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // dbg!(&expression);
             }
             Statement::Expression { expression, .. } => {
-                // Must check whether the function call expression has valid amount of arguments.
-                if let Expression::FunctionCall {
-                    identifier,
-                    arguments,
-                    position,
-                } = expression
-                {
-                    if let Some(function) = self.symbol_table().find_function(identifier) {
-                        if function.parameters().len() != arguments.len() {
-                            self.error_diag.borrow_mut().invalid_number_of_arguments(
-                                position.0,
-                                position.1,
-                                identifier,
-                                function.parameters().len(),
-                                arguments.len(),
-                            );
-                        }
-                    } else {
-                        self.error_diag
-                            .borrow_mut()
-                            .function_does_not_exist(position.0, position.1);
-                    }
-                }
+                self.eval(expression);
             }
             Statement::While {
                 expression,
@@ -129,14 +107,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 let data_type = self.eval(expression);
-                if !matches!(data_type, DataType::Booba) {
-                    self.error_diag.borrow_mut().invalid_data_type(
-                        position.0,
-                        position.1,
-                        DataType::Booba,
-                        &data_type,
-                    );
-                }
+                self.check_data_type(&DataType::Booba, &data_type, position);
                 self.analyze_statement(statement);
             }
             Statement::Block { block, .. } => {
@@ -153,34 +124,39 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let data_type = self.eval(expression);
 
-                if !matches!(data_type, DataType::Booba) {
-                    self.error_diag.borrow_mut().invalid_data_type(
-                        position.0,
-                        position.1,
-                        DataType::Booba,
-                        &data_type,
-                    )
-                }
+                self.check_data_type(&DataType::Booba, &data_type, position);
                 self.analyze_statement(statement);
             }
-            Statement::IfElse {expression, statement, position, else_statement} => {
+            Statement::IfElse { expression, statement, position, else_statement } => {
                 let data_type = self.eval(expression);
 
-                if !matches!(data_type, DataType::Booba) {
-                    self.error_diag.borrow_mut().invalid_data_type(
-                        position.0,
-                        position.1,
-                        DataType::Booba,
-                        &data_type,
-                    )
-                }
+                self.check_data_type(&DataType::Booba, &data_type, position);
                 self.analyze_statement(statement);
                 self.analyze_statement(else_statement);
+            }
+            Statement::Assignment { identifier, expression, position } => {
+                let variable = self.symbol_table().find_variable(identifier, self
+                    .current_function).expect("A variable").data_type().clone();
+                self.check_data_type(&variable, &self.eval(expression), position);
+            }
+            Statement::Empty { .. } => {
+                // Nothing :)
             }
             _ => {
                 todo!("Analyzing {:?}", statement)
             }
         };
+    }
+
+    fn check_data_type(&mut self, expected_data_type: &DataType<'a>, got: &DataType<'a>, position: &(u32, u32)) {
+        if expected_data_type != got {
+            self.error_diag.borrow_mut().invalid_data_type(
+                position.0,
+                position.1,
+                expected_data_type,
+                got,
+            )
+        }
     }
 
     pub fn eval(&self, expr: &Expression<'a>) -> DataType<'a> {
@@ -220,11 +196,37 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
                 panic!("{}", format!("Variable {identifier} not found"));
             }
-            Expression::FunctionCall { identifier, .. } => {
-                if let Some(global_function) = self.symbol_table().find_function(identifier) {
-                    return global_function.return_type().clone();
-                }
-                panic!("{}", format!("Function {identifier} not found"));
+            Expression::FunctionCall { identifier, arguments, position } => {
+                return if let Some(function) = self.symbol_table().find_function(identifier) {
+                    if function.parameters().len() != arguments.len() { // Check the argument count.
+                        self.error_diag.borrow_mut().invalid_number_of_arguments(
+                            position.0,
+                            position.1,
+                            identifier,
+                            function.parameters().len(),
+                            arguments.len(),
+                        );
+                    } else { // Check the argument data type.
+                        let mut zip = arguments
+                            .iter()
+                            .map(|arg| self.eval(arg))
+                            .zip(function.parameters().iter().map(|var| var.data_type()));
+                        dbg!(&zip.clone().collect::<Vec<_>>());
+                        if let Some(mismatched_arg) =
+                            zip.find(|(a, b)| &a != b) {
+                            self.error_diag.borrow_mut().invalid_data_type(position.0,
+                                                                           position.1,
+                                                                           mismatched_arg.1,
+                                                                           &mismatched_arg.0)
+                        }
+                    }
+                    function.return_type().clone()
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .function_does_not_exist(position.0, position.1);
+                    DataType::Nopp
+                };
             }
             _ => DataType::Nopp,
         };

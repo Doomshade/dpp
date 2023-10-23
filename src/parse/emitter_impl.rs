@@ -199,15 +199,6 @@ impl<'a> Emitter<'a> {
             } => {
                 self.emit_function_call(arguments, identifier);
             }
-            Expression::Assignment {
-                identifier,
-                expression,
-                ..
-            } => {
-                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier, self.current_function);
-                self.emit_expression(expression);
-                self.store(level, var_loc as i32, 1);
-            }
             _ => todo!("Not implemented"),
         }
     }
@@ -525,6 +516,15 @@ impl<'a> Emitter<'a> {
                 self.emit_finishing_label(else_block.as_str());
                 self.emit_statement(else_statement);
                 self.emit_finishing_label(end_if.as_str());
+            }
+            Statement::Assignment {
+                identifier,
+                expression,
+                ..
+            } => {
+                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier, self.current_function);
+                self.emit_expression(expression);
+                self.store(level, var_loc as i32, 1);
             }
             _ => todo!("Emitting statement: {:#?}", statement),
         };

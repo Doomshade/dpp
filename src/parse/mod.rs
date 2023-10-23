@@ -432,11 +432,6 @@ mod parser {
             identifier: &'a str,
             arguments: Vec<Expression<'a>>,
         },
-        Assignment {
-            position: (u32, u32),
-            identifier: &'a str,
-            expression: Box<Expression<'a>>,
-        },
         Invalid,
     }
 
@@ -453,7 +448,6 @@ mod parser {
                 Expression::FunctionCall { identifier, .. } => {
                     format!("Function {}", identifier)
                 }
-                Expression::Assignment { identifier, .. } => identifier.to_string(),
                 Expression::Invalid => "Invalid expression".to_string(),
             };
             write!(f, "{}", formatted)?;
@@ -901,6 +895,11 @@ pub enum Statement<'a> {
         position: (u32, u32),
         expression: Expression<'a>,
         cases: Vec<Case<'a>>,
+    },
+    Assignment {
+        position: (u32, u32),
+        identifier: &'a str,
+        expression: Expression<'a>
     },
 }
 

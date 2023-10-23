@@ -197,7 +197,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn invalid_data_type(&mut self, row: u32, col: u32, expected_data_type: DataType<'a>, got: &DataType<'a>) {
+    pub fn invalid_data_type(&mut self, row: u32, col: u32, expected_data_type: &DataType<'a>,
+                             got: &DataType<'a>) {
         self.insert_error_message(
             row,
             col,

@@ -18,35 +18,36 @@
 
     \begin{grammar}
 
-        <transl-unit> ::= \{ (<function> | <var-decl>) \}
+        <transl-unit> ::= \{ ( <function> | <var-decl> ) \}
 
         <function> ::= `FUNc' <ident> <params> `->' <data-type> <block>
 
-        <params> ::= `(' [<param> \{ `,' <param> \}] `)'
+        <params> ::= `(' [ <param> \{ `,' <param> \} ] `)'
 
         <param> ::= <ident> `:' <data-type>
 
         <block> ::= `{' \{ <stat> \} `}'
 
-        <stat> ::= `if' `(' <expr> `)' <stat> [`else' <stat>]
+        <stat> ::= `if' `(' <expr> `)' <stat> [ `else' <stat> ]
         \alt `for' `(' <ident> [ `=' <expr> ] `to' <expr> `)' <stat>
         \alt `while' `(' <expr> `)' <stat>
         \alt `do' <block> `while' `(' <expr> `)' `;'
         \alt `loop' <block>
         \alt `break' `;'
         \alt `continue' `;'
-        \alt `switch' `(' <expr> `)' `{' [<case> \{ `,' <case> \}] `}'
+        \alt `switch' `(' <expr> `)' `{' [ <case> \{ `,' <case> \} ] `}'
         \alt `bye' <expr> `;'
         \alt `pprint' `(' <expr> `)' `;'
         \alt `pprintln' `(' <expr> `)' `;'
         \alt `;'
+        \alt <ident> `=' <expr> `;'
         \alt <var-decl>
         \alt <block>
         \alt <expr> `;'
 
         <case> ::= `case' <expr> `:' <block>
 
-        <var-decl> ::= <data-type> `->' <ident> `;'
+        <var-decl> ::= <data-type> `->' <ident> [ `=' <expr> ] `;'
 
         <data-type> ::= `pp' // int
         \alt `p' // char
@@ -56,22 +57,22 @@
 
         <expr> ::= <equ>
 
-        <equ> ::= <comp> \{ (`!=' | `==') <comp> \}
+        <equ> ::= <comp> \{ ( `!=' | `==' ) <comp> \}
 
-        <comp> ::= <term> \{ (`>' | `>=' | `<=' | `<') <term> \}
+        <comp> ::= <term> \{ ( `>' | `>=' | `<=' | `<' ) <term> \}
 
-        <term> ::= <factor> \{ (`+' | `-') <factor> \}
+        <term> ::= <factor> \{ ( `+' | `-' ) <factor> \}
 
-        <factor> ::= <unary> \{ (`*' | `/') <unary> \}
+        <factor> ::= <unary> \{ ( `*' | `/' ) <unary> \}
 
-        <unary> ::= (`!' | `-') <unary> | <primary>
+        <unary> ::= ( `!' | `-' ) <unary> | <primary>
 
         <primary> ::= `yem' // true
         \alt `nom' // false
         \alt <number>
         \alt <string>
         \alt `(' <expr> `)'
-        \alt <ident> [`(' [<args>] `)']
+        \alt <ident> [ `(' [ <args> ] `)' ]
 
         <args> ::= <expr> \{ `,' <expr> \}
     \end{grammar}
