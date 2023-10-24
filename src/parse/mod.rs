@@ -345,6 +345,7 @@ mod parser {
         data_type: DataType<'a>,
         size: usize,
         value: Option<Expression<'a>>,
+        is_parameter: bool,
     }
 
     impl<'a> Variable<'a> {
@@ -353,6 +354,7 @@ mod parser {
             identifier: &'a str,
             data_type: DataType<'a>,
             value: Option<Expression<'a>>,
+            is_parameter: bool,
         ) -> Self {
             Variable {
                 position,
@@ -361,7 +363,12 @@ mod parser {
                 size: data_type.size(),
                 data_type,
                 value,
+                is_parameter,
             }
+        }
+
+        pub fn is_initialized(&self) -> bool {
+            self.is_parameter || self.value.is_some()
         }
 
         pub fn position(&self) -> (u32, u32) {
@@ -539,12 +546,17 @@ mod parser {
                 },
                 DataType::P => std::mem::size_of::<char>(),
                 DataType::Booba => std::mem::size_of::<bool>(),
-                _ => panic!("Invalid data type"),
+                DataType::Nopp => 0,
+                _ => panic!("Invalid data type {self}"),
             }
         }
 
         pub fn size_in_instructions(&self) -> usize {
-            ((self.size() - 1) / 4) + 1
+            let size = self.size();
+            if size == 0 {
+                return 0;
+            }
+            return ((size - 1) / 4) + 1;
         }
     }
 }
@@ -862,6 +874,8 @@ pub struct SemanticAnalyzer<'a, 'b> {
     symbol_table: SymbolTable<'a>,
     error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     current_function: Option<&'a str>,
+    loop_stack: usize,
+    scope_index: usize,
 }
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -870,6 +884,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             symbol_table: SymbolTable::default(),
             error_diag,
             current_function: None,
+            loop_stack: 0,
+            scope_index: 0,
         }
     }
 
@@ -1164,7 +1180,9 @@ pub mod compiler {
             println!("Parsing program...");
             let start = std::time::Instant::now();
             let tokens = Self::lex(&file_contents, &error_diag)?;
+            dbg!(&tokens);
             let translation_unit = Self::parse(tokens, &error_diag)?;
+            dbg!(&translation_unit);
             let symbol_table = Self::analyze(&error_diag, &translation_unit)?;
             let duration = start.elapsed();
             println!("Program parsed in {:?}", duration);

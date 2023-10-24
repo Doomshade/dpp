@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::parse::analysis::{FunctionScope, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation, EMIT_DEBUG};
-use crate::parse::parser::{Block, TranslationUnit};
+use crate::parse::parser::{Block, DataType, TranslationUnit};
 use crate::parse::{BinaryOperator, Emitter, Expression, Function, Statement, Variable};
 
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
@@ -123,6 +123,9 @@ impl<'a> Emitter<'a> {
             self.echo(format!("{} arguments loaded", args.len()).as_str());
         }
         self.emit_block(function.block());
+        if function.return_type() == &DataType::Nopp {
+            self.emit_instruction(Instruction::Return);
+        }
 
         self.emit_debug_info(DebugKeyword::StackA);
     }
@@ -552,7 +555,7 @@ impl<'a> Emitter<'a> {
                 self.emit_expression(expression);
                 self.store(level, var_loc as i32, 1);
             }
-            _ => todo!("Emitting statement: {:#?}", statement),
+            _ => println!("Not yet implemented: Emitting statement: {:#?}", statement),
         };
     }
 

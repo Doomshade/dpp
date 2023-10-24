@@ -1,7 +1,8 @@
+use dpp_macros::PosMacro;
+
 use crate::parse::analysis::SymbolTable;
 use crate::parse::parser::{DataType, TranslationUnit};
 use crate::parse::{Expression, Function, Number, SemanticAnalyzer, Statement, UnaryOperator};
-use dpp_macros::PosMacro;
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     pub fn analyze(&mut self, translation_unit: &TranslationUnit<'a>) {
@@ -60,21 +61,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         variable.position().1,
                         variable.identifier(),
                     );
-                    return;
                 }
 
                 if let Some(expression) = variable.value() {
                     let data_type = self.eval(expression);
-                    let mut matching_data_type = false;
-                    if let DataType::Number(..) = data_type {
-                        if let DataType::Number(..) = variable.data_type() {
-                            matching_data_type = true;
-                        }
-                    }
-                    if !matching_data_type {
-                        matching_data_type = &data_type == variable.data_type();
-                    }
-                    assert!(matching_data_type, "Data types do not match");
+                    self.check_data_type(variable.data_type(), &data_type, &variable.position());
                 }
                 self.symbol_table_mut()
                     .push_global_variable(variable.clone());
@@ -100,15 +91,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 if let Some(expression) = variable.value() {
                     let data_type = self.eval(expression);
-                    assert_eq!(&data_type, variable.data_type(), "Data types do not match");
-
-                    if &self.eval(expression) != variable.data_type() {
-                        self.error_diag.borrow_mut().invalid_type(
-                            variable.position().0,
-                            variable.position().1,
-                            variable.identifier(),
-                        );
-                    }
+                    self.check_data_type(variable.data_type(), &data_type, &variable.position());
                 }
                 self.symbol_table_mut()
                     .push_local_variable(variable.clone());
@@ -123,8 +106,43 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 let data_type = self.eval(expression);
-                self.check_data_type(&DataType::Booba, &data_type, position);
+                self.check_data_type(
+                    &DataType::Booba,
+                    &data_type,
+                    &(expression.row(), expression.col()),
+                );
+                self.loop_stack += 1;
                 self.analyze_statement(statement);
+                self.loop_stack -= 1;
+            }
+            Statement::Loop { block, position } => {
+                self.loop_stack += 1;
+                block
+                    .statements()
+                    .iter()
+                    .for_each(|statement| self.analyze_statement(statement));
+                self.loop_stack -= 1;
+            }
+            Statement::DoWhile {
+                expression,
+                block,
+                position,
+            } => {
+                let data_type = self.eval(expression);
+                self.check_data_type(&DataType::Booba, &data_type, position);
+                self.loop_stack += 1;
+                block
+                    .statements()
+                    .iter()
+                    .for_each(|statement| self.analyze_statement(statement));
+                self.loop_stack -= 1;
+            }
+            Statement::Break { position } => {
+                if self.loop_stack == 0 {
+                    self.error_diag
+                        .borrow_mut()
+                        .invalid_break_placement(position.0, position.1);
+                }
             }
             Statement::Block { block, .. } => {
                 block
@@ -223,6 +241,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         };
     }
 
+    fn check_if_mixed_data_types(
+        &self,
+        expected_data_type: &DataType<'a>,
+        got: &DataType<'a>,
+        position: &(u32, u32),
+    ) {
+        if expected_data_type != got {
+            self.error_diag.borrow_mut().mixed_data_types_error(
+                position.0,
+                position.1,
+                expected_data_type,
+                got,
+            )
+        }
+    }
+
     fn check_data_type(
         &self,
         expected_data_type: &DataType<'a>,
@@ -266,7 +300,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let lhs_data_type = self.eval(lhs);
                 let rhs_data_type = self.eval(rhs);
-                self.check_data_type(&lhs_data_type, &rhs_data_type, &position);
+
+                self.check_if_mixed_data_types(&lhs_data_type, &rhs_data_type, &position);
                 // TODO: Check whether the binary operator is available for the given data type.
                 use crate::parse::BinaryOperator::*;
                 match op {
@@ -275,14 +310,28 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     | LessThanOrEqual => DataType::Booba,
                 }
             }
-            Expression::Identifier { identifier, .. } => {
-                if let Some(variable) = self
+            Expression::Identifier {
+                identifier,
+                position,
+            } => {
+                return if let Some(variable) = self
                     .symbol_table()
                     .find_variable(identifier, self.current_function)
                 {
-                    return variable.data_type().clone();
+                    if variable.is_initialized() {
+                        variable.data_type().clone()
+                    } else {
+                        self.error_diag
+                            .borrow_mut()
+                            .variable_not_initialized(position.0, position.1, identifier);
+                        DataType::Nopp
+                    }
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_not_found(position.0, position.1, identifier);
+                    DataType::Nopp
                 }
-                panic!("{}", format!("Variable {identifier} not found"));
             }
             Expression::FunctionCall {
                 identifier,
@@ -303,15 +352,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         // Check the argument data type.
                         if let Some(mismatched_arg) = arguments
                             .iter()
-                            .map(|arg| self.eval(arg))
                             .zip(function.parameters().iter().map(|var| var.data_type()))
-                            .find(|(a, b)| &a != b)
+                            .find(|(a, b)| &self.eval(a) != *b)
                         {
+                            let got = self.eval(mismatched_arg.0);
                             self.error_diag.borrow_mut().invalid_data_type(
-                                position.0,
-                                position.1,
+                                mismatched_arg.0.row(),
+                                mismatched_arg.0.col(),
                                 mismatched_arg.1,
-                                &mismatched_arg.0,
+                                &got,
                             )
                         }
                     }
@@ -328,6 +377,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
+        self.loop_stack = 0;
         self.current_function = Some(function.identifier());
         let mut ref_mut = self.symbol_table_mut();
         ref_mut.push_function(function.clone());

@@ -67,7 +67,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     }
 
     fn new_token(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
-        Token::new(kind, (self.row, self.col - 1), value)
+        Token::new(kind, (self.row, self.col), value)
     }
 
     fn parse_token(&mut self) -> Token<'a> {
@@ -235,7 +235,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         while self.peek().is_whitespace() {
             if self.peek() == '\n' {
                 self.row += 1;
-                self.col = 1;
+                self.col = 0;
             }
             end += self.advance();
         }
@@ -272,16 +272,15 @@ impl<'a, 'b> Lexer<'a, 'b> {
             }
         }
 
-        let token = self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..end]);
         if self.peek() == '"' {
             let _ = self.advance(); // Consume the closing quote.
         } else {
-            self.error_diag
-                .borrow_mut()
-                .expected_different_token_error(&token, TokenKind::DoubleQuote);
+            self.error_diag.borrow_mut().expected_different_token_error(
+                &self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..end]),
+                TokenKind::DoubleQuote,
+            );
         }
-
-        token
+        self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..end - 1])
     }
 
     fn handle_number(&mut self) -> Token<'a> {

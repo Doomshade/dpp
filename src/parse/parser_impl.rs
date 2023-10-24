@@ -311,7 +311,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
         let data_type = self.data_type()?;
-        Some(Variable::new(position, identifier, data_type, None))
+        Some(Variable::new(position, identifier, data_type, None, true))
     }
 
     fn block(&mut self) -> Option<Block<'a>> {
@@ -377,6 +377,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 } else {
                     None
                 };
+                dbg!(&ident_expression);
                 self.expect(TokenKind::ToKeyword)?;
                 let length_expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
@@ -588,11 +589,17 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.expect(TokenKind::Equal);
             let expression = self.expr()?;
             Statement::VariableDeclaration {
-                variable: Variable::new(self.position, identifier, data_type, Some(expression)),
+                variable: Variable::new(
+                    self.position,
+                    identifier,
+                    data_type,
+                    Some(expression),
+                    false,
+                ),
             }
         } else {
             Statement::VariableDeclaration {
-                variable: Variable::new(self.position, identifier, data_type, None),
+                variable: Variable::new(self.position, identifier, data_type, None, false),
             }
         };
 
@@ -771,6 +778,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn primary(&mut self) -> Option<Expression<'a>> {
         match self.token()?.kind() {
             TokenKind::Identifier => {
+                let position = self.position;
                 let identifier = self.expect(TokenKind::Identifier)?;
                 match self.token()?.kind() {
                     TokenKind::OpenParen => {
@@ -782,30 +790,33 @@ impl<'a, 'b> Parser<'a, 'b> {
                         })
                     }
                     _ => Some(Expression::Identifier {
-                        position: self.position,
+                        position,
                         identifier,
                     }),
                 }
             }
             TokenKind::YemKeyword => {
+                let position = self.position;
                 self.expect(TokenKind::YemKeyword)?;
                 Some(Expression::Booba {
-                    position: self.position,
+                    position,
                     value: true,
                 })
             }
             TokenKind::NomKeyword => {
+                let position = self.position;
                 self.expect(TokenKind::NomKeyword)?;
                 Some(Expression::Booba {
-                    position: self.position,
+                    position,
                     value: false,
                 })
             }
             TokenKind::Number => {
+                let position = self.position;
                 let number = self.expect(TokenKind::Number)?;
                 if let Ok(value) = number.parse::<i32>() {
                     Some(Expression::Number {
-                        position: self.position,
+                        position,
                         number_type: Number::Pp,
                         value,
                     })
@@ -814,20 +825,19 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
             }
             TokenKind::P => {
+                let position = self.position;
                 let char = self.expect(TokenKind::P)?;
                 if let Some(value) = char.chars().next() {
-                    Some(Expression::P {
-                        position: self.position,
-                        value,
-                    })
+                    Some(Expression::P { position, value })
                 } else {
                     panic!("Invalid character")
                 }
             }
             TokenKind::Yarn => {
+                let position = self.position;
                 let yarn = self.expect(TokenKind::Yarn)?;
                 Some(Expression::Yarn {
-                    position: self.position,
+                    position,
                     value: yarn,
                 })
             }

@@ -12,14 +12,14 @@ FUNc main() -> pp {
     bye 0;
 }
 
-FUNc asd(firstarg: pp, a: pp) -> pp {
+FUNc asd(firstarg: pp, aa: pp) -> pp {
     pp -> expr = (1 + 2) * 3 + 4 * 5;
-    pp -> decl;
+    booba -> decl = yem;
     pp -> assign = 123;
-    pp -> c;
-    pp -> another_expr = (a + (a(decl))) + c;
+    pp -> c = 0;
+    pp -> another_expr = (aa + (a(1))) + c;
 
-    abcde(a > 456, a);
+    abcde(aa > 456, aa);
     # blocc
     {
         { # another blocc
@@ -27,20 +27,20 @@ FUNc asd(firstarg: pp, a: pp) -> pp {
         }
     }
 
-    switch(a) {
+    switch(aa) {
         case 69 {
-            pp -> a;
+            pp -> a = 4;
         }
     }
 
-    for(i = "asd" to 10) {
+    for(i = 0 to 10) {
 
     }
 
     while(yem) {}
 
     do {
-        pp -> a;
+        pp -> a = 8;
     } while(yem);
 
     loop {

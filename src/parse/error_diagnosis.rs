@@ -83,6 +83,10 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
+    pub fn invalid_break_placement(&mut self, row: u32, col: u32) {
+        self.insert_error_message(row, col, "Invalid break placement.");
+    }
+
     pub fn unexpected_token_error(&mut self, token: &Token<'a>) {
         self.insert_error_message(
             token.row(),
@@ -192,12 +196,33 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             format!("Variable \"{var_name}\" already exists.").as_str(),
         );
     }
-
-    pub fn invalid_type(&mut self, row: u32, col: u32, var_name: &str) {
+    pub fn variable_not_found(&mut self, row: u32, col: u32, var_name: &str) {
         self.insert_error_message(
             row,
             col,
-            format!("Invalid type for variable \"{var_name}\".").as_str(),
+            format!("Variable \"{var_name}\" was not found.").as_str(),
+        );
+    }
+
+    pub fn variable_not_initialized(&mut self, row: u32, col: u32, var_name: &str) {
+        self.insert_error_message(
+            row,
+            col,
+            format!("Variable \"{var_name}\" has not been initialized.").as_str(),
+        );
+    }
+
+    pub fn mixed_data_types_error(
+        &mut self,
+        row: u32,
+        col: u32,
+        lhs: &DataType<'a>,
+        rhs: &DataType<'a>,
+    ) {
+        self.insert_error_message(
+            row,
+            col,
+            format!("Mixed two data types - {lhs} and {rhs}.").as_str(),
         );
     }
 
