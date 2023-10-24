@@ -1,7 +1,7 @@
 use dpp_macros::PosMacro;
 
 use crate::parse::analysis::SymbolTable;
-use crate::parse::parser::{DataType, TranslationUnit};
+use crate::parse::parser::{Block, DataType, TranslationUnit};
 use crate::parse::{Expression, Function, Number, SemanticAnalyzer, Statement, UnaryOperator};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -29,9 +29,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn analyze_function(&mut self, function: &Function<'a>) {
         self.begin_function(&function);
-        for statement in function.block().statements() {
-            self.analyze_statement(statement);
-        }
+        self.analyze_block(function.block());
         if function.return_type() != &DataType::Nopp {
             // If it's anything other than Nopp, then we require the function to have
             // a return statement at the very end.
@@ -145,10 +143,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
             }
             Statement::Block { block, .. } => {
-                block
-                    .statements()
-                    .iter()
-                    .for_each(|statement| self.analyze_statement(statement));
+                self.analyze_block(block);
             }
             Statement::Bye { .. } => {}
             Statement::If {
@@ -239,6 +234,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .not_implemented(format!("{:?}", statement).as_str());
             }
         };
+    }
+
+    fn analyze_block(&mut self, block: &Block<'a>) {
+        self.symbol_table.push_scope();
+        block
+            .statements()
+            .iter()
+            .for_each(|statement| self.analyze_statement(statement));
+        self.symbol_table.pop_scope();
     }
 
     fn check_if_mixed_data_types(
@@ -381,6 +385,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.current_function = Some(function.identifier());
         let mut ref_mut = self.symbol_table_mut();
         ref_mut.push_function(function.clone());
+        ref_mut.push_scope();
         function
             .parameters()
             .iter()
@@ -389,5 +394,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn end_function(&mut self) {
         self.current_function = None;
+        self.symbol_table_mut().pop_scope();
     }
 }

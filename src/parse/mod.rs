@@ -23,9 +23,8 @@ pub struct Lexer<'a, 'b> {
 }
 
 mod lexer {
-    use dpp_macros_derive::PosMacro;
-
     use dpp_macros::PosMacro;
+    use dpp_macros_derive::PosMacro;
 
     #[derive(Debug, PosMacro)]
     pub struct Token<'a> {
@@ -238,9 +237,8 @@ mod lexer {
 }
 
 mod parser {
-    use dpp_macros_derive::PosMacro;
-
     use dpp_macros::PosMacro;
+    use dpp_macros_derive::PosMacro;
 
     use crate::parse::{BinaryOperator, Number, Statement, UnaryOperator};
 
@@ -566,7 +564,7 @@ mod analysis {
 
     use crate::parse::parser::{Function, Variable};
 
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug)]
     pub struct SymbolTable<'a> {
         /// The global scope holding global variables and function identifiers.
         global_scope: GlobalScope<'a>,
@@ -575,6 +573,13 @@ mod analysis {
     }
 
     impl<'a> SymbolTable<'a> {
+        pub fn new() -> Self {
+            SymbolTable {
+                global_scope: GlobalScope::new(),
+                function_scopes: Vec::new(),
+            }
+        }
+
         pub fn get_variable_level_and_offset(
             &self,
             identifier: &str,
@@ -627,6 +632,14 @@ mod analysis {
             self.global_scope.get_function(identifier)
         }
 
+        pub fn push_scope(&mut self) {
+            self.current_function_scope_mut().push_scope();
+        }
+
+        pub fn pop_scope(&mut self) {
+            self.current_function_scope_mut().pop_scope();
+        }
+
         pub fn find_variable(
             &self,
             identifier: &str,
@@ -673,10 +686,6 @@ mod analysis {
                 .find(move |func| func.function_identifier == function_identifier)
         }
 
-        pub fn function_scope_at(&self, index: usize) -> Option<&FunctionScope<'a>> {
-            self.function_scopes.get(index)
-        }
-
         pub fn current_function_scope(&self) -> &FunctionScope<'a> {
             self.function_scopes.last().expect("Inside function scope")
         }
@@ -688,7 +697,7 @@ mod analysis {
         }
     }
 
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug)]
     pub struct Scope<'a> {
         /// The current position in the stack frame. This is used to calculate the absolute position
         /// of the variable in the stack frame.
@@ -700,6 +709,13 @@ mod analysis {
     }
 
     impl<'a> Scope<'a> {
+        pub fn new(start_position: usize) -> Self {
+            Scope {
+                current_position: start_position,
+                variables: HashMap::new(),
+                functions: HashMap::new(),
+            }
+        }
         fn push_variable(&mut self, mut variable: Variable<'a>) {
             variable.set_position_in_scope(self.current_position);
             self.current_position += variable.size_in_instructions();
@@ -768,15 +784,8 @@ mod analysis {
         pub const ACTIVATION_RECORD_SIZE: usize = 3;
 
         pub fn new(function_identifier: &'a str) -> Self {
-            let mut scopes = Vec::new();
-            let mut scope = Scope::default();
-
-            // Set the stack pointer AFTER the activation record.
-            scope.current_position = Self::ACTIVATION_RECORD_SIZE;
-
-            scopes.push(scope);
             FunctionScope {
-                scopes,
+                scopes: Vec::new(),
                 function_identifier,
             }
         }
@@ -805,7 +814,12 @@ mod analysis {
         }
 
         pub fn push_scope(&mut self) {
-            self.scopes.push(Scope::default());
+            if let Some(previous_scope) = self.scopes.last() {
+                self.scopes
+                    .push(Scope::new(previous_scope.current_position + 1));
+            } else {
+                self.scopes.push(Scope::new(Self::ACTIVATION_RECORD_SIZE));
+            }
         }
 
         pub fn current_scope(&self) -> Option<&Scope<'a>> {
@@ -825,20 +839,20 @@ mod analysis {
         }
     }
 
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug)]
     pub struct GlobalScope<'a> {
         scope: Scope<'a>,
     }
 
     impl<'a> GlobalScope<'a> {
         pub fn new() -> Self {
-            let mut scope = Scope::default();
             // TODO: Need to offset this because we need the first
             // thing on the stack to be "1" because we call
             // main and then it fucking has to read the first thing
             // on the stack.
-            scope.current_position = 1;
-            GlobalScope { scope }
+            GlobalScope {
+                scope: Scope::new(1),
+            }
         }
         pub fn push_variable(&mut self, variable: Variable<'a>) {
             self.scope.push_variable(variable);
@@ -881,7 +895,7 @@ pub struct SemanticAnalyzer<'a, 'b> {
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     pub fn new(error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         Self {
-            symbol_table: SymbolTable::default(),
+            symbol_table: SymbolTable::new(),
             error_diag,
             current_function: None,
             loop_stack: 0,
