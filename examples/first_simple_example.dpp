@@ -1,16 +1,25 @@
 pp -> x;
 pp -> y = 123;
 
+FUNc abcde(a: booba, b: pp) -> nopp {
+}
+
+FUNc a(a: pp) -> pp {
+    bye 0;
+}
+
+FUNc main() -> pp {
+    bye 0;
+}
+
 FUNc asd(firstarg: pp, a: pp) -> pp {
-    pp -> a = 5;
     pp -> expr = (1 + 2) * 3 + 4 * 5;
     pp -> decl;
     pp -> assign = 123;
     pp -> c;
-    pp -> another_expr = (a + (a(abc))) + c;
+    pp -> another_expr = (a + (a(decl))) + c;
 
     abcde(a > 456, a);
-    abcde("");
     # blocc
     {
         { # another blocc
@@ -18,7 +27,7 @@ FUNc asd(firstarg: pp, a: pp) -> pp {
         }
     }
 
-    switch(a > 2) {
+    switch(a) {
         case 69 {
             pp -> a;
         }

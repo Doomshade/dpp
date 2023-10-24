@@ -24,7 +24,6 @@ impl<'a> Emitter<'a> {
     }
 
     pub fn emit_all(&mut self, writer: &mut BufWriter<File>, translation_unit: &TranslationUnit<'a>) -> std::io::Result<()> {
-        println!("Emitting translation unit.");
         self.emit_translation_unit(translation_unit);
 
         // First emit the base

@@ -142,13 +142,23 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::Empty { .. } => {
                 // Nothing :)
             }
+            Statement::Switch { expression, cases, position } => {
+                let switch_data_type = self.eval(expression);
+                if let Some(mismatched_data_type) = cases.iter().map(|case| (case.block()
+                                                                                 .position(), self
+                                                                                 .eval(case
+                                                                                     .expression()))).find(|(position, data_type)| *data_type != switch_data_type) {
+                    self.check_data_type(&switch_data_type, &mismatched_data_type.1,
+                                         &mismatched_data_type.0);
+                }
+            }
             _ => {
-                todo!("Analyzing {:?}", statement)
+                self.error_diag.borrow_mut().not_implemented(format!("{:?}", statement).as_str());
             }
         };
     }
 
-    fn check_data_type(&mut self, expected_data_type: &DataType<'a>, got: &DataType<'a>, position: &(u32, u32)) {
+    fn check_data_type(&self, expected_data_type: &DataType<'a>, got: &DataType<'a>, position: &(u32, u32)) {
         if expected_data_type != got {
             self.error_diag.borrow_mut().invalid_data_type(
                 position.0,
@@ -178,10 +188,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     },
                 };
             }
-            Expression::Binary { lhs, rhs, op, .. } => {
+            Expression::Binary { lhs, rhs, op, position } => {
                 let lhs_data_type = self.eval(lhs);
                 let rhs_data_type = self.eval(rhs);
-                assert_eq!(lhs_data_type, rhs_data_type, "Data types do not match");
+                self.check_data_type(&lhs_data_type, &rhs_data_type, &position);
                 // TODO: Check whether the binary operator is available for the given data type.
                 use crate::parse::BinaryOperator::*;
                 match op {
@@ -207,13 +217,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             arguments.len(),
                         );
                     } else { // Check the argument data type.
-                        let mut zip = arguments
-                            .iter()
-                            .map(|arg| self.eval(arg))
-                            .zip(function.parameters().iter().map(|var| var.data_type()));
-                        dbg!(&zip.clone().collect::<Vec<_>>());
                         if let Some(mismatched_arg) =
-                            zip.find(|(a, b)| &a != b) {
+                            arguments
+                                .iter()
+                                .map(|arg| self.eval(arg))
+                                .zip(function.parameters().iter().map(|var| var.data_type())).find(|(a, b)| &a != b) {
                             self.error_diag.borrow_mut().invalid_data_type(position.0,
                                                                            position.1,
                                                                            mismatched_arg.1,

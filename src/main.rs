@@ -95,17 +95,32 @@ impl Display for ArgsError {
 
 impl Error for ArgsError {}
 
-fn main() -> Result<(), Box<dyn Error>> {
+const STACK_SIZE: usize = 16 * 1024 * 1024;
+
+fn run() {
     const OUTPUT: &'static str = "out/dpp/test.pl0";
     const PL0_INTERPRET_PATH: &'static str = "resources/pl0_interpret/bin/refint_pl0_ext.exe";
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         let error = ArgsError { args };
         eprintln!("{}", &error);
-        return Err(Box::new(error));
+        return;
     }
 
     let file_path = &args[1];
-    DppCompiler::compile_translation_unit(file_path, OUTPUT, PL0_INTERPRET_PATH)?;
-    Ok(())
+    match DppCompiler::compile_translation_unit(file_path, OUTPUT, PL0_INTERPRET_PATH) {
+        Ok(_) => println!("{file_path} compiled successfully into {OUTPUT}"),
+        Err(err) => eprintln!("{:?}", err)
+    }
+}
+
+fn main() {
+    // Spawn thread with explicit stack size
+    let child = std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(run)
+        .unwrap();
+
+    // Wait for thread to join
+    child.join().unwrap();
 }

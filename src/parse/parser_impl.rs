@@ -553,6 +553,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             _ => {
                 self.error_diag.borrow_mut().unexpected_token_error(token);
+                self.add_error("statement");
                 self.error = true;
                 self.go_into_panic_mode();
                 return self.statement();

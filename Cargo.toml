@@ -8,3 +8,9 @@ syn = "2.0.37"
 quote = "1.0.33"
 dpp_macros = { path = "dpp_macros" }
 dpp_macros_derive = { path = "dpp_macros/dpp_macros_derive" }
+
+[profile.release]
+debug = 1
+
+[rust]
+debuginfo-level = 1

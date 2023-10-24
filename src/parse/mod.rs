@@ -899,7 +899,7 @@ pub enum Statement<'a> {
     Assignment {
         position: (u32, u32),
         identifier: &'a str,
-        expression: Expression<'a>
+        expression: Expression<'a>,
     },
 }
 
@@ -907,6 +907,15 @@ pub enum Statement<'a> {
 pub struct Case<'a> {
     expression: Expression<'a>,
     block: Box<Block<'a>>,
+}
+
+impl<'a> Case<'a> {
+    pub fn expression(&self) -> &Expression<'a> {
+        &self.expression
+    }
+    pub fn block(&self) -> &Box<Block<'a>> {
+        &self.block
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -1072,10 +1081,13 @@ pub struct Emitter<'a>
 }
 
 pub mod compiler {
+    use std::cell::RefCell;
     use std::error::Error;
     use std::fs;
+    use std::rc::Rc;
 
     use crate::parse::{Emitter, Lexer, SemanticAnalyzer};
+    use crate::parse::analysis::SymbolTable;
     use crate::parse::error_diagnosis::ErrorDiagnosis;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
@@ -1083,9 +1095,10 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
+    const DEBUG: bool = false;
+
     impl DppCompiler {
-        pub fn compile_translation_unit(file_path: &str, output_file: &str, pl0_interpret_path: &str) -> Result<(), Box<dyn
-        Error>> {
+        pub fn compile_translation_unit(file_path: &str, output_file: &str, pl0_interpret_path: &str) -> Result<(), Box<dyn Error>> {
             let file_contents = fs::read_to_string(file_path)?;
             let error_diag = std::rc::Rc::new(std::cell::RefCell::new(ErrorDiagnosis::new(
                 file_path,
@@ -1093,10 +1106,21 @@ pub mod compiler {
             )));
             // Lex -> parse -> analyze -> emit.
             // Pass error diag to each step.
+            println!("Parsing program...");
+            let start = std::time::Instant::now();
             let tokens = Self::lex(&file_contents, &error_diag)?;
             let translation_unit = Self::parse(tokens, &error_diag)?;
-            dbg!(&translation_unit);
-            Self::analyze_and_emit(translation_unit, &error_diag, output_file)?;
+            let symbol_table = Self::analyze(&error_diag, &translation_unit)?;
+            let duration = start.elapsed();
+            println!("Program parsed in {:?}", duration);
+
+            // Create a Rc<T> because the emitter is NOT allowed to modify the symbol table.
+            // The emitter is only allowed to look up functions, variables etc.
+            println!("Emitting program...");
+            let start = std::time::Instant::now();
+            Self::emit(output_file, &translation_unit, symbol_table)?;
+            let duration = start.elapsed();
+            println!("Program emitted in {:?}", duration);
             let child = std::process::Command::new(pl0_interpret_path)
                 .args(["-a", "+d", "+l", "+i", "+t", "+s", output_file])
                 .stdout(std::process::Stdio::piped())
@@ -1106,12 +1130,35 @@ pub mod compiler {
             let out = child.wait_with_output()?;
             let stdout = String::from_utf8(out.stdout)?;
             let stderr = String::from_utf8(out.stderr)?;
-            println!("{stdout}");
+
+            if DEBUG {
+                println!("{stdout}");
+            }
 
             if !stderr.is_empty() {
                 eprintln!("ERROR: {stderr}");
             }
             Ok(())
+        }
+
+        fn emit(output_file: &str, translation_unit: &TranslationUnit, symbol_table: SymbolTable) -> Result<(), Box<dyn Error>> {
+            let mut emitter = Emitter::new(
+                std::rc::Rc::new(symbol_table),
+            );
+
+            let file = fs::File::create(output_file)?;
+            let mut writer = std::io::BufWriter::new(file);
+            emitter.emit_all(&mut writer, &translation_unit)?;
+            Ok(())
+        }
+
+        fn analyze<'a>(error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>, translation_unit: &TranslationUnit<'a>) -> Result<SymbolTable<'a>, Box<dyn Error>> {
+            let mut analyzer = SemanticAnalyzer::new(
+                std::rc::Rc::clone(&error_diag),
+            );
+            analyzer.analyze(&translation_unit);
+            error_diag.borrow().check_errors()?;
+            Ok(analyzer.into_symbol_table())
         }
 
         fn lex<'a>(
@@ -1132,29 +1179,6 @@ pub mod compiler {
             let result = parser.parse();
             error_diag.borrow().check_errors()?;
             Ok(result)
-        }
-
-        fn analyze_and_emit<'a>(
-            translation_unit: TranslationUnit<'a>,
-            error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
-            output: &str,
-        ) -> Result<(), Box<dyn Error>> {
-            let mut analyzer = SemanticAnalyzer::new(
-                std::rc::Rc::clone(&error_diag),
-            );
-            analyzer.analyze(&translation_unit);
-            error_diag.borrow().check_errors()?;
-
-            // Create a Rc<T> because the emitter is NOT allowed to modify the symbol table.
-            // The emitter is only allowed to look up functions, variables etc.
-            let mut emitter = Emitter::new(
-                std::rc::Rc::new(analyzer.into_symbol_table()),
-            );
-
-            let file = fs::File::create(output).expect("Unable to create file");
-            let mut writer = std::io::BufWriter::new(file);
-            emitter.emit_all(&mut writer, &translation_unit)?;
-            Ok(())
         }
     }
 
