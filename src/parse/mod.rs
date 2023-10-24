@@ -3,11 +3,11 @@ use crate::parse::emitter::Instruction;
 use crate::parse::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{Block, Expression, Function, Variable};
 
-pub mod lexer_impl;
 pub mod analysis_impl;
-pub mod parser_impl;
 pub mod emitter_impl;
 pub mod error_diagnosis;
+pub mod lexer_impl;
+pub mod parser_impl;
 
 #[derive(Debug)]
 pub struct Lexer<'a, 'b> {
@@ -447,7 +447,7 @@ mod parser {
                 Expression::Binary { position, .. } => position.0,
                 Expression::Identifier { position, .. } => position.0,
                 Expression::FunctionCall { position, .. } => position.0,
-                Expression::Invalid => 0
+                Expression::Invalid => 0,
             }
         }
 
@@ -461,7 +461,7 @@ mod parser {
                 Expression::Binary { position, .. } => position.1,
                 Expression::Identifier { position, .. } => position.1,
                 Expression::FunctionCall { position, .. } => position.1,
-                Expression::Invalid => 0
+                Expression::Invalid => 0,
             }
         }
     }
@@ -504,13 +504,13 @@ mod parser {
     impl PartialEq for DataType<'_> {
         fn eq(&self, other: &Self) -> bool {
             matches!(
-            (self, other),
-            (DataType::Number(..), DataType::Number(..))
-                | (DataType::P, DataType::P)
-                | (DataType::Yarn, DataType::Yarn)
-                | (DataType::Booba, DataType::Booba)
-                | (DataType::Nopp, DataType::Nopp)
-        )
+                (self, other),
+                (DataType::Number(..), DataType::Number(..))
+                    | (DataType::P, DataType::P)
+                    | (DataType::Yarn, DataType::Yarn)
+                    | (DataType::Booba, DataType::Booba)
+                    | (DataType::Nopp, DataType::Nopp)
+            )
         }
     }
 
@@ -563,16 +563,23 @@ mod analysis {
     }
 
     impl<'a> SymbolTable<'a> {
-        pub fn get_variable_level_and_offset(&self, identifier: &str, function_ident: Option<&'a
-        str>) -> (u32, usize) {
+        pub fn get_variable_level_and_offset(
+            &self,
+            identifier: &str,
+            function_ident: Option<&'a str>,
+        ) -> (u32, usize) {
             if let Some(function_ident) = function_ident {
                 if let Some(function_scope) = self.function_scope(function_ident) {
                     if let Some(variable) = function_scope.find_variable(identifier) {
-                        return (0, variable.position_in_scope().expect("Initialized variable position"));
+                        return (
+                            0,
+                            variable
+                                .position_in_scope()
+                                .expect("Initialized variable position"),
+                        );
                     }
                 }
             }
-
 
             use std::borrow::Borrow;
             // If not found, try to find it in the global scope.
@@ -582,7 +589,8 @@ mod analysis {
                     .borrow()
                     .get_variable(identifier)
                     .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
-                    .position_in_scope().expect("Initialized variable position"),
+                    .position_in_scope()
+                    .expect("Initialized variable position"),
             )
         }
 
@@ -599,15 +607,21 @@ mod analysis {
         }
 
         fn new_function_scope(&mut self, function_identifier: &'a str) {
-            self.function_scopes.push(FunctionScope::new(function_identifier))
+            self.function_scopes
+                .push(FunctionScope::new(function_identifier))
         }
 
         pub fn find_function(&self, identifier: &str) -> Option<&std::rc::Rc<Function<'a>>> {
             self.global_scope.get_function(identifier)
         }
 
-        pub fn find_variable(&self, identifier: &str, function_ident: Option<&'a str>) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.find_local_variable(identifier, function_ident).or_else(|| self.find_global_variable(identifier))
+        pub fn find_variable(
+            &self,
+            identifier: &str,
+            function_ident: Option<&'a str>,
+        ) -> Option<&std::rc::Rc<Variable<'a>>> {
+            self.find_local_variable(identifier, function_ident)
+                .or_else(|| self.find_global_variable(identifier))
         }
 
         pub fn push_function(&mut self, function: Function<'a>) {
@@ -619,8 +633,13 @@ mod analysis {
             self.global_scope.get_variable(identifier)
         }
 
-        pub fn find_local_variable(&self, identifier: &str, function_ident: Option<&'a str>) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.function_scope(function_ident?)?.find_variable(identifier)
+        pub fn find_local_variable(
+            &self,
+            identifier: &str,
+            function_ident: Option<&'a str>,
+        ) -> Option<&std::rc::Rc<Variable<'a>>> {
+            self.function_scope(function_ident?)?
+                .find_variable(identifier)
         }
 
         pub fn get_variables(&self) -> HashMap<&str, &std::rc::Rc<Variable<'a>>> {
@@ -637,7 +656,9 @@ mod analysis {
 
         // TODO: This could be done in O(1) but w/e.
         pub fn function_scope(&self, function_identifier: &str) -> Option<&FunctionScope<'a>> {
-            self.function_scopes.iter().find(move |func| func.function_identifier == function_identifier)
+            self.function_scopes
+                .iter()
+                .find(move |func| func.function_identifier == function_identifier)
         }
 
         pub fn function_scope_at(&self, index: usize) -> Option<&FunctionScope<'a>> {
@@ -649,7 +670,9 @@ mod analysis {
         }
 
         pub fn current_function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
-            self.function_scopes.last_mut().expect("Inside function scope")
+            self.function_scopes
+                .last_mut()
+                .expect("Inside function scope")
         }
     }
 
@@ -672,7 +695,6 @@ mod analysis {
                 .insert(variable.identifier(), std::rc::Rc::new(variable));
         }
 
-
         pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
             self.variables.get(identifier)
         }
@@ -681,7 +703,9 @@ mod analysis {
             self.variables.remove(identifier);
         }
 
-        pub fn get_variables(&self) -> std::collections::hash_map::Values<'_, &'a str, std::rc::Rc<Variable<'a>>> {
+        pub fn get_variables(
+            &self,
+        ) -> std::collections::hash_map::Values<'_, &'a str, std::rc::Rc<Variable<'a>>> {
             self.variables.values()
         }
 
@@ -694,7 +718,6 @@ mod analysis {
                 .insert(function.identifier(), std::rc::Rc::new(function));
         }
 
-
         pub fn get_function(&self, identifier: &str) -> Option<&std::rc::Rc<Function<'a>>> {
             self.functions.get(identifier)
         }
@@ -703,7 +726,9 @@ mod analysis {
             self.functions.remove(identifier);
         }
 
-        pub fn get_functions(&self) -> std::collections::hash_map::Values<'_, &'a str, std::rc::Rc<Function<'a>>> {
+        pub fn get_functions(
+            &self,
+        ) -> std::collections::hash_map::Values<'_, &'a str, std::rc::Rc<Function<'a>>> {
             self.functions.values()
         }
 
@@ -752,7 +777,9 @@ mod analysis {
         }
 
         pub fn variable_count(&self) -> usize {
-            self.scopes.iter().fold(0, |accum, scope| accum + scope.variables.len())
+            self.scopes
+                .iter()
+                .fold(0, |accum, scope| accum + scope.variables.len())
         }
 
         pub fn function_identifier(&self) -> &'a str {
@@ -760,7 +787,9 @@ mod analysis {
         }
 
         pub fn push_variable(&mut self, variable: Variable<'a>) {
-            self.current_scope_mut().expect("A scope").push_variable(variable);
+            self.current_scope_mut()
+                .expect("A scope")
+                .push_variable(variable);
         }
 
         pub fn push_scope(&mut self) {
@@ -778,7 +807,6 @@ mod analysis {
         pub fn pop_scope(&mut self) {
             self.scopes.pop();
         }
-
 
         pub fn scopes(&self) -> &Vec<Scope<'a>> {
             &self.scopes
@@ -798,9 +826,7 @@ mod analysis {
             // main and then it fucking has to read the first thing
             // on the stack.
             scope.current_position = 1;
-            GlobalScope {
-                scope,
-            }
+            GlobalScope { scope }
         }
         pub fn push_variable(&mut self, variable: Variable<'a>) {
             self.scope.push_variable(variable);
@@ -832,17 +858,14 @@ mod analysis {
     }
 }
 
-pub struct SemanticAnalyzer<'a, 'b>
-{
+pub struct SemanticAnalyzer<'a, 'b> {
     symbol_table: SymbolTable<'a>,
     error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     current_function: Option<&'a str>,
 }
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
-    pub fn new(
-        error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
-    ) -> Self {
+    pub fn new(error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         Self {
             symbol_table: SymbolTable::default(),
             error_diag,
@@ -979,7 +1002,6 @@ pub enum UnaryOperator {
     Negate,
 }
 
-
 mod emitter {
     #[derive(Clone, Debug)]
     pub enum Address {
@@ -1097,9 +1119,7 @@ mod emitter {
     pub(crate) const EMIT_DEBUG: bool = true;
 }
 
-
-pub struct Emitter<'a>
-{
+pub struct Emitter<'a> {
     /// The instructions to be emitted.
     code: Vec<Instruction>,
     /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
@@ -1117,19 +1137,23 @@ pub mod compiler {
     use std::fs;
     use std::rc::Rc;
 
-    use crate::parse::{Emitter, Lexer, SemanticAnalyzer};
     use crate::parse::analysis::SymbolTable;
     use crate::parse::error_diagnosis::ErrorDiagnosis;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
     use crate::parse::parser_impl::Parser;
+    use crate::parse::{Emitter, Lexer, SemanticAnalyzer};
 
     pub struct DppCompiler;
 
     const DEBUG: bool = false;
 
     impl DppCompiler {
-        pub fn compile_translation_unit(file_path: &str, output_file: &str, pl0_interpret_path: &str) -> Result<(), Box<dyn Error>> {
+        pub fn compile_translation_unit(
+            file_path: &str,
+            output_file: &str,
+            pl0_interpret_path: &str,
+        ) -> Result<(), Box<dyn Error>> {
             let file_contents = fs::read_to_string(file_path)?;
             let error_diag = std::rc::Rc::new(std::cell::RefCell::new(ErrorDiagnosis::new(
                 file_path,
@@ -1172,10 +1196,12 @@ pub mod compiler {
             Ok(())
         }
 
-        fn emit(output_file: &str, translation_unit: &TranslationUnit, symbol_table: SymbolTable) -> Result<(), Box<dyn Error>> {
-            let mut emitter = Emitter::new(
-                std::rc::Rc::new(symbol_table),
-            );
+        fn emit(
+            output_file: &str,
+            translation_unit: &TranslationUnit,
+            symbol_table: SymbolTable,
+        ) -> Result<(), Box<dyn Error>> {
+            let mut emitter = Emitter::new(std::rc::Rc::new(symbol_table));
 
             let file = fs::File::create(output_file)?;
             let mut writer = std::io::BufWriter::new(file);
@@ -1183,10 +1209,11 @@ pub mod compiler {
             Ok(())
         }
 
-        fn analyze<'a>(error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>, translation_unit: &TranslationUnit<'a>) -> Result<SymbolTable<'a>, Box<dyn Error>> {
-            let mut analyzer = SemanticAnalyzer::new(
-                std::rc::Rc::clone(&error_diag),
-            );
+        fn analyze<'a>(
+            error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
+            translation_unit: &TranslationUnit<'a>,
+        ) -> Result<SymbolTable<'a>, Box<dyn Error>> {
+            let mut analyzer = SemanticAnalyzer::new(std::rc::Rc::clone(&error_diag));
             analyzer.analyze(&translation_unit);
             error_diag.borrow().check_errors()?;
             Ok(analyzer.into_symbol_table())

@@ -2,17 +2,15 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::rc::Rc;
 
-use crate::parse::{BinaryOperator, Emitter, Expression, Function, Statement, Variable};
 use crate::parse::analysis::{FunctionScope, SymbolTable};
-use crate::parse::emitter::{Address, DebugKeyword, EMIT_DEBUG, Instruction, Operation};
+use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation, EMIT_DEBUG};
 use crate::parse::parser::{Block, TranslationUnit};
+use crate::parse::{BinaryOperator, Emitter, Expression, Function, Statement, Variable};
 
 const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
 
 impl<'a> Emitter<'a> {
-    pub fn new(
-        symbol_table: Rc<SymbolTable<'a>>,
-    ) -> Self {
+    pub fn new(symbol_table: Rc<SymbolTable<'a>>) -> Self {
         Self {
             code: Vec::new(),
             labels: std::collections::HashMap::new(),
@@ -23,7 +21,11 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    pub fn emit_all(&mut self, writer: &mut BufWriter<File>, translation_unit: &TranslationUnit<'a>) -> std::io::Result<()> {
+    pub fn emit_all(
+        &mut self,
+        writer: &mut BufWriter<File>,
+        translation_unit: &TranslationUnit<'a>,
+    ) -> std::io::Result<()> {
         self.emit_translation_unit(translation_unit);
 
         // First emit the base
@@ -91,9 +93,15 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
-        translation_unit.global_statements().iter().for_each(|stmt| self.emit_statement(stmt));
+        translation_unit
+            .global_statements()
+            .iter()
+            .for_each(|stmt| self.emit_statement(stmt));
         self.emit_main_call();
-        translation_unit.functions().iter().for_each(|func| self.emit_function(func))
+        translation_unit
+            .functions()
+            .iter()
+            .for_each(|func| self.emit_function(func))
     }
 
     fn emit_function(&mut self, function: &Function<'a>) {
@@ -103,7 +111,9 @@ impl<'a> Emitter<'a> {
         let sym_table = self.symbol_table();
         let function_scope = sym_table.function_scope(function.identifier()).unwrap();
         // Shift the stack pointer by activation record + declared variable count.
-        self.emit_int((FunctionScope::ACTIVATION_RECORD_SIZE + function_scope.variable_count()) as i32);
+        self.emit_int(
+            (FunctionScope::ACTIVATION_RECORD_SIZE + function_scope.variable_count()) as i32,
+        );
 
         // Load arguments.
         let args = function.parameters();
@@ -118,9 +128,11 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_block(&mut self, block: &Block<'a>) {
-        block.statements().iter().for_each(|statement| self.emit_statement(statement));
+        block
+            .statements()
+            .iter()
+            .for_each(|statement| self.emit_statement(statement));
     }
-
 
     pub fn emit_jump(&mut self, address: Address) {
         self.emit_instruction(Instruction::Jump { address });
@@ -186,7 +198,9 @@ impl<'a> Emitter<'a> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier, self.current_function);
+                let (level, var_loc) = self
+                    .symbol_table()
+                    .get_variable_level_and_offset(identifier, self.current_function);
                 self.load(level, var_loc as i32, 1);
                 self.echo(format!("Loaded {}", identifier).as_str());
                 self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
@@ -214,7 +228,9 @@ impl<'a> Emitter<'a> {
             (return_type_size, arguments_size) = self.main_function_descriptor();
         } else {
             let symbol_table = self.symbol_table();
-            let function = symbol_table.find_function(identifier).expect("Function to exist");
+            let function = symbol_table
+                .find_function(identifier)
+                .expect("Function to exist");
             return_type_size = function.return_type().size_in_instructions();
             arguments_size = function.parameters_size();
         }
@@ -231,7 +247,7 @@ impl<'a> Emitter<'a> {
                     return_type_size * 4,
                     identifier
                 )
-                    .as_str(),
+                .as_str(),
             );
             self.emit_debug_info(DebugKeyword::Stack);
         }
@@ -382,7 +398,8 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_label(&mut self, label: &str) {
-        self.labels.insert(label.to_string(), self.code.len() as u32);
+        self.labels
+            .insert(label.to_string(), self.code.len() as u32);
         self.emit_instruction(Instruction::Label(String::from(label)));
     }
 
@@ -414,7 +431,7 @@ impl<'a> Emitter<'a> {
                                 identifier,
                                 return_type_size * 4
                             )
-                                .as_str(),
+                            .as_str(),
                         );
                         self.emit_debug_info(DebugKeyword::StackA);
                     }
@@ -424,7 +441,10 @@ impl<'a> Emitter<'a> {
                 if let Some(expression) = variable.value() {
                     self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
                     self.emit_expression(expression);
-                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(variable.identifier(), self.current_function);
+                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(
+                        variable.identifier(),
+                        self.current_function,
+                    );
                     self.store(level, var_loc as i32, 1);
 
                     self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
@@ -498,7 +518,12 @@ impl<'a> Emitter<'a> {
                 self.pop_scope();
                 self.emit_finishing_label(end.as_str());
             }
-            Statement::IfElse { expression, statement, else_statement, .. } => {
+            Statement::IfElse {
+                expression,
+                statement,
+                else_statement,
+                ..
+            } => {
                 self.push_scope();
                 let end_if = self.create_label("if_e");
                 let else_block = self.create_label("else");
@@ -510,7 +535,7 @@ impl<'a> Emitter<'a> {
                 self.emit_statement(statement);
                 self.pop_scope();
                 self.emit_instruction(Instruction::Jump {
-                    address: Address::Label(end_if.clone())
+                    address: Address::Label(end_if.clone()),
                 });
                 self.emit_finishing_label(else_block.as_str());
                 self.emit_statement(else_statement);
@@ -521,7 +546,9 @@ impl<'a> Emitter<'a> {
                 expression,
                 ..
             } => {
-                let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(identifier, self.current_function);
+                let (level, var_loc) = self
+                    .symbol_table()
+                    .get_variable_level_and_offset(identifier, self.current_function);
                 self.emit_expression(expression);
                 self.store(level, var_loc as i32, 1);
             }
@@ -530,13 +557,30 @@ impl<'a> Emitter<'a> {
     }
 
     fn push_scope(&mut self) {
-        let current_function_ident = self.symbol_table().current_function_scope().function_identifier();
-        self.function_scope_depth.insert(current_function_ident, self.function_scope_depth.get(current_function_ident).unwrap_or(&0) + 1);
+        let current_function_ident = self
+            .symbol_table()
+            .current_function_scope()
+            .function_identifier();
+        self.function_scope_depth.insert(
+            current_function_ident,
+            self.function_scope_depth
+                .get(current_function_ident)
+                .unwrap_or(&0)
+                + 1,
+        );
     }
 
     fn pop_scope(&mut self) {
-        let current_function_ident = self.symbol_table().current_function_scope().function_identifier();
-        self.function_scope_depth.insert(current_function_ident, self.function_scope_depth.get
-        (current_function_ident).unwrap() - 1);
+        let current_function_ident = self
+            .symbol_table()
+            .current_function_scope()
+            .function_identifier();
+        self.function_scope_depth.insert(
+            current_function_ident,
+            self.function_scope_depth
+                .get(current_function_ident)
+                .unwrap()
+                - 1,
+        );
     }
 }

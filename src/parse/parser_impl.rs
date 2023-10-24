@@ -14,10 +14,12 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use crate::parse::{BinaryOperator, Block, Case, Expression, Function, Number, Statement, UnaryOperator, Variable};
 use crate::parse::error_diagnosis::ErrorDiagnosis;
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::{DataType, TranslationUnit};
+use crate::parse::{
+    BinaryOperator, Block, Case, Expression, Function, Number, Statement, UnaryOperator, Variable,
+};
 
 #[derive(Clone, Debug)]
 pub struct Parser<'a, 'b> {
@@ -259,7 +261,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         let return_type = self.data_type()?;
         let block = self.block()?;
 
-        Some(Function::new(position, identifier, return_type, parameters, block))
+        Some(Function::new(
+            position,
+            identifier,
+            return_type,
+            parameters,
+            block,
+        ))
     }
 
     fn params(&mut self) -> Option<Vec<Variable<'a>>> {
@@ -522,7 +530,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Some(Statement::Assignment {
                         position: self.position,
                         identifier,
-                        expression
+                        expression,
                     })
                 } else {
                     let expression = self.expr()?;
@@ -531,7 +539,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         position: self.position,
                         expression,
                     })
-                }
+                };
             }
             TokenKind::OpenBrace => {
                 let block = self.block()?;

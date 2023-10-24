@@ -1,15 +1,21 @@
-use dpp_macros::PosMacro;
-use crate::parse::{Expression, Function, Number, SemanticAnalyzer, Statement, UnaryOperator};
 use crate::parse::analysis::SymbolTable;
 use crate::parse::parser::{DataType, TranslationUnit};
+use crate::parse::{Expression, Function, Number, SemanticAnalyzer, Statement, UnaryOperator};
+use dpp_macros::PosMacro;
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     pub fn analyze(&mut self, translation_unit: &TranslationUnit<'a>) {
         // Analyze global statements.
-        translation_unit.global_statements().iter().for_each(|statement| self.analyze_global_statement(statement));
+        translation_unit
+            .global_statements()
+            .iter()
+            .for_each(|statement| self.analyze_global_statement(statement));
 
         // Analyze the parsed functions.
-        translation_unit.functions().iter().for_each(|function| self.analyze_function(function));
+        translation_unit
+            .functions()
+            .iter()
+            .for_each(|function| self.analyze_function(function));
 
         if !self.symbol_table().find_function("main").is_some() {
             self.error_diag.borrow_mut().no_main_method_found_error();
@@ -44,7 +50,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_global_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.symbol_table().find_local_variable(variable.identifier(), self.current_function).is_some() {
+                if self
+                    .symbol_table()
+                    .find_local_variable(variable.identifier(), self.current_function)
+                    .is_some()
+                {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position().0,
                         variable.position().1,
@@ -66,7 +76,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     }
                     assert!(matching_data_type, "Data types do not match");
                 }
-                self.symbol_table_mut().push_global_variable(variable.clone());
+                self.symbol_table_mut()
+                    .push_global_variable(variable.clone());
             }
             _ => {}
         }
@@ -75,7 +86,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.symbol_table().find_local_variable(variable.identifier(), self.current_function).is_some() {
+                if self
+                    .symbol_table()
+                    .find_local_variable(variable.identifier(), self.current_function)
+                    .is_some()
+                {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position().0,
                         variable.position().1,
@@ -95,7 +110,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         );
                     }
                 }
-                self.symbol_table_mut().push_local_variable(variable.clone());
+                self.symbol_table_mut()
+                    .push_local_variable(variable.clone());
                 // dbg!(&expression);
             }
             Statement::Expression { expression, .. } => {
@@ -127,36 +143,64 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.check_data_type(&DataType::Booba, &data_type, position);
                 self.analyze_statement(statement);
             }
-            Statement::IfElse { expression, statement, position, else_statement } => {
+            Statement::IfElse {
+                expression,
+                statement,
+                position,
+                else_statement,
+            } => {
                 let data_type = self.eval(expression);
 
                 self.check_data_type(&DataType::Booba, &data_type, position);
                 self.analyze_statement(statement);
                 self.analyze_statement(else_statement);
             }
-            Statement::Assignment { identifier, expression, position } => {
-                let variable = self.symbol_table().find_variable(identifier, self
-                    .current_function).expect("A variable").data_type().clone();
+            Statement::Assignment {
+                identifier,
+                expression,
+                position,
+            } => {
+                let variable = self
+                    .symbol_table()
+                    .find_variable(identifier, self.current_function)
+                    .expect("A variable")
+                    .data_type()
+                    .clone();
                 self.check_data_type(&variable, &self.eval(expression), position);
             }
             Statement::Empty { .. } => {
                 // Nothing :)
             }
-            Statement::Switch { expression, cases, position } => {
+            Statement::Switch {
+                expression,
+                cases,
+                position,
+            } => {
                 let switch_data_type = self.eval(expression);
-                if let Some(mismatched_data_type) = cases.iter().map(|case| (case.block()
-                                                                                 .position(), self
-                                                                                 .eval(case
-                                                                                     .expression()))).find(|(position, data_type)| *data_type != switch_data_type) {
-                    self.check_data_type(&switch_data_type, &mismatched_data_type.1,
-                                         &mismatched_data_type.0);
+                if let Some(mismatched_data_type) = cases
+                    .iter()
+                    .map(|case| (case.block().position(), self.eval(case.expression())))
+                    .find(|(position, data_type)| *data_type != switch_data_type)
+                {
+                    self.check_data_type(
+                        &switch_data_type,
+                        &mismatched_data_type.1,
+                        &mismatched_data_type.0,
+                    );
                 }
             }
             Statement::For {
-                index_ident, ident_expression, length_expression, statement,
-                position
+                index_ident,
+                ident_expression,
+                length_expression,
+                statement,
+                position,
             } => {
-                if self.symbol_table().find_local_variable(index_ident, self.current_function).is_some() {
+                if self
+                    .symbol_table()
+                    .find_local_variable(index_ident, self.current_function)
+                    .is_some()
+                {
                     self.error_diag.borrow_mut().variable_already_exists(
                         position.0,
                         position.1,
@@ -164,17 +208,27 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     );
                 }
                 if let Some(ident_expression) = ident_expression {
-                    self.check_data_type(&DataType::Number(Number::Pp), &self.eval
-                    (ident_expression), &(ident_expression.row(), ident_expression.col()));
+                    self.check_data_type(
+                        &DataType::Number(Number::Pp),
+                        &self.eval(ident_expression),
+                        &(ident_expression.row(), ident_expression.col()),
+                    );
                 }
             }
             _ => {
-                self.error_diag.borrow_mut().not_implemented(format!("{:?}", statement).as_str());
+                self.error_diag
+                    .borrow_mut()
+                    .not_implemented(format!("{:?}", statement).as_str());
             }
         };
     }
 
-    fn check_data_type(&self, expected_data_type: &DataType<'a>, got: &DataType<'a>, position: &(u32, u32)) {
+    fn check_data_type(
+        &self,
+        expected_data_type: &DataType<'a>,
+        got: &DataType<'a>,
+        position: &(u32, u32),
+    ) {
         if expected_data_type != got {
             self.error_diag.borrow_mut().invalid_data_type(
                 position.0,
@@ -204,7 +258,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     },
                 };
             }
-            Expression::Binary { lhs, rhs, op, position } => {
+            Expression::Binary {
+                lhs,
+                rhs,
+                op,
+                position,
+            } => {
                 let lhs_data_type = self.eval(lhs);
                 let rhs_data_type = self.eval(rhs);
                 self.check_data_type(&lhs_data_type, &rhs_data_type, &position);
@@ -217,14 +276,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                if let Some(variable) = self.symbol_table().find_variable(identifier, self.current_function) {
+                if let Some(variable) = self
+                    .symbol_table()
+                    .find_variable(identifier, self.current_function)
+                {
                     return variable.data_type().clone();
                 }
                 panic!("{}", format!("Variable {identifier} not found"));
             }
-            Expression::FunctionCall { identifier, arguments, position } => {
+            Expression::FunctionCall {
+                identifier,
+                arguments,
+                position,
+            } => {
                 return if let Some(function) = self.symbol_table().find_function(identifier) {
-                    if function.parameters().len() != arguments.len() { // Check the argument count.
+                    if function.parameters().len() != arguments.len() {
+                        // Check the argument count.
                         self.error_diag.borrow_mut().invalid_number_of_arguments(
                             position.0,
                             position.1,
@@ -232,16 +299,20 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             function.parameters().len(),
                             arguments.len(),
                         );
-                    } else { // Check the argument data type.
-                        if let Some(mismatched_arg) =
-                            arguments
-                                .iter()
-                                .map(|arg| self.eval(arg))
-                                .zip(function.parameters().iter().map(|var| var.data_type())).find(|(a, b)| &a != b) {
-                            self.error_diag.borrow_mut().invalid_data_type(position.0,
-                                                                           position.1,
-                                                                           mismatched_arg.1,
-                                                                           &mismatched_arg.0)
+                    } else {
+                        // Check the argument data type.
+                        if let Some(mismatched_arg) = arguments
+                            .iter()
+                            .map(|arg| self.eval(arg))
+                            .zip(function.parameters().iter().map(|var| var.data_type()))
+                            .find(|(a, b)| &a != b)
+                        {
+                            self.error_diag.borrow_mut().invalid_data_type(
+                                position.0,
+                                position.1,
+                                mismatched_arg.1,
+                                &mismatched_arg.0,
+                            )
                         }
                     }
                     function.return_type().clone()
@@ -260,7 +331,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.current_function = Some(function.identifier());
         let mut ref_mut = self.symbol_table_mut();
         ref_mut.push_function(function.clone());
-        function.parameters().iter().for_each(|parameter| ref_mut.push_local_variable(parameter.clone()));
+        function
+            .parameters()
+            .iter()
+            .for_each(|parameter| ref_mut.push_local_variable(parameter.clone()));
     }
 
     fn end_function(&mut self) {

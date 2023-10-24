@@ -1,11 +1,11 @@
 //! The tokenizer for the dpp language.
 
+use crate::parse::error_diagnosis::ErrorDiagnosis;
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::parse::error_diagnosis::ErrorDiagnosis;
 
-use crate::parse::Lexer;
 use crate::parse::lexer::{Token, TokenKind};
+use crate::parse::Lexer;
 
 impl<'a, 'b> Lexer<'a, 'b> {
     /// # Arguments
@@ -90,8 +90,9 @@ impl<'a, 'b> Lexer<'a, 'b> {
         // If it's a whitespace or a comment, try to parse the next token as this one is useless
         // to the parser. The Comment token could be useful for error handling later on,
         // but we don't need it for now.
-        if matches!(token.kind(), TokenKind::Whitespace) || matches!(token.kind(),
-            TokenKind::Comment) {
+        if matches!(token.kind(), TokenKind::Whitespace)
+            || matches!(token.kind(), TokenKind::Comment)
+        {
             return self.parse_token();
         }
         token
@@ -145,10 +146,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     fn handle_unknown(&mut self) -> Token<'a> {
         let end = self.advance();
 
-        self.new_token(
-            TokenKind::Unknown,
-            &self.raw_input[self.cursor - 1..end],
-        )
+        self.new_token(TokenKind::Unknown, &self.raw_input[self.cursor - 1..end])
     }
 
     fn handle_comment(&mut self) -> Token<'a> {
@@ -313,8 +311,10 @@ impl<'a, 'b> Lexer<'a, 'b> {
         let mut end = start;
         end += self.advance();
 
-        while self.peek().is_ascii_digit() || self.peek().is_alphabetic() || self.peek() == '_' &&
-            !self.peek().is_whitespace() {
+        while self.peek().is_ascii_digit()
+            || self.peek().is_alphabetic()
+            || self.peek() == '_' && !self.peek().is_whitespace()
+        {
             end += self.advance();
         }
 
