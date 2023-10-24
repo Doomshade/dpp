@@ -10,4 +10,6 @@ proc-macro = true
 
 [dependencies]
 syn = "2.0.37"
+proc-macro2 = "1.0.67"
 quote = "1.0.33"
+convert_case = "0.6.0"

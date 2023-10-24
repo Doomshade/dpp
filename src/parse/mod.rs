@@ -435,6 +435,37 @@ mod parser {
         Invalid,
     }
 
+    impl PosMacro for Expression<'_> {
+        // TODO: Implement the macro for this later.
+        fn row(&self) -> u32 {
+            match self {
+                Expression::Number { position, .. } => position.0,
+                Expression::P { position, .. } => position.0,
+                Expression::Booba { position, .. } => position.0,
+                Expression::Yarn { position, .. } => position.0,
+                Expression::Unary { position, .. } => position.0,
+                Expression::Binary { position, .. } => position.0,
+                Expression::Identifier { position, .. } => position.0,
+                Expression::FunctionCall { position, .. } => position.0,
+                Expression::Invalid => 0
+            }
+        }
+
+        fn col(&self) -> u32 {
+            match self {
+                Expression::Number { position, .. } => position.1,
+                Expression::P { position, .. } => position.1,
+                Expression::Booba { position, .. } => position.1,
+                Expression::Yarn { position, .. } => position.1,
+                Expression::Unary { position, .. } => position.1,
+                Expression::Binary { position, .. } => position.1,
+                Expression::Identifier { position, .. } => position.1,
+                Expression::FunctionCall { position, .. } => position.1,
+                Expression::Invalid => 0
+            }
+        }
+    }
+
     impl std::fmt::Display for Expression<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let formatted = match self {

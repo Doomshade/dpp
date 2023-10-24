@@ -1,7 +1,10 @@
 use proc_macro::TokenStream;
+use proc_macro2::{Span, TokenStream as TokenStream2};
 
-use quote::quote;
+use quote::{format_ident, quote, quote_spanned};
 use syn;
+use syn::spanned::Spanned;
+use syn::{parse_macro_input, Data, DeriveInput, Error, Fields};
 
 #[proc_macro_derive(PosMacro)]
 pub fn pos_macro_derive(input: TokenStream) -> TokenStream {
@@ -11,20 +14,68 @@ pub fn pos_macro_derive(input: TokenStream) -> TokenStream {
 
 fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
-    let gen = quote! {
-        impl<'a> PosMacro for #name<'a> {
-            #[must_use]
-            fn row(&self) -> u32 {
-                self.position.0
+    match &ast.data {
+        Data::Enum(data_enum) => {
+            let mut variant_checker_functions = TokenStream2::new();
+
+            for variant in &data_enum.variants {
+                let variant_name = &variant.ident;
+                let row_func_name = "row";
+                let col_func_name = "col";
+
+                let fields_in_variant = match &variant.fields {
+                    Fields::Unnamed(_) => quote_spanned! {variant.span()=> (..) },
+                    Fields::Unit => quote_spanned! { variant.span()=> },
+                    Fields::Named(_) => quote_spanned! {variant.span()=> {..} },
+                };
+
+                variant_checker_functions.extend(quote_spanned! {
+                    variant.span() => {
+
+                    #[must_use]
+                    fn row(&self) -> u32 {
+                        match self {
+                                #name::#variant_name #fields_in_variant => {
+                                    &#variant_name.position
+                                }
+                            }
+                    }
+
+                    #[must_use]
+                    fn col(&self) -> u32 {
+                        self.position.1
+                    }
+                    }
+                })
             }
 
-            #[must_use]
-            fn col(&self) -> u32 {
-                self.position.1
-            }
+            let gen = quote! {
+                impl<'a> PosMacro for #name<'a> {
+                    #variant_checker_functions
+                }
+            };
+            gen.into()
         }
-    };
-    gen.into()
+        Data::Struct(data_struct) => {
+            let gen = quote! {
+                impl<'a> PosMacro for #name<'a> {
+                    #[must_use]
+                    fn row(&self) -> u32 {
+                        self.position.0
+                    }
+
+                    #[must_use]
+                    fn col(&self) -> u32 {
+                        self.position.1
+                    }
+                }
+            };
+            gen.into()
+        }
+        Data::Union(_) => {
+            todo!("Not implemented for union");
+        }
+    }
 }
 
 #[proc_macro_derive(HelloMacro)]

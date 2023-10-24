@@ -33,7 +33,7 @@ FUNc asd(firstarg: pp, a: pp) -> pp {
         }
     }
 
-    for(i = len() to 10) {
+    for(i = "asd" to 10) {
 
     }
 

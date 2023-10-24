@@ -1,4 +1,5 @@
-use crate::parse::{Expression, Function, SemanticAnalyzer, Statement, UnaryOperator};
+use dpp_macros::PosMacro;
+use crate::parse::{Expression, Function, Number, SemanticAnalyzer, Statement, UnaryOperator};
 use crate::parse::analysis::SymbolTable;
 use crate::parse::parser::{DataType, TranslationUnit};
 
@@ -74,8 +75,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable } => {
-                if self.symbol_table().find_local_variable(variable.identifier(), self.current_function).is_some
-                () {
+                if self.symbol_table().find_local_variable(variable.identifier(), self.current_function).is_some() {
                     self.error_diag.borrow_mut().variable_already_exists(
                         variable.position().0,
                         variable.position().1,
@@ -150,6 +150,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                                                                                      .expression()))).find(|(position, data_type)| *data_type != switch_data_type) {
                     self.check_data_type(&switch_data_type, &mismatched_data_type.1,
                                          &mismatched_data_type.0);
+                }
+            }
+            Statement::For {
+                index_ident, ident_expression, length_expression, statement,
+                position
+            } => {
+                if self.symbol_table().find_local_variable(index_ident, self.current_function).is_some() {
+                    self.error_diag.borrow_mut().variable_already_exists(
+                        position.0,
+                        position.1,
+                        index_ident,
+                    );
+                }
+                if let Some(ident_expression) = ident_expression {
+                    self.check_data_type(&DataType::Number(Number::Pp), &self.eval
+                    (ident_expression), &(ident_expression.row(), ident_expression.col()));
                 }
             }
             _ => {
