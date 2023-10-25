@@ -148,6 +148,8 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "+-" => TokenKind::PlusDash,
             "+=" => TokenKind::PlusEqual,
             "-=" => TokenKind::MinusEqual,
+            "&" => TokenKind::Ampersand,
+            "|" => TokenKind::Pipe,
             _ => panic!("Unknown operator: {op}"),
         };
 
