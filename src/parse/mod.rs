@@ -338,7 +338,7 @@ mod parser {
     #[derive(Clone, Debug)]
     pub struct Variable<'a> {
         position: (u32, u32),
-        position_in_scope: Option<usize>,
+        position_in_function_scope: Option<usize>,
         identifier: &'a str,
         data_type: DataType<'a>,
         size: usize,
@@ -356,7 +356,7 @@ mod parser {
         ) -> Self {
             Variable {
                 position,
-                position_in_scope: None,
+                position_in_function_scope: None,
                 identifier,
                 size: data_type.size(),
                 data_type,
@@ -373,7 +373,7 @@ mod parser {
             self.position
         }
         pub fn position_in_scope(&self) -> Option<usize> {
-            self.position_in_scope
+            self.position_in_function_scope
         }
         pub fn identifier(&self) -> &'a str {
             self.identifier
@@ -389,7 +389,7 @@ mod parser {
         }
 
         pub fn set_position_in_scope(&mut self, position_in_scope: usize) {
-            self.position_in_scope = Some(position_in_scope);
+            self.position_in_function_scope = Some(position_in_scope);
         }
 
         pub fn size_in_instructions(&self) -> usize {
@@ -780,7 +780,7 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct FunctionScope<'a> {
-        root_scope: Vec<Scope<'a>>,
+        scopes: Vec<Scope<'a>>,
         function_identifier: &'a str,
     }
 
@@ -789,20 +789,20 @@ mod analysis {
 
         pub fn new(function_identifier: &'a str) -> Self {
             FunctionScope {
-                root_scope: Vec::new(),
+                scopes: Vec::new(),
                 function_identifier,
             }
         }
 
         pub fn find_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.root_scope
+            self.scopes
                 .iter()
                 .rev()
                 .find_map(|scope| scope.get_variable(identifier))
         }
 
         pub fn variable_count(&self) -> usize {
-            self.root_scope
+            self.scopes
                 .iter()
                 .fold(0, |accum, scope| accum + scope.variables.len())
         }
@@ -818,29 +818,28 @@ mod analysis {
         }
 
         pub fn push_scope(&mut self) {
-            if let Some(previous_scope) = self.root_scope.last() {
-                self.root_scope
+            if let Some(previous_scope) = self.scopes.last() {
+                self.scopes
                     .push(Scope::new(previous_scope.current_position + 1));
             } else {
-                self.root_scope
-                    .push(Scope::new(Self::ACTIVATION_RECORD_SIZE));
+                self.scopes.push(Scope::new(Self::ACTIVATION_RECORD_SIZE));
             }
         }
 
         pub fn current_scope(&self) -> Option<&Scope<'a>> {
-            self.root_scope.last()
+            self.scopes.last()
         }
 
         pub fn current_scope_mut(&mut self) -> Option<&mut Scope<'a>> {
-            self.root_scope.last_mut()
+            self.scopes.last_mut()
         }
 
         pub fn pop_scope(&mut self) {
-            self.root_scope.pop();
+            self.scopes.pop();
         }
 
         pub fn scopes(&self) -> &Vec<Scope<'a>> {
-            &self.root_scope
+            &self.scopes
         }
     }
 
