@@ -240,6 +240,7 @@ mod parser {
     use dpp_macros::PosMacro;
     use dpp_macros_derive::PosMacro;
 
+    use crate::parse::analysis::Scope;
     use crate::parse::{BinaryOperator, Number, Statement, UnaryOperator};
 
     #[derive(Clone, Debug, PosMacro)]
@@ -338,7 +339,8 @@ mod parser {
     #[derive(Clone, Debug)]
     pub struct Variable<'a> {
         position: (u32, u32),
-        position_in_function_scope: Option<usize>,
+        position_in_scope: Option<usize>,
+        scope_id: Option<usize>,
         identifier: &'a str,
         data_type: DataType<'a>,
         size: usize,
@@ -356,7 +358,8 @@ mod parser {
         ) -> Self {
             Variable {
                 position,
-                position_in_function_scope: None,
+                position_in_scope: None,
+                scope_id: None,
                 identifier,
                 size: data_type.size(),
                 data_type,
@@ -373,7 +376,7 @@ mod parser {
             self.position
         }
         pub fn position_in_scope(&self) -> Option<usize> {
-            self.position_in_function_scope
+            self.position_in_scope
         }
         pub fn identifier(&self) -> &'a str {
             self.identifier
@@ -388,8 +391,12 @@ mod parser {
             self.value.as_ref()
         }
 
+        pub fn set_scope_id(&mut self, scope_id: usize) {
+            self.scope_id = Some(scope_id);
+        }
+
         pub fn set_position_in_scope(&mut self, position_in_scope: usize) {
-            self.position_in_function_scope = Some(position_in_scope);
+            self.position_in_scope = Some(position_in_scope);
         }
 
         pub fn size_in_instructions(&self) -> usize {
@@ -560,7 +567,10 @@ mod parser {
 }
 
 mod analysis {
+    use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::env::var;
+    use std::rc::Rc;
 
     use crate::parse::parser::{Function, Variable};
 
@@ -586,8 +596,11 @@ mod analysis {
             function_ident: Option<&'a str>,
         ) -> (u32, usize) {
             if let Some(function_ident) = function_ident {
+                dbg!(&function_ident);
                 if let Some(function_scope) = self.function_scope(function_ident) {
+                    dbg!(&function_scope);
                     if let Some(variable) = function_scope.find_variable(identifier) {
+                        dbg!(&variable);
                         return (
                             0,
                             variable
@@ -596,8 +609,19 @@ mod analysis {
                         );
                     }
                 }
+            } else {
+                return (
+                    0,
+                    self.global_scope
+                        .borrow()
+                        .get_variable(identifier)
+                        .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
+                        .position_in_scope()
+                        .expect("Initialized variable position"),
+                );
             }
 
+            dbg!(&self.global_scope);
             use std::borrow::Borrow;
             // If not found, try to find it in the global scope.
             (
@@ -623,7 +647,7 @@ mod analysis {
             self.global_scope.push_function(function);
         }
 
-        fn new_function_scope(&mut self, function_identifier: &'a str) {
+        fn push_function_scope(&mut self, function_identifier: &'a str) {
             self.function_scopes
                 .push(FunctionScope::new(function_identifier))
         }
@@ -644,17 +668,17 @@ mod analysis {
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
-        ) -> Option<&std::rc::Rc<Variable<'a>>> {
+        ) -> Option<std::rc::Rc<Variable<'a>>> {
             self.find_local_variable(identifier, function_ident)
                 .or_else(|| self.find_global_variable(identifier))
         }
 
         pub fn push_function(&mut self, function: Function<'a>) {
-            self.new_function_scope(function.identifier());
+            self.push_function_scope(function.identifier());
             self.global_scope.push_function(function);
         }
 
-        pub fn find_global_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
+        pub fn find_global_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
             self.global_scope.get_variable(identifier)
         }
 
@@ -662,21 +686,9 @@ mod analysis {
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
-        ) -> Option<&std::rc::Rc<Variable<'a>>> {
+        ) -> Option<std::rc::Rc<Variable<'a>>> {
             self.function_scope(function_ident?)?
                 .find_variable(identifier)
-        }
-
-        pub fn get_variables(&self) -> HashMap<&str, &std::rc::Rc<Variable<'a>>> {
-            let mut variables = HashMap::new();
-            if let Some(function_scope) = self.function_scopes.last() {
-                for scope in function_scope.scopes() {
-                    for (k, v) in scope.variables() {
-                        variables.insert(*k, v);
-                    }
-                }
-            }
-            variables
         }
 
         // TODO: This could be done in O(1) but w/e.
@@ -686,11 +698,7 @@ mod analysis {
                 .find(move |func| func.function_identifier == function_identifier)
         }
 
-        pub fn current_function_scope(&self) -> &FunctionScope<'a> {
-            self.function_scopes.last().expect("Inside function scope")
-        }
-
-        pub fn current_function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
+        fn current_function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
             self.function_scopes
                 .last_mut()
                 .expect("Inside function scope")
@@ -699,36 +707,32 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct Scope<'a> {
-        /// The current position in the stack frame. This is used to calculate the absolute position
-        /// of the variable in the stack frame.
-        current_position: usize,
         /// Variable symbol table.
         variables: std::collections::HashMap<&'a str, std::rc::Rc<Variable<'a>>>,
         /// Function symbol table.
         functions: std::collections::HashMap<&'a str, std::rc::Rc<Function<'a>>>,
-        parent: Option<Scope<'a>>,
-        children: Vec<Scope<'a>>,
+        id: usize,
     }
 
     impl<'a> Scope<'a> {
-        pub fn new(start_position: usize) -> Self {
+        pub fn new(id: usize) -> Self {
             Scope {
-                current_position: start_position,
                 variables: HashMap::new(),
                 functions: HashMap::new(),
-                parent: None,
-                children: Vec::new(),
+                id,
             }
         }
         fn push_variable(&mut self, mut variable: Variable<'a>) {
-            variable.set_position_in_scope(self.current_position);
-            self.current_position += variable.size_in_instructions();
+            variable.set_scope_id(self.id);
             self.variables
                 .insert(variable.identifier(), std::rc::Rc::new(variable));
         }
 
-        pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.variables.get(identifier)
+        pub fn get_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
+            if let Some(variable) = self.variables.get(identifier) {
+                return Some(variable.clone());
+            }
+            None
         }
 
         pub fn remove_variable(&mut self, identifier: &str) {
@@ -767,9 +771,6 @@ mod analysis {
         pub fn has_function(&self, identifier: &str) -> bool {
             self.functions.contains_key(identifier)
         }
-        pub fn current_position(&self) -> usize {
-            self.current_position
-        }
         pub fn variables(&self) -> &std::collections::HashMap<&'a str, std::rc::Rc<Variable<'a>>> {
             &self.variables
         }
@@ -780,8 +781,11 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct FunctionScope<'a> {
-        scopes: Vec<Scope<'a>>,
+        all_scopes: Vec<Rc<RefCell<Scope<'a>>>>,
+        scope_stack: Vec<Rc<RefCell<Scope<'a>>>>,
         function_identifier: &'a str,
+        scope_counter: usize,
+        current_position: usize,
     }
 
     impl<'a> FunctionScope<'a> {
@@ -789,63 +793,73 @@ mod analysis {
 
         pub fn new(function_identifier: &'a str) -> Self {
             FunctionScope {
-                scopes: Vec::new(),
+                all_scopes: Vec::new(),
+                scope_stack: Vec::new(),
                 function_identifier,
+                scope_counter: 1,
+                current_position: Self::ACTIVATION_RECORD_SIZE,
             }
         }
 
-        pub fn find_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.scopes
-                .iter()
-                .rev()
-                .find_map(|scope| scope.get_variable(identifier))
+        pub fn find_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
+            for scope in self.all_scopes.iter().rev() {
+                let borrow = scope.borrow();
+                if let Some(variable) = borrow.get_variable(identifier) {
+                    return Some(variable.clone());
+                }
+            }
+
+            None
         }
 
         pub fn variable_count(&self) -> usize {
-            self.scopes
+            self.all_scopes
                 .iter()
-                .fold(0, |accum, scope| accum + scope.variables.len())
+                .fold(0, |accum, scope| accum + scope.borrow().variables.len())
         }
 
         pub fn function_identifier(&self) -> &'a str {
             self.function_identifier
         }
 
-        pub fn push_variable(&mut self, variable: Variable<'a>) {
+        pub fn push_variable(&mut self, mut variable: Variable<'a>) {
+            variable.set_position_in_scope(self.current_position);
+            self.current_position += variable.size_in_instructions();
             self.current_scope_mut()
                 .expect("A scope")
+                .borrow_mut()
                 .push_variable(variable);
         }
 
         pub fn push_scope(&mut self) {
-            if let Some(previous_scope) = self.scopes.last() {
-                self.scopes
-                    .push(Scope::new(previous_scope.current_position + 1));
-            } else {
-                self.scopes.push(Scope::new(Self::ACTIVATION_RECORD_SIZE));
-            }
+            let new_scope = Scope::new(self.scope_counter);
+            self.scope_counter += 1;
+            let scope = Rc::new(RefCell::new(new_scope));
+            self.scope_stack.push(scope.clone());
+            self.all_scopes.push(scope);
         }
 
-        pub fn current_scope(&self) -> Option<&Scope<'a>> {
-            self.scopes.last()
+        pub fn current_scope(&self) -> Option<&Rc<RefCell<Scope<'a>>>> {
+            self.scope_stack.last()
         }
 
-        pub fn current_scope_mut(&mut self) -> Option<&mut Scope<'a>> {
-            self.scopes.last_mut()
+        pub fn current_scope_mut(&mut self) -> Option<&mut Rc<RefCell<Scope<'a>>>> {
+            self.scope_stack.last_mut()
         }
 
         pub fn pop_scope(&mut self) {
-            self.scopes.pop();
+            self.scope_stack.pop();
         }
 
-        pub fn scopes(&self) -> &Vec<Scope<'a>> {
-            &self.scopes
+        pub fn scopes(&self) -> &Vec<Rc<RefCell<Scope<'a>>>> {
+            &self.scope_stack
         }
     }
 
     #[derive(Clone, Debug)]
     pub struct GlobalScope<'a> {
         scope: Scope<'a>,
+        current_position: usize,
     }
 
     impl<'a> GlobalScope<'a> {
@@ -855,10 +869,13 @@ mod analysis {
             // main and then it fucking has to read the first thing
             // on the stack.
             GlobalScope {
-                scope: Scope::new(1),
+                scope: Scope::new(0),
+                current_position: 1,
             }
         }
-        pub fn push_variable(&mut self, variable: Variable<'a>) {
+        pub fn push_variable(&mut self, mut variable: Variable<'a>) {
+            variable.set_position_in_scope(self.current_position);
+            self.current_position += variable.size_in_instructions();
             self.scope.push_variable(variable);
         }
 
@@ -866,7 +883,7 @@ mod analysis {
             self.scope.has_variable(identifier)
         }
 
-        pub fn get_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
+        pub fn get_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
             self.scope.get_variable(identifier)
         }
 
@@ -1180,7 +1197,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    const DEBUG: bool = false;
+    const DEBUG: bool = true;
 
     impl DppCompiler {
         pub fn compile_translation_unit(
@@ -1212,6 +1229,8 @@ pub mod compiler {
             Self::emit(output_file, &translation_unit, symbol_table)?;
             let duration = start.elapsed();
             println!("Program emitted in {:?}", duration);
+            println!("Running program...");
+            let start = std::time::Instant::now();
             let child = std::process::Command::new(pl0_interpret_path)
                 .args(["-a", "+d", "+l", "+i", "+t", "+s", output_file])
                 .stdout(std::process::Stdio::piped())
@@ -1229,13 +1248,15 @@ pub mod compiler {
             if !stderr.is_empty() {
                 eprintln!("ERROR: {stderr}");
             }
+            let duration = start.elapsed();
+            println!("Program finished in {:?}", duration);
             Ok(())
         }
 
-        fn emit(
+        fn emit<'a>(
             output_file: &str,
-            translation_unit: &TranslationUnit,
-            symbol_table: SymbolTable,
+            translation_unit: &TranslationUnit<'a>,
+            symbol_table: SymbolTable<'a>,
         ) -> Result<(), Box<dyn Error>> {
             let mut emitter = Emitter::new(std::rc::Rc::new(symbol_table));
 

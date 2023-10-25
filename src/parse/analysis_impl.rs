@@ -11,7 +11,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .global_statements()
             .iter()
             .for_each(|statement| self.analyze_global_statement(statement));
-
         // Analyze the parsed functions.
         translation_unit
             .functions()
@@ -370,6 +369,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     }
                     function.return_type().clone()
                 } else {
+                    dbg!(self.symbol_table());
                     self.error_diag
                         .borrow_mut()
                         .function_does_not_exist(position.0, position.1);

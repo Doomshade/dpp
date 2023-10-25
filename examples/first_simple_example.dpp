@@ -1,14 +1,10 @@
-pp -> x;
+pp -> x = 0;
 pp -> y = 123;
 
 FUNc abcde(a: booba, b: pp) -> nopp {
 }
 
 FUNc a(a: pp) -> pp {
-    bye 0;
-}
-
-FUNc main() -> pp {
     bye 0;
 }
 
@@ -37,11 +33,11 @@ FUNc asd(firstarg: pp, aa: pp) -> pp {
 
     }
 
-    while(yem) {}
+    while(nom) {}
 
     do {
         pp -> a = 8;
-    } while(yem);
+    } while(nom);
 
     loop {
         break;
@@ -52,6 +48,8 @@ FUNc asd(firstarg: pp, aa: pp) -> pp {
     }
     bye "hello";
 }
+
+
 
 FUNc hellyea(fuk: pp, dis: pp) -> pp {
     pp -> yup = (1 + 3) * 3;
@@ -68,4 +66,10 @@ FUNc hellyea(fuk: pp, dis: pp) -> pp {
     }
 
     bye 69;
+}
+
+FUNc main() -> pp {
+    pp -> y = 123;
+    pp -> z = hellyea(y, 123);
+    bye 0;
 }

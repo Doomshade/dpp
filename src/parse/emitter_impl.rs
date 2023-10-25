@@ -93,10 +93,25 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
+        self.emit_int(
+            translation_unit
+                .global_statements()
+                .iter()
+                .fold(0, |mut acc, stat| {
+                    match stat {
+                        Statement::VariableDeclaration { variable } => {
+                            acc += variable.size_in_instructions();
+                        }
+                        _ => panic!("Invalid global statement"),
+                    }
+                    return acc;
+                }) as i32,
+        );
         translation_unit
             .global_statements()
             .iter()
             .for_each(|stmt| self.emit_statement(stmt));
+        self.emit_debug_info(DebugKeyword::Stack);
         self.emit_main_call();
         translation_unit
             .functions()
@@ -289,7 +304,7 @@ impl<'a> Emitter<'a> {
 
         // The last instruction will be the JMP to 0 - indicating exit.
         self.echo("Program returned with return value:");
-        self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
+        self.emit_debug_info(DebugKeyword::StackN { amount: 4 });
         self.emit_jump(Address::Absolute(0));
     }
 
@@ -457,9 +472,12 @@ impl<'a> Emitter<'a> {
                 let parameters_size;
                 {
                     let symbol_table = self.symbol_table();
-                    let current_function = symbol_table.current_function_scope();
+                    let current_function = symbol_table
+                        .function_scope(self.current_function.unwrap())
+                        .unwrap();
                     let function_identifier = current_function.function_identifier();
                     let function = symbol_table.find_function(function_identifier).unwrap();
+                    dbg!(&function);
                     parameters_size = function.parameters_size();
                 }
                 if let Some(expression) = expression {
@@ -560,10 +578,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn push_scope(&mut self) {
-        let current_function_ident = self
-            .symbol_table()
-            .current_function_scope()
-            .function_identifier();
+        let current_function_ident = self.current_function.unwrap();
         self.function_scope_depth.insert(
             current_function_ident,
             self.function_scope_depth
@@ -574,10 +589,7 @@ impl<'a> Emitter<'a> {
     }
 
     fn pop_scope(&mut self) {
-        let current_function_ident = self
-            .symbol_table()
-            .current_function_scope()
-            .function_identifier();
+        let current_function_ident = self.current_function.unwrap();
         self.function_scope_depth.insert(
             current_function_ident,
             self.function_scope_depth
