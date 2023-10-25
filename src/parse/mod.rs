@@ -706,6 +706,8 @@ mod analysis {
         variables: std::collections::HashMap<&'a str, std::rc::Rc<Variable<'a>>>,
         /// Function symbol table.
         functions: std::collections::HashMap<&'a str, std::rc::Rc<Function<'a>>>,
+        parent: Option<Scope<'a>>,
+        children: Vec<Scope<'a>>,
     }
 
     impl<'a> Scope<'a> {
@@ -714,6 +716,8 @@ mod analysis {
                 current_position: start_position,
                 variables: HashMap::new(),
                 functions: HashMap::new(),
+                parent: None,
+                children: Vec::new(),
             }
         }
         fn push_variable(&mut self, mut variable: Variable<'a>) {
@@ -776,7 +780,7 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct FunctionScope<'a> {
-        scopes: Vec<Scope<'a>>,
+        root_scope: Vec<Scope<'a>>,
         function_identifier: &'a str,
     }
 
@@ -785,20 +789,20 @@ mod analysis {
 
         pub fn new(function_identifier: &'a str) -> Self {
             FunctionScope {
-                scopes: Vec::new(),
+                root_scope: Vec::new(),
                 function_identifier,
             }
         }
 
         pub fn find_variable(&self, identifier: &str) -> Option<&std::rc::Rc<Variable<'a>>> {
-            self.scopes
+            self.root_scope
                 .iter()
                 .rev()
                 .find_map(|scope| scope.get_variable(identifier))
         }
 
         pub fn variable_count(&self) -> usize {
-            self.scopes
+            self.root_scope
                 .iter()
                 .fold(0, |accum, scope| accum + scope.variables.len())
         }
@@ -814,28 +818,29 @@ mod analysis {
         }
 
         pub fn push_scope(&mut self) {
-            if let Some(previous_scope) = self.scopes.last() {
-                self.scopes
+            if let Some(previous_scope) = self.root_scope.last() {
+                self.root_scope
                     .push(Scope::new(previous_scope.current_position + 1));
             } else {
-                self.scopes.push(Scope::new(Self::ACTIVATION_RECORD_SIZE));
+                self.root_scope
+                    .push(Scope::new(Self::ACTIVATION_RECORD_SIZE));
             }
         }
 
         pub fn current_scope(&self) -> Option<&Scope<'a>> {
-            self.scopes.last()
+            self.root_scope.last()
         }
 
         pub fn current_scope_mut(&mut self) -> Option<&mut Scope<'a>> {
-            self.scopes.last_mut()
+            self.root_scope.last_mut()
         }
 
         pub fn pop_scope(&mut self) {
-            self.scopes.pop();
+            self.root_scope.pop();
         }
 
         pub fn scopes(&self) -> &Vec<Scope<'a>> {
-            &self.scopes
+            &self.root_scope
         }
     }
 
