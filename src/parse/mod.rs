@@ -54,7 +54,8 @@ pub struct SemanticAnalyzer<'a, 'b> {
 }
 
 #[derive(Debug)]
-pub struct Emitter<'a> {
+pub struct Emitter<'a, 'b> {
+    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     /// The instructions to be emitted.
     code: Vec<Instruction>,
     /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
@@ -400,9 +401,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     }
 }
 
-impl<'a> Emitter<'a> {
-    pub fn new(symbol_table: rc::Rc<SymbolTable<'a>>) -> Self {
+impl<'a, 'b> Emitter<'a, 'b> {
+    pub fn new(
+        symbol_table: rc::Rc<SymbolTable<'a>>,
+        error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    ) -> Self {
         Self {
+            error_diag,
             code: Vec::new(),
             labels: collections::HashMap::new(),
             control_statement_count: 0,
@@ -699,6 +704,7 @@ mod lexer {
 
 mod parser {
     use std::fmt;
+    use std::fmt::Formatter;
 
     use dpp_macros::PosMacro;
     use dpp_macros_derive::PosMacro;
@@ -1070,6 +1076,50 @@ mod parser {
                 return 0;
             }
             return ((size - 1) / 4) + 1;
+        }
+    }
+
+    impl PosMacro for Statement<'_> {
+        fn row(&self) -> u32 {
+            match self {
+                Statement::VariableDeclaration { variable } => variable.position.0,
+                Statement::If { position, .. } => position.0,
+                Statement::IfElse { position, .. } => position.0,
+                Statement::Bye { position, .. } => position.0,
+                Statement::Print { position, .. } => position.0,
+                Statement::Block { position, .. } => position.0,
+                Statement::Expression { position, .. } => position.0,
+                Statement::Empty { position, .. } => position.0,
+                Statement::For { position, .. } => position.0,
+                Statement::While { position, .. } => position.0,
+                Statement::DoWhile { position, .. } => position.0,
+                Statement::Loop { position, .. } => position.0,
+                Statement::Break { position, .. } => position.0,
+                Statement::Continue { position, .. } => position.0,
+                Statement::Switch { position, .. } => position.0,
+                Statement::Assignment { position, .. } => position.0,
+            }
+        }
+
+        fn col(&self) -> u32 {
+            match self {
+                Statement::VariableDeclaration { variable } => variable.position.1,
+                Statement::If { position, .. } => position.1,
+                Statement::IfElse { position, .. } => position.1,
+                Statement::Bye { position, .. } => position.1,
+                Statement::Print { position, .. } => position.1,
+                Statement::Block { position, .. } => position.1,
+                Statement::Expression { position, .. } => position.1,
+                Statement::Empty { position, .. } => position.1,
+                Statement::For { position, .. } => position.1,
+                Statement::While { position, .. } => position.1,
+                Statement::DoWhile { position, .. } => position.1,
+                Statement::Loop { position, .. } => position.1,
+                Statement::Break { position, .. } => position.1,
+                Statement::Continue { position, .. } => position.1,
+                Statement::Switch { position, .. } => position.1,
+                Statement::Assignment { position, .. } => position.1,
+            }
         }
     }
 
@@ -1594,13 +1644,7 @@ mod emitter {
 }
 
 pub mod compiler {
-    use std::cell;
-    use std::error;
-    use std::fs;
-    use std::io;
-    use std::process;
-    use std::rc;
-    use std::time;
+    use std::{cell, error, fs, io, process, rc, time};
 
     use crate::parse::analysis::SymbolTable;
     use crate::parse::error_diagnosis::SyntaxError;
@@ -1631,8 +1675,9 @@ pub mod compiler {
                 // Lex -> parse -> analyze -> emit.
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
-                let symbol_table = Self::analyze(&error_diag, &translation_unit)?;
-                Self::emit(output_file, &translation_unit, symbol_table)?;
+                let symbol_table = Self::analyze(&translation_unit, &error_diag)?;
+                Self::emit(output_file, &translation_unit, symbol_table, &error_diag)?;
+                error_diag.borrow_mut().check_errors()?;
             }
             let duration = start.elapsed();
             println!("Program parsed in {:?}", duration);
@@ -1679,8 +1724,8 @@ pub mod compiler {
         }
 
         fn analyze<'a>(
-            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
             translation_unit: &TranslationUnit<'a>,
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
         ) -> Result<SymbolTable<'a>, SyntaxError> {
             SemanticAnalyzer::new(rc::Rc::clone(&error_diag)).analyze(&translation_unit)
         }
@@ -1689,8 +1734,9 @@ pub mod compiler {
             output_file: &str,
             translation_unit: &TranslationUnit<'a>,
             symbol_table: SymbolTable<'a>,
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
         ) -> io::Result<()> {
-            Emitter::new(rc::Rc::new(symbol_table)).emit_all(
+            Emitter::new(rc::Rc::new(symbol_table), rc::Rc::clone(&error_diag)).emit_all(
                 &mut io::BufWriter::new(fs::File::create(output_file)?),
                 &translation_unit,
             )

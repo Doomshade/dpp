@@ -1,5 +1,7 @@
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use dpp_macros::PosMacro;
+use std::fs;
+use std::io;
+use std::io::Write;
 
 use crate::parse::analysis::FunctionScope;
 use crate::parse::compiler;
@@ -7,12 +9,12 @@ use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation};
 use crate::parse::parser::{BinaryOperator, Block, DataType, Statement, TranslationUnit};
 use crate::parse::{Emitter, Expression, Function, Variable};
 
-impl<'a> Emitter<'a> {
+impl<'a, 'b> Emitter<'a, 'b> {
     pub fn emit_all(
         &mut self,
-        writer: &mut BufWriter<File>,
+        writer: &mut io::BufWriter<fs::File>,
         translation_unit: &TranslationUnit<'a>,
-    ) -> std::io::Result<()> {
+    ) -> io::Result<()> {
         self.emit_translation_unit(translation_unit);
 
         // First emit the base
@@ -318,7 +320,7 @@ impl<'a> Emitter<'a> {
                 }
                 _ => unreachable!(),
             };
-            println!("{:#010x}", &packed_chars);
+            // println!("{:#010x}", &packed_chars);
 
             vec.push(packed_chars);
         }
@@ -458,7 +460,6 @@ impl<'a> Emitter<'a> {
                         .unwrap();
                     let function_identifier = current_function.function_identifier();
                     let function = symbol_table.find_function(function_identifier).unwrap();
-                    dbg!(&function);
                     parameters_size = function.parameters_size();
                 }
                 if let Some(expression) = expression {
@@ -554,7 +555,11 @@ impl<'a> Emitter<'a> {
                 self.emit_expression(expression);
                 self.store(level, var_loc as i32, 1);
             }
-            _ => println!("Not yet implemented: Emitting statement: {:#?}", statement),
+            _ => self.error_diag.borrow_mut().not_implemented(
+                statement.row(),
+                statement.col(),
+                format!("statement {:?}", statement).as_str(),
+            ),
         };
     }
 

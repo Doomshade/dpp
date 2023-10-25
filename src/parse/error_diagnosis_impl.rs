@@ -39,8 +39,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn not_implemented(&mut self, error: &str) {
-        self.insert_error_message(1, 1, format!("Not yet implemented: {error}").as_str());
+    pub fn not_implemented(&mut self, row: u32, col: u32, error: &str) {
+        self.insert_error_message(row, col, format!("Not yet implemented: {error}").as_str());
     }
 
     pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token<'a>>) {

@@ -262,9 +262,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.analyze_statement(statement);
             }
             _ => {
-                self.error_diag
-                    .borrow_mut()
-                    .not_implemented(format!("{:?}", statement).as_str());
+                self.error_diag.borrow_mut().not_implemented(
+                    statement.row(),
+                    statement.col(),
+                    format!("{:?}", statement).as_str(),
+                );
             }
         };
     }
@@ -371,7 +373,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     }
                     function.return_type().clone()
                 } else {
-                    dbg!(self.symbol_table());
                     self.error_diag
                         .borrow_mut()
                         .function_does_not_exist(position.0, position.1);
