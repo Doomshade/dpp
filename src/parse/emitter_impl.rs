@@ -1,7 +1,8 @@
-use dpp_macros::PosMacro;
 use std::fs;
 use std::io;
 use std::io::Write;
+
+use dpp_macros::PosMacro;
 
 use crate::parse::analysis::FunctionScope;
 use crate::parse::compiler;
@@ -175,29 +176,15 @@ impl<'a, 'b> Emitter<'a, 'b> {
             Expression::Binary { lhs, rhs, op, .. } => {
                 self.emit_expression(lhs);
                 self.emit_expression(rhs);
-                use BinaryOperator::*;
+                use BinaryOperator as BinOp;
+                use Operation as Op;
                 match op {
-                    Add => {
-                        self.emit_instruction(Instruction::Operation {
-                            operation: Operation::Add,
-                        });
-                    }
-                    Subtract => {
-                        self.emit_instruction(Instruction::Operation {
-                            operation: Operation::Subtract,
-                        });
-                    }
-                    Multiply => {
-                        self.emit_instruction(Instruction::Operation {
-                            operation: Operation::Multiply,
-                        });
-                    }
-                    Equal => self.emit_instruction(Instruction::Operation {
-                        operation: Operation::Equal,
-                    }),
-                    GreaterThan => self.emit_instruction(Instruction::Operation {
-                        operation: Operation::GreaterThan,
-                    }),
+                    BinOp::Add => self.emit_operation(Op::Add),
+                    BinOp::Subtract => self.emit_operation(Op::Subtract),
+                    BinOp::Multiply => self.emit_operation(Op::Multiply),
+                    BinOp::Equal => self.emit_operation(Op::Equal),
+                    BinOp::GreaterThan => self.emit_operation(Op::GreaterThan),
+
                     _ => todo!("Binary operator {:?}", op),
                 }
             }
@@ -412,6 +399,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.code.push(instruction);
     }
 
+    fn emit_operation(&mut self, operation: Operation) {
+        self.emit_instruction(Instruction::Operation { operation });
+    }
+
     fn emit_statement(&mut self, statement: &Statement<'a>) {
         match statement {
             Statement::Expression { expression, .. } => {
@@ -554,6 +545,46 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     .get_variable_level_and_offset(identifier, self.current_function);
                 self.emit_expression(expression);
                 self.store(level, var_loc as i32, 1);
+            }
+            Statement::For {
+                index_ident,
+                ident_expression,
+                length_expression,
+                statement,
+                ..
+            } => {
+                let cmp_label = self.create_label("for_cmp");
+                let end = self.create_label("for_end");
+                let (level, var_loc) = self
+                    .symbol_table()
+                    .get_variable_level_and_offset(index_ident, self.current_function);
+
+                // Create a new variable for the for loop and store its value.
+                if let Some(expression) = ident_expression {
+                    self.emit_expression(expression);
+                } else {
+                    self.emit_literal(0);
+                }
+                self.store(level, var_loc as i32, 1);
+
+                // Compare the variable with the length.
+                self.emit_label(cmp_label.as_str());
+                self.load(level, var_loc as i32, 1);
+                self.emit_expression(length_expression);
+                self.emit_operation(Operation::LessThan);
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(end.clone()),
+                });
+
+                self.emit_statement(statement);
+
+                // Increment i.
+                self.load(level, var_loc as i32, 1);
+                self.emit_literal(1);
+                self.emit_operation(Operation::Add);
+                self.store(level, var_loc as i32, 1);
+                self.emit_jump(Address::Label(cmp_label.clone()));
+                self.emit_label(end.as_str());
             }
             _ => self.error_diag.borrow_mut().not_implemented(
                 statement.row(),

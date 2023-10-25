@@ -2,7 +2,9 @@ use dpp_macros::PosMacro;
 
 use crate::parse::analysis::SymbolTable;
 use crate::parse::error_diagnosis::SyntaxError;
-use crate::parse::parser::{Block, DataType, Number, Statement, TranslationUnit, UnaryOperator};
+use crate::parse::parser::{
+    Block, DataType, Number, Statement, TranslationUnit, UnaryOperator, Variable,
+};
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -259,7 +261,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     &self.analyze_expr(length_expression),
                     &(length_expression.row(), length_expression.col()),
                 );
+
+                self.symbol_table_mut().push_scope();
+                let variable = Variable::new(
+                    *position,
+                    index_ident,
+                    DataType::Number(Number::Pp),
+                    ident_expression.clone(),
+                    false,
+                );
+                self.symbol_table_mut().push_local_variable(variable);
                 self.analyze_statement(statement);
+                self.symbol_table_mut().pop_scope();
             }
             _ => {
                 self.error_diag.borrow_mut().not_implemented(

@@ -1654,7 +1654,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    pub const DEBUG: bool = true;
+    pub const DEBUG: bool = false;
 
     impl DppCompiler {
         pub fn compile_translation_unit(

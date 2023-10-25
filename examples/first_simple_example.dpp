@@ -22,29 +22,10 @@ FUNc asd(firstarg: pp, aa: pp) -> pp {
         }
     }
 
-    switch(aa) {
-        case 69 {
-            pp -> a = 4;
-        }
-    }
-
+    # for(int i = 0; i < 10; i++) {}
     for(i = 0 to 10) {
-
     }
 
-    while(nom) {}
-
-    do {
-        pp -> a = 8;
-    } while(nom);
-
-    loop {
-        break;
-    }
-
-    if (a > 2) {
-        booba -> test = yem;
-    }
     bye "hello";
 }
 
@@ -65,9 +46,13 @@ FUNc hellyea(fuk: pp, dis: pp) -> pp {
         pp -> abc = 123;
     } else if (nom) {
         pp -> def = 1234;
+    } else if (nom) {
+         pp -> def = 1234;
     } else {
         pp -> ghi = 456;
     }
+    for(i = 0 to 10) {
+    }
 
-    bye 69;
+    bye i;
 }
