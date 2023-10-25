@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
-use crate::parse::analysis::{FunctionScope, SymbolTable};
+use crate::parse::analysis::FunctionScope;
 use crate::parse::compiler;
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation};
 use crate::parse::parser::{BinaryOperator, Block, DataType, Statement, TranslationUnit};

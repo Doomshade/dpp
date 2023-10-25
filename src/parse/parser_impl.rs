@@ -11,7 +11,7 @@
 //! Each enum also derives Debug that lets us print the tree structure of the AST.
 
 use crate::parse::error_diagnosis::SyntaxError;
-use crate::parse::lexer::{Token, TokenKind};
+use crate::parse::lexer::TokenKind;
 use crate::parse::parser::{
     BinaryOperator, Case, DataType, Number, Statement, TranslationUnit, UnaryOperator,
 };

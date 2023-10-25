@@ -4,15 +4,23 @@ use std::rc;
 
 use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::Instruction;
-use crate::parse::error_diagnosis::ErrorDiagnosis;
+use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
-pub mod error_diagnosis;
+pub mod error_diagnosis_impl;
 pub mod lexer_impl;
 pub mod parser_impl;
+
+#[derive(Debug)]
+pub struct ErrorDiagnosis<'a, 'b> {
+    file_name: &'b str,
+    _file_contents: &'a str,
+    /// Using hash map to remove duplicate messages
+    error_messages: collections::HashMap<String, ErrorMessage>,
+}
 
 #[derive(Debug)]
 pub struct Lexer<'a, 'b> {
@@ -404,28 +412,72 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn code(&self) -> &Vec<Instruction> {
-        &self.code
-    }
-
     fn symbol_table(&self) -> &rc::Rc<SymbolTable<'a>> {
         &self.symbol_table
     }
+}
 
-    fn labels(&self) -> &collections::HashMap<String, u32> {
-        &self.labels
+mod error_diagnosis {
+    use std::cmp;
+    use std::error;
+    use std::fmt;
+
+    pub struct SyntaxError {
+        error_messages: Vec<String>,
     }
 
-    fn current_function(&self) -> Option<&'a str> {
-        self.current_function
+    impl SyntaxError {
+        pub fn new(error_messages: Vec<String>) -> Self {
+            SyntaxError { error_messages }
+        }
     }
 
-    fn function_scope_depth(&self) -> &collections::HashMap<&'a str, u32> {
-        &self.function_scope_depth
+    impl fmt::Debug for SyntaxError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            writeln!(f, "Syntax error")?;
+            for error_message in &self.error_messages {
+                writeln!(f, "{error_message}")?;
+            }
+            Ok(())
+        }
     }
 
-    fn control_statement_count(&self) -> u32 {
-        self.control_statement_count
+    impl fmt::Display for SyntaxError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "Syntax error")
+        }
+    }
+
+    impl error::Error for SyntaxError {}
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    pub struct ErrorMessage {
+        row: u32,
+        col: u32,
+        message: String,
+    }
+
+    impl ErrorMessage {
+        pub fn new(row: u32, col: u32, message: String) -> Self {
+            ErrorMessage { row, col, message }
+        }
+        pub fn message(&self) -> &str {
+            &self.message
+        }
+    }
+
+    impl Ord for ErrorMessage {
+        fn cmp(&self, other: &Self) -> cmp::Ordering {
+            self.row
+                .cmp(&other.row)
+                .then_with(|| self.col.cmp(&other.col))
+        }
+    }
+
+    impl PartialOrd for ErrorMessage {
+        fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+            Some(self.cmp(other))
+        }
     }
 }
 
@@ -1551,10 +1603,10 @@ pub mod compiler {
     use std::time;
 
     use crate::parse::analysis::SymbolTable;
-    use crate::parse::error_diagnosis::{ErrorDiagnosis, SyntaxError};
+    use crate::parse::error_diagnosis::SyntaxError;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
-    use crate::parse::{Emitter, Lexer, Parser, SemanticAnalyzer};
+    use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Parser, SemanticAnalyzer};
 
     pub struct DppCompiler;
 

@@ -1,9 +1,6 @@
 //! The tokenizer for the dpp language.
 
-use crate::parse::error_diagnosis::{ErrorDiagnosis, SyntaxError};
-use std::cell::RefCell;
-use std::rc::Rc;
-
+use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::Lexer;
 

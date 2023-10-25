@@ -1,10 +1,10 @@
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 
-use quote::{format_ident, quote, quote_spanned};
+use quote::{quote, quote_spanned};
 use syn;
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, Data, DeriveInput, Error, Fields};
+use syn::{Data, Fields};
 
 #[proc_macro_derive(PosMacro)]
 pub fn pos_macro_derive(input: TokenStream) -> TokenStream {
@@ -20,8 +20,6 @@ fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
 
             for variant in &data_enum.variants {
                 let variant_name = &variant.ident;
-                let row_func_name = "row";
-                let col_func_name = "col";
 
                 let fields_in_variant = match &variant.fields {
                     Fields::Unnamed(_) => quote_spanned! {variant.span()=> (..) },
@@ -56,7 +54,7 @@ fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
             };
             gen.into()
         }
-        Data::Struct(data_struct) => {
+        Data::Struct(_) => {
             let gen = quote! {
                 impl<'a> PosMacro for #name<'a> {
                     #[must_use]

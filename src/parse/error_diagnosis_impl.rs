@@ -1,61 +1,9 @@
-use core::cmp::Ordering;
-use core::fmt::{Debug, Display, Formatter};
+use crate::parse::error_diagnosis::{ErrorMessage, SyntaxError};
+use crate::parse::ErrorDiagnosis;
 use std::collections::{BinaryHeap, HashMap};
-use std::error::Error;
 
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::DataType;
-
-pub struct SyntaxError {
-    error_messages: Vec<String>,
-}
-
-impl Debug for SyntaxError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Syntax error")?;
-        for error_message in &self.error_messages {
-            writeln!(f, "{error_message}")?;
-        }
-        Ok(())
-    }
-}
-
-impl Display for SyntaxError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Syntax error")
-    }
-}
-
-impl Error for SyntaxError {}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct ErrorMessage {
-    row: u32,
-    col: u32,
-    message: String,
-}
-
-impl Ord for ErrorMessage {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.row
-            .cmp(&other.row)
-            .then_with(|| self.col.cmp(&other.col))
-    }
-}
-
-impl PartialOrd for ErrorMessage {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[derive(Debug)]
-pub struct ErrorDiagnosis<'a, 'b> {
-    file_name: &'b str,
-    _file_contents: &'a str,
-    /// Using hash map to remove duplicate messages
-    error_messages: HashMap<String, ErrorMessage>,
-}
 
 impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     #[must_use]
@@ -242,11 +190,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         if self.error_messages.contains_key(&error_message) {
             return;
         }
-        let message_struct = ErrorMessage {
-            row,
-            col,
-            message: error_message.clone(),
-        };
+
+        let message_struct = ErrorMessage::new(row, col, error_message.clone());
         self.error_messages.insert(error_message, message_struct);
     }
 
@@ -263,11 +208,9 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         let vec = priority_queue
             .into_sorted_vec()
             .iter()
-            .map(|x| x.message.clone())
+            .map(|x| x.message().to_string())
             .collect();
 
-        Err(SyntaxError {
-            error_messages: vec,
-        })
+        Err(SyntaxError::new(vec))
     }
 }
