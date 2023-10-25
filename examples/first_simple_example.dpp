@@ -1,5 +1,4 @@
 pp -> x = 0;
-pp -> y = 123;
 
 FUNc abcde(a: booba, b: pp) -> nopp {
 }

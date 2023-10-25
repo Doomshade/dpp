@@ -240,7 +240,6 @@ mod parser {
     use dpp_macros::PosMacro;
     use dpp_macros_derive::PosMacro;
 
-    use crate::parse::analysis::Scope;
     use crate::parse::{BinaryOperator, Number, Statement, UnaryOperator};
 
     #[derive(Clone, Debug, PosMacro)]
@@ -401,6 +400,12 @@ mod parser {
 
         pub fn size_in_instructions(&self) -> usize {
             ((self.size() - 1) / 4) + 1
+        }
+        pub fn scope_id(&self) -> Option<usize> {
+            self.scope_id
+        }
+        pub fn is_parameter(&self) -> bool {
+            self.is_parameter
         }
     }
 
@@ -567,10 +572,9 @@ mod parser {
 }
 
 mod analysis {
-    use std::cell::RefCell;
-    use std::collections::HashMap;
-    use std::env::var;
-    use std::rc::Rc;
+    use std::cell;
+    use std::collections;
+    use std::rc;
 
     use crate::parse::parser::{Function, Variable};
 
@@ -590,17 +594,17 @@ mod analysis {
             }
         }
 
+        /// Gets the variable from the generated scopes.
         pub fn get_variable_level_and_offset(
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
         ) -> (u32, usize) {
             if let Some(function_ident) = function_ident {
-                dbg!(&function_ident);
                 if let Some(function_scope) = self.function_scope(function_ident) {
-                    dbg!(&function_scope);
-                    if let Some(variable) = function_scope.find_variable(identifier) {
-                        dbg!(&variable);
+                    if let Some(variable) =
+                        function_scope.find_variable_in_generated_scopes(identifier)
+                    {
                         return (
                             0,
                             variable
@@ -621,7 +625,6 @@ mod analysis {
                 );
             }
 
-            dbg!(&self.global_scope);
             use std::borrow::Borrow;
             // If not found, try to find it in the global scope.
             (
@@ -664,12 +667,12 @@ mod analysis {
             self.current_function_scope_mut().pop_scope();
         }
 
-        pub fn find_variable(
+        pub fn find_variable_in_scope_stack(
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
-        ) -> Option<std::rc::Rc<Variable<'a>>> {
-            self.find_local_variable(identifier, function_ident)
+        ) -> Option<rc::Rc<Variable<'a>>> {
+            self.find_local_variable_in_scope_stack(identifier, function_ident)
                 .or_else(|| self.find_global_variable(identifier))
         }
 
@@ -677,17 +680,17 @@ mod analysis {
             self.push_function_scope(function.identifier());
         }
 
-        pub fn find_global_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
+        pub fn find_global_variable(&self, identifier: &str) -> Option<rc::Rc<Variable<'a>>> {
             self.global_scope.get_variable(identifier)
         }
 
-        pub fn find_local_variable(
+        pub fn find_local_variable_in_scope_stack(
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
-        ) -> Option<std::rc::Rc<Variable<'a>>> {
+        ) -> Option<rc::Rc<Variable<'a>>> {
             self.function_scope(function_ident?)?
-                .find_variable(identifier)
+                .find_variable_in_scope_stack(identifier)
         }
 
         // TODO: This could be done in O(1) but w/e.
@@ -716,8 +719,8 @@ mod analysis {
     impl<'a> Scope<'a> {
         pub fn new(id: usize) -> Self {
             Scope {
-                variables: HashMap::new(),
-                functions: HashMap::new(),
+                variables: collections::HashMap::new(),
+                functions: collections::HashMap::new(),
                 id,
             }
         }
@@ -780,8 +783,8 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct FunctionScope<'a> {
-        all_scopes: Vec<Rc<RefCell<Scope<'a>>>>,
-        scope_stack: Vec<Rc<RefCell<Scope<'a>>>>,
+        generated_scopes: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
+        scope_stack: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
         function_identifier: &'a str,
         scope_counter: usize,
         current_position: usize,
@@ -792,7 +795,7 @@ mod analysis {
 
         pub fn new(function_identifier: &'a str) -> Self {
             FunctionScope {
-                all_scopes: Vec::new(),
+                generated_scopes: Vec::new(),
                 scope_stack: Vec::new(),
                 function_identifier,
                 scope_counter: 1,
@@ -800,10 +803,31 @@ mod analysis {
             }
         }
 
-        pub fn find_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
-            for scope in self.all_scopes.iter().rev() {
-                let borrow = scope.borrow();
-                if let Some(variable) = borrow.get_variable(identifier) {
+        pub fn find_variable_in_generated_scopes(
+            &self,
+            identifier: &str,
+        ) -> Option<rc::Rc<Variable<'a>>> {
+            self.find_variable(identifier, &self.generated_scopes)
+        }
+
+        pub fn find_variable_in_scope_stack(
+            &self,
+            identifier: &str,
+        ) -> Option<rc::Rc<Variable<'a>>> {
+            self.find_variable(identifier, &self.scope_stack)
+        }
+
+        fn find_variable(
+            &self,
+            identifier: &str,
+            scopes: &Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
+        ) -> Option<rc::Rc<Variable<'a>>> {
+            // Loop through all scopes to find the variable. If we find a variable
+            // with the right identifier make sure it's in the right scope.
+            for scope_rc in scopes.iter().rev() {
+                let scope = scope_rc.borrow();
+                if let Some(variable) = scope.get_variable(identifier) {
+                    if variable.scope_id().unwrap() == 0 {}
                     return Some(variable.clone());
                 }
             }
@@ -812,7 +836,7 @@ mod analysis {
         }
 
         pub fn variable_count(&self) -> usize {
-            self.all_scopes
+            self.generated_scopes
                 .iter()
                 .fold(0, |accum, scope| accum + scope.borrow().variables.len())
         }
@@ -833,16 +857,16 @@ mod analysis {
         pub fn push_scope(&mut self) {
             let new_scope = Scope::new(self.scope_counter);
             self.scope_counter += 1;
-            let scope = Rc::new(RefCell::new(new_scope));
+            let scope = rc::Rc::new(cell::RefCell::new(new_scope));
             self.scope_stack.push(scope.clone());
-            self.all_scopes.push(scope);
+            self.generated_scopes.push(scope);
         }
 
-        pub fn current_scope(&self) -> Option<&Rc<RefCell<Scope<'a>>>> {
+        pub fn current_scope(&self) -> Option<&rc::Rc<cell::RefCell<Scope<'a>>>> {
             self.scope_stack.last()
         }
 
-        pub fn current_scope_mut(&mut self) -> Option<&mut Rc<RefCell<Scope<'a>>>> {
+        pub fn current_scope_mut(&mut self) -> Option<&mut rc::Rc<cell::RefCell<Scope<'a>>>> {
             self.scope_stack.last_mut()
         }
 
@@ -850,7 +874,7 @@ mod analysis {
             self.scope_stack.pop();
         }
 
-        pub fn scopes(&self) -> &Vec<Rc<RefCell<Scope<'a>>>> {
+        pub fn scopes(&self) -> &Vec<rc::Rc<cell::RefCell<Scope<'a>>>> {
             &self.scope_stack
         }
     }

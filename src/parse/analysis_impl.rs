@@ -55,7 +55,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::VariableDeclaration { variable } => {
                 if self
                     .symbol_table()
-                    .find_local_variable(variable.identifier(), self.current_function)
+                    .find_local_variable_in_scope_stack(
+                        variable.identifier(),
+                        self.current_function,
+                    )
                     .is_some()
                 {
                     self.error_diag.borrow_mut().variable_already_exists(
@@ -81,7 +84,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::VariableDeclaration { variable } => {
                 if self
                     .symbol_table()
-                    .find_local_variable(variable.identifier(), self.current_function)
+                    .find_local_variable_in_scope_stack(
+                        variable.identifier(),
+                        self.current_function,
+                    )
                     .is_some()
                 {
                     self.error_diag.borrow_mut().variable_already_exists(
@@ -179,7 +185,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let variable = self
                     .symbol_table()
-                    .find_variable(identifier, self.current_function)
+                    .find_variable_in_scope_stack(identifier, self.current_function)
                     .expect("A variable")
                     .data_type()
                     .clone();
@@ -215,7 +221,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 if self
                     .symbol_table()
-                    .find_local_variable(index_ident, self.current_function)
+                    .find_local_variable_in_scope_stack(index_ident, self.current_function)
                     .is_some()
                 {
                     self.error_diag.borrow_mut().variable_already_exists(
@@ -324,7 +330,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 return if let Some(variable) = self
                     .symbol_table()
-                    .find_variable(identifier, self.current_function)
+                    .find_variable_in_scope_stack(identifier, self.current_function)
                 {
                     if variable.is_initialized() {
                         variable.data_type().clone()
