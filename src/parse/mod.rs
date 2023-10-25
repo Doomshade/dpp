@@ -5,8 +5,8 @@ use std::rc;
 use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::Instruction;
 use crate::parse::error_diagnosis::ErrorDiagnosis;
-use crate::parse::lexer::Token;
-use crate::parse::parser::{Block, Expression, Function, Variable};
+use crate::parse::lexer::{Token, TokenKind};
+use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -56,6 +56,377 @@ pub struct Emitter<'a> {
     current_function: Option<&'a str>,
     function_scope_depth: collections::HashMap<&'a str, u32>,
     control_statement_count: u32,
+}
+
+impl<'a, 'b> Lexer<'a, 'b> {
+    /// # Arguments
+    ///
+    /// * `input`: The translation unit input.
+    /// * `error_diag`: The error diagnostics.
+    ///
+    /// returns: Lexer
+    #[must_use]
+    pub fn new(input: &'a str, error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
+        // Create a vector of characters from the input string. This is so that we can access the
+        // characters by index. Unfortunately this will take up more memory, but as soon as the
+        // lexer goes out of scope, the vector will be dropped.
+
+        // NOTE: We would normally use an iterator here, but the problem is that we need to
+        // be able to peek inside the iterator. The Peekable trait allows it, HOWEVER: the trait
+        // consumes the iterator, which means that we can't use it anymore. So we have to use a
+        // vector instead.
+        let chars = input.chars().collect();
+        Self {
+            raw_input: input,
+            chars,
+            cursor: 0,
+            row: 1,
+            col: 1,
+            error_diag,
+        }
+    }
+
+    fn new_token(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
+        Token::new(kind, (self.row, self.col), value)
+    }
+
+    fn peek(&self) -> char {
+        self.peek_ahead(0)
+    }
+
+    fn peek_ahead(&self, ahead: usize) -> char {
+        if self.cursor + ahead >= self.chars.len() {
+            return char::default();
+        }
+
+        self.chars[self.cursor + ahead]
+    }
+
+    #[must_use]
+    fn advance(&mut self) -> usize {
+        let advanced_bytes = self.peek().len_utf8();
+        if advanced_bytes > 1 {
+            println!("YO");
+        }
+        self.col += 1;
+        self.cursor += 1;
+        advanced_bytes
+    }
+}
+
+impl<'a, 'b> Parser<'a, 'b> {
+    pub fn new(
+        tokens: rc::Rc<Vec<Token<'a>>>,
+        error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    ) -> Self {
+        Self {
+            position: (1, 1),
+            tokens,
+            curr_token_index: 0,
+            error_diag,
+            error: false,
+            fixing_parsing: false,
+        }
+    }
+
+    fn go_back(&mut self) {
+        self.curr_token_index -= 1;
+        if let Some(token) = self.token() {
+            self.position = token.position();
+        }
+    }
+
+    fn consume_token(&mut self) {
+        self.curr_token_index += 1;
+        if let Some(token) = self.token() {
+            self.position = token.position();
+        }
+    }
+
+    #[must_use]
+    fn token(&self) -> Option<&Token<'a>> {
+        return self.token_offset(0);
+    }
+
+    #[must_use]
+    fn token_offset(&self, offset: i32) -> Option<&Token<'a>> {
+        if self.curr_token_index as i32 + offset >= self.tokens.len() as i32
+            || self.curr_token_index as i32 + offset < 0
+        {
+            return None;
+        }
+        Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
+    }
+
+    fn matches_token_kind(&mut self, token_kind: TokenKind) -> bool {
+        if let Some(token) = self.token() {
+            return token.kind() == token_kind;
+        }
+        false
+    }
+
+    fn expect_one_from(
+        &mut self,
+        expected_token_kinds: &[TokenKind],
+    ) -> Option<(&'a str, TokenKind)> {
+        if let Some(token) = self.token() {
+            let token_kind = token.kind();
+            let token_value = token.value();
+
+            if expected_token_kinds
+                .iter()
+                .any(|expected_token_kind| expected_token_kind == &token_kind)
+            {
+                self.consume_token();
+                self.error = false;
+            } else {
+                // Check if this is the second error in a row.
+                // If it is, return None. This will signal that we should go into panic mode.
+                // We let the callee handle this.
+                if self.error {
+                    return None;
+                }
+
+                // Log the error at the previous token as we expected something else there.
+                if !self.fixing_parsing {
+                    self.fixing_parsing = true;
+                    if let Some(prev_token) = self.token_offset(-1) {
+                        self.error_diag
+                            .borrow_mut()
+                            .expected_one_of_token_error(prev_token, expected_token_kinds);
+                        self.consume_token();
+                        let call_me_again = self.expect_one_from(expected_token_kinds);
+                        self.fixing_parsing = false;
+                        if let Some((a, b)) = call_me_again {
+                            if self.error {
+                                self.go_back();
+                            } else {
+                                return Some((a, b));
+                            }
+                        } else {
+                            self.go_back();
+                        }
+                    } else {
+                        unreachable!("No token found");
+                    }
+                }
+                self.error = true;
+            }
+
+            return Some((token_value, token_kind));
+        }
+        None
+    }
+
+    fn matches_data_type(&self) -> bool {
+        if let Some(token) = self.token() {
+            return matches!(
+                token.kind(),
+                TokenKind::XxlppKeyword
+                    | TokenKind::PpKeyword
+                    | TokenKind::SppKeyword
+                    | TokenKind::XsppKeyword
+                    | TokenKind::PKeyword
+                    | TokenKind::NoppKeyword
+                    | TokenKind::BoobaKeyword
+                    | TokenKind::YarnKeyword
+            );
+        }
+        false
+    }
+
+    /// Expects a **token** of a certain kind. If the token is not present an error is added to the
+    /// error diagnostics. If the token is present, it is consumed and the value of the token is
+    /// returned. If the token has no value, an empty string is returned.
+    ///
+    /// Note that this function fabricates the token if it's not present to continue proper parsing.
+    /// For example, if we expect a colon, but a semicolon is present, we add an error and continue
+    /// as if a colon was present. This is useful for error recovery.
+    ///
+    /// If two expect check fails in a row we enter panic mode. This means that we start throwing
+    /// out tokens until we find a synchronizing token and None is returned. Otherwise this function
+    /// always returns Some even if an error, such as a missing token, is present.
+    ///
+    /// # Arguments
+    ///
+    /// * `token_kind`: The token kind to expect.
+    ///
+    /// returns: Some of the String value of the token. Is empty if it does not exist. None if the
+    /// the parser enters panic mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Expect an open parenthesis. If it is not present, pretend it's
+    /// // there and continue parsing.
+    /// self.expect(TokenKind::OpenParen)?;
+    ///
+    /// // (...)
+    ///
+    /// // Expect a close parenthesis. If it is not present, pretend it's
+    /// // there and continue parsing.
+    /// self.expect(TokenKind::CloseParen)?;
+    ///
+    /// // or
+    /// let identifier = self.expect(TokenKind::Identifier)?;
+    ///
+    /// ```
+    fn expect(&mut self, expected_token_kind: TokenKind) -> Option<&'a str> {
+        match self.expect_one_from(&[expected_token_kind]) {
+            Some((value, _)) => Some(value),
+            None => None,
+        }
+    }
+
+    fn go_into_panic_mode(&mut self) {
+        // Consume tokens until we find a synchronizing token.
+        while let Some(token) = self.token() {
+            match token.kind() {
+                TokenKind::Eof
+                | TokenKind::IfKeyword
+                | TokenKind::ForKeyword
+                | TokenKind::WhileKeyword
+                | TokenKind::DoKeyword
+                | TokenKind::LoopKeyword
+                | TokenKind::BreakKeyword
+                | TokenKind::ContinueKeyword
+                | TokenKind::FUNcKeyword
+                | TokenKind::SwitchKeyword
+                | TokenKind::ByeKeyword
+                | TokenKind::Semicolon => {
+                    break;
+                }
+                _ => {
+                    self.consume_token();
+                    continue;
+                }
+            }
+        }
+
+        // Reset the error flag as we expect the next expect call to be valid.
+        self.error = false;
+    }
+
+    fn add_error(&mut self, error_message: &str) {
+        self.error_diag
+            .borrow_mut()
+            .expected_something_error(error_message, self.token_offset(-1));
+    }
+
+    // Wrappers for print! and println! macros to use
+    // inside the Statement::PrintStatement.
+    fn print(str: &str) {
+        print!("{str}");
+    }
+
+    fn println(str: &str) {
+        println!("{str}");
+    }
+}
+
+impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
+    pub fn new(error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
+        Self {
+            symbol_table: SymbolTable::new(),
+            error_diag,
+            current_function: None,
+            loop_stack: 0,
+        }
+    }
+
+    fn symbol_table_mut(&mut self) -> &mut SymbolTable<'a> {
+        &mut self.symbol_table
+    }
+
+    fn symbol_table(&self) -> &SymbolTable<'a> {
+        &self.symbol_table
+    }
+
+    fn check_if_mixed_data_types(
+        &self,
+        expected_data_type: &DataType<'a>,
+        got: &DataType<'a>,
+        position: &(u32, u32),
+    ) {
+        if expected_data_type != got {
+            self.error_diag.borrow_mut().mixed_data_types_error(
+                position.0,
+                position.1,
+                expected_data_type,
+                got,
+            )
+        }
+    }
+
+    fn check_data_type(
+        &self,
+        expected_data_type: &DataType<'a>,
+        got: &DataType<'a>,
+        position: &(u32, u32),
+    ) {
+        if expected_data_type != got {
+            self.error_diag.borrow_mut().invalid_data_type(
+                position.0,
+                position.1,
+                expected_data_type,
+                got,
+            )
+        }
+    }
+
+    fn begin_function(&mut self, function: &Function<'a>) {
+        self.loop_stack = 0;
+        self.current_function = Some(function.identifier());
+        let ref_mut = self.symbol_table_mut();
+        ref_mut.push_function(function.clone());
+        ref_mut.push_scope();
+        function
+            .parameters()
+            .iter()
+            .for_each(|parameter| ref_mut.push_local_variable(parameter.clone()));
+    }
+
+    fn end_function(&mut self) {
+        self.current_function = None;
+        self.symbol_table_mut().pop_scope();
+    }
+}
+
+impl<'a> Emitter<'a> {
+    pub fn new(symbol_table: rc::Rc<SymbolTable<'a>>) -> Self {
+        Self {
+            code: Vec::new(),
+            labels: collections::HashMap::new(),
+            control_statement_count: 0,
+            symbol_table,
+            function_scope_depth: collections::HashMap::new(),
+            current_function: None,
+        }
+    }
+
+    fn code(&self) -> &Vec<Instruction> {
+        &self.code
+    }
+
+    fn symbol_table(&self) -> &rc::Rc<SymbolTable<'a>> {
+        &self.symbol_table
+    }
+
+    fn labels(&self) -> &collections::HashMap<String, u32> {
+        &self.labels
+    }
+
+    fn current_function(&self) -> Option<&'a str> {
+        self.current_function
+    }
+
+    fn function_scope_depth(&self) -> &collections::HashMap<&'a str, u32> {
+        &self.function_scope_depth
+    }
+
+    fn control_statement_count(&self) -> u32 {
+        self.control_statement_count
+    }
 }
 
 mod lexer {
@@ -746,9 +1117,7 @@ mod analysis {
     use std::collections;
     use std::rc;
 
-    use crate::parse::error_diagnosis::ErrorDiagnosis;
     use crate::parse::parser::{Function, Variable};
-    use crate::parse::SemanticAnalyzer;
 
     #[derive(Debug)]
     pub struct SymbolTable<'a> {
@@ -780,25 +1149,6 @@ mod analysis {
         function_identifier: &'a str,
         scope_counter: usize,
         current_position: usize,
-    }
-
-    impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
-        pub fn new(error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
-            Self {
-                symbol_table: SymbolTable::new(),
-                error_diag,
-                current_function: None,
-                loop_stack: 0,
-            }
-        }
-
-        pub fn symbol_table_mut(&mut self) -> &mut SymbolTable<'a> {
-            &mut self.symbol_table
-        }
-
-        pub fn symbol_table(&self) -> &SymbolTable<'a> {
-            &self.symbol_table
-        }
     }
 
     impl<'a> SymbolTable<'a> {

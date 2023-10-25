@@ -8,32 +8,6 @@ use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::Lexer;
 
 impl<'a, 'b> Lexer<'a, 'b> {
-    /// # Arguments
-    ///
-    /// * `input`: The translation unit input.
-    /// * `error_diag`: The error diagnostics.
-    ///
-    /// returns: Lexer
-    #[must_use]
-    pub fn new(input: &'a str, error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
-        // Create a vector of characters from the input string. This is so that we can access the
-        // characters by index. Unfortunately this will take up more memory, but as soon as the
-        // lexer goes out of scope, the vector will be dropped.
-
-        // NOTE: We would normally use an iterator here, but the problem is that we need to
-        // be able to peek inside the iterator. The Peekable trait allows it, HOWEVER: the trait
-        // consumes the iterator, which means that we can't use it anymore. So we have to use a
-        // vector instead.
-        let chars = input.chars().collect();
-        Self {
-            raw_input: input,
-            chars,
-            cursor: 0,
-            row: 1,
-            col: 1,
-            error_diag,
-        }
-    }
     ///
     /// Lexes the input into a vector of Tokens.
     ///
@@ -54,38 +28,34 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// ```
     pub fn lex(&mut self) -> Result<Vec<Token<'a>>, SyntaxError> {
         let mut tokens = Vec::new();
-        let mut token = self.parse_token();
+        let mut token = self.lex_token();
         loop {
             let is_eof = token.kind() == TokenKind::Eof;
             tokens.push(token);
             if is_eof {
                 break;
             }
-            token = self.parse_token();
+            token = self.lex_token();
         }
         self.error_diag.borrow().check_errors()?;
         Ok(tokens)
     }
 
-    fn new_token(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
-        Token::new(kind, (self.row, self.col), value)
-    }
-
-    fn parse_token(&mut self) -> Token<'a> {
+    fn lex_token(&mut self) -> Token<'a> {
         // Parse the token based on the first character prefix.
         let token = match self.peek() {
             '\0' => self.new_token(TokenKind::Eof, "EOF"),
-            'a'..='z' | 'A'..='Z' | '_' => self.handle_identifier(),
-            '0'..='9' => self.handle_number(),
-            '"' => self.handle_yarn(),
-            ' ' | '\t' | '\n' | '\r' => self.handle_whitespace(),
-            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.handle_punctuation(),
+            'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
+            '0'..='9' => self.number(),
+            '"' => self.yarn(),
+            ' ' | '\t' | '\n' | '\r' => self.whitespace(),
+            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.punctuation(),
             '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
-                self.handle_operator()
+                self.operator()
             }
-            '#' => self.handle_comment(),
-            '\'' => self.handle_p(),
-            _ => self.handle_unknown(),
+            '#' => self.comment(),
+            '\'' => self.p(),
+            _ => self.unknown(),
         };
 
         // If it's a whitespace or a comment, try to parse the next token as this one is useless
@@ -94,35 +64,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
         if matches!(token.kind(), TokenKind::Whitespace)
             || matches!(token.kind(), TokenKind::Comment)
         {
-            return self.parse_token();
+            return self.lex_token();
         }
         token
     }
 
-    fn peek(&self) -> char {
-        self.peek_ahead(0)
-    }
-
-    fn peek_ahead(&self, ahead: usize) -> char {
-        if self.cursor + ahead >= self.chars.len() {
-            return char::default();
-        }
-
-        self.chars[self.cursor + ahead]
-    }
-
-    #[must_use]
-    fn advance(&mut self) -> usize {
-        let advanced_bytes = self.peek().len_utf8();
-        if advanced_bytes > 1 {
-            println!("YO");
-        }
-        self.col += 1;
-        self.cursor += 1;
-        advanced_bytes
-    }
-
-    fn handle_p(&mut self) -> Token<'a> {
+    fn p(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
 
@@ -144,13 +91,13 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::P, &self.raw_input[start + 1..end - 1])
     }
 
-    fn handle_unknown(&mut self) -> Token<'a> {
+    fn unknown(&mut self) -> Token<'a> {
         let end = self.advance();
 
         self.new_token(TokenKind::Unknown, &self.raw_input[self.cursor - 1..end])
     }
 
-    fn handle_comment(&mut self) -> Token<'a> {
+    fn comment(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
 
@@ -163,7 +110,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::Comment, &self.raw_input[start..end])
     }
 
-    fn handle_operator(&mut self) -> Token<'a> {
+    fn operator(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
 
@@ -210,7 +157,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(kind, op)
     }
 
-    fn handle_punctuation(&mut self) -> Token<'a> {
+    fn punctuation(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
         let kind = match self.peek() {
@@ -230,7 +177,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(kind, &self.raw_input[start..end])
     }
 
-    fn handle_whitespace(&mut self) -> Token<'a> {
+    fn whitespace(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut _end = start;
         while self.peek().is_whitespace() {
@@ -244,7 +191,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::Whitespace, "")
     }
 
-    fn handle_yarn(&mut self) -> Token<'a> {
+    fn yarn(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
         end += self.advance(); // Consume the opening quote.
@@ -284,7 +231,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..end - 1])
     }
 
-    fn handle_number(&mut self) -> Token<'a> {
+    fn number(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
 
@@ -306,7 +253,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::Number, &self.raw_input[start..end])
     }
 
-    fn handle_identifier(&mut self) -> Token<'a> {
+    fn identifier(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
         end += self.advance();

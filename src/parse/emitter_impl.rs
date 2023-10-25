@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::rc::Rc;
 
 use crate::parse::analysis::{FunctionScope, SymbolTable};
 use crate::parse::compiler;
@@ -9,17 +8,6 @@ use crate::parse::parser::{BinaryOperator, Block, DataType, Statement, Translati
 use crate::parse::{Emitter, Expression, Function, Variable};
 
 impl<'a> Emitter<'a> {
-    pub fn new(symbol_table: Rc<SymbolTable<'a>>) -> Self {
-        Self {
-            code: Vec::new(),
-            labels: std::collections::HashMap::new(),
-            control_statement_count: 0,
-            symbol_table,
-            function_scope_depth: std::collections::HashMap::new(),
-            current_function: None,
-        }
-    }
-
     pub fn emit_all(
         &mut self,
         writer: &mut BufWriter<File>,
@@ -151,25 +139,21 @@ impl<'a> Emitter<'a> {
             .for_each(|statement| self.emit_statement(statement));
     }
 
-    pub fn emit_jump(&mut self, address: Address) {
+    fn emit_jump(&mut self, address: Address) {
         self.emit_instruction(Instruction::Jump { address });
     }
 
-    pub fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
+    fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
         self.emit_instruction(Instruction::Dbg { debug_keyword });
     }
 
-    pub fn echo(&mut self, message: &str) {
+    fn echo(&mut self, message: &str) {
         self.emit_debug_info(DebugKeyword::Echo {
             message: String::from(message),
         });
     }
 
-    fn symbol_table(&self) -> &SymbolTable<'a> {
-        &self.symbol_table
-    }
-
-    pub fn emit_expression(&mut self, expression: &Expression<'a>) {
+    fn emit_expression(&mut self, expression: &Expression<'a>) {
         match expression {
             Expression::Number { value, .. } => {
                 self.emit_literal(*value);
@@ -296,7 +280,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    pub fn emit_main_call(&mut self) {
+    fn emit_main_call(&mut self) {
         self.echo("Calling main function.");
         let main_function_call = Expression::FunctionCall {
             identifier: "main",
@@ -341,7 +325,7 @@ impl<'a> Emitter<'a> {
         vec
     }
 
-    pub fn emit_load_arguments(&mut self, arguments: &Vec<Variable<'a>>) {
+    fn emit_load_arguments(&mut self, arguments: &Vec<Variable<'a>>) {
         // Load the parameters into the stack from the callee function.
         // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
         // To load them we have to get the total size of parameters and subtract it
@@ -378,7 +362,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    pub fn store(&mut self, level: u32, offset: i32, count: usize) {
+    fn store(&mut self, level: u32, offset: i32, count: usize) {
         for i in 0..count {
             self.emit_instruction(Instruction::Store {
                 level,
@@ -398,7 +382,7 @@ impl<'a> Emitter<'a> {
         control_label
     }
 
-    pub fn emit_function_label(&mut self, label: &str) {
+    fn emit_function_label(&mut self, label: &str) {
         self.emit_label(label);
     }
 
@@ -418,7 +402,7 @@ impl<'a> Emitter<'a> {
         self.emit_instruction(Instruction::Label(String::from(label)));
     }
 
-    pub fn emit_int(&mut self, size: i32) {
+    fn emit_int(&mut self, size: i32) {
         self.emit_instruction(Instruction::Int { size })
     }
 
@@ -426,7 +410,7 @@ impl<'a> Emitter<'a> {
         self.code.push(instruction);
     }
 
-    pub fn emit_statement(&mut self, statement: &Statement<'a>) {
+    fn emit_statement(&mut self, statement: &Statement<'a>) {
         match statement {
             Statement::Expression { expression, .. } => {
                 self.emit_expression(expression);

@@ -10,10 +10,7 @@
 //!
 //! Each enum also derives Debug that lets us print the tree structure of the AST.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use crate::parse::error_diagnosis::{ErrorDiagnosis, SyntaxError};
+use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::{
     BinaryOperator, Case, DataType, Number, Statement, TranslationUnit, UnaryOperator,
@@ -21,195 +18,14 @@ use crate::parse::parser::{
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
 impl<'a, 'b> Parser<'a, 'b> {
-    pub fn new(
-        tokens: Rc<Vec<Token<'a>>>,
-        error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
-    ) -> Self {
-        Self {
-            position: (1, 1),
-            tokens,
-            curr_token_index: 0,
-            error_diag,
-            error: false,
-            fixing_parsing: false,
-        }
-    }
-
-    fn go_back(&mut self) {
-        self.curr_token_index -= 1;
-        if let Some(token) = self.token() {
-            self.position = token.position();
-        }
-    }
-
-    fn consume_token(&mut self) {
-        self.curr_token_index += 1;
-        if let Some(token) = self.token() {
-            self.position = token.position();
-        }
-    }
-
-    #[must_use]
-    fn token(&self) -> Option<&Token<'a>> {
-        return self.token_offset(0);
-    }
-
-    #[must_use]
-    fn token_offset(&self, offset: i32) -> Option<&Token<'a>> {
-        if self.curr_token_index as i32 + offset >= self.tokens.len() as i32
-            || self.curr_token_index as i32 + offset < 0
-        {
-            return None;
-        }
-        Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
-    }
-
-    fn matches_token_kind(&mut self, token_kind: TokenKind) -> bool {
-        if let Some(token) = self.token() {
-            return token.kind() == token_kind;
-        }
-        false
-    }
-
-    fn expect_one_from(
-        &mut self,
-        expected_token_kinds: &[TokenKind],
-    ) -> Option<(&'a str, TokenKind)> {
-        if let Some(token) = self.token() {
-            let token_kind = token.kind();
-            let token_value = token.value();
-
-            if expected_token_kinds
-                .iter()
-                .any(|expected_token_kind| expected_token_kind == &token_kind)
-            {
-                self.consume_token();
-                self.error = false;
-            } else {
-                // Check if this is the second error in a row.
-                // If it is, return None. This will signal that we should go into panic mode.
-                // We let the callee handle this.
-                if self.error {
-                    return None;
-                }
-
-                // Log the error at the previous token as we expected something else there.
-                if !self.fixing_parsing {
-                    self.fixing_parsing = true;
-                    if let Some(prev_token) = self.token_offset(-1) {
-                        self.error_diag
-                            .borrow_mut()
-                            .expected_one_of_token_error(prev_token, expected_token_kinds);
-                        self.consume_token();
-                        let call_me_again = self.expect_one_from(expected_token_kinds);
-                        self.fixing_parsing = false;
-                        if let Some((a, b)) = call_me_again {
-                            if self.error {
-                                self.go_back();
-                            } else {
-                                return Some((a, b));
-                            }
-                        } else {
-                            self.go_back();
-                        }
-                    } else {
-                        unreachable!("No token found");
-                    }
-                }
-                self.error = true;
-            }
-
-            return Some((token_value, token_kind));
-        }
-        None
-    }
-
-    /// Expects a **token** of a certain kind. If the token is not present an error is added to the
-    /// error diagnostics. If the token is present, it is consumed and the value of the token is
-    /// returned. If the token has no value, an empty string is returned.
-    ///
-    /// Note that this function fabricates the token if it's not present to continue proper parsing.
-    /// For example, if we expect a colon, but a semicolon is present, we add an error and continue
-    /// as if a colon was present. This is useful for error recovery.
-    ///
-    /// If two expect check fails in a row we enter panic mode. This means that we start throwing
-    /// out tokens until we find a synchronizing token and None is returned. Otherwise this function
-    /// always returns Some even if an error, such as a missing token, is present.
-    ///
-    /// # Arguments
-    ///
-    /// * `token_kind`: The token kind to expect.
-    ///
-    /// returns: Some of the String value of the token. Is empty if it does not exist. None if the
-    /// the parser enters panic mode.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Expect an open parenthesis. If it is not present, pretend it's
-    /// // there and continue parsing.
-    /// self.expect(TokenKind::OpenParen)?;
-    ///
-    /// // (...)
-    ///
-    /// // Expect a close parenthesis. If it is not present, pretend it's
-    /// // there and continue parsing.
-    /// self.expect(TokenKind::CloseParen)?;
-    ///
-    /// // or
-    /// let identifier = self.expect(TokenKind::Identifier)?;
-    ///
-    /// ```
-    fn expect(&mut self, expected_token_kind: TokenKind) -> Option<&'a str> {
-        match self.expect_one_from(&[expected_token_kind]) {
-            Some((value, _)) => Some(value),
-            None => None,
-        }
-    }
-
-    fn go_into_panic_mode(&mut self) {
-        // Consume tokens until we find a synchronizing token.
-        while let Some(token) = self.token() {
-            match token.kind() {
-                TokenKind::Eof
-                | TokenKind::IfKeyword
-                | TokenKind::ForKeyword
-                | TokenKind::WhileKeyword
-                | TokenKind::DoKeyword
-                | TokenKind::LoopKeyword
-                | TokenKind::BreakKeyword
-                | TokenKind::ContinueKeyword
-                | TokenKind::FUNcKeyword
-                | TokenKind::SwitchKeyword
-                | TokenKind::ByeKeyword
-                | TokenKind::Semicolon => {
-                    break;
-                }
-                _ => {
-                    self.consume_token();
-                    continue;
-                }
-            }
-        }
-
-        // Reset the error flag as we expect the next expect call to be valid.
-        self.error = false;
-    }
-
-    fn add_error(&mut self, error_message: &str) {
-        self.error_diag
-            .borrow_mut()
-            .expected_something_error(error_message, self.token_offset(-1));
-    }
-
     pub fn parse(&mut self) -> Result<TranslationUnit<'a>, SyntaxError> {
-        let translation_unit = self.translation_unit();
+        let translation_unit = self.transl_unit();
         self.error_diag.borrow().check_errors()?;
 
         Ok(translation_unit)
     }
 
-    fn translation_unit(&mut self) -> TranslationUnit<'a> {
+    fn transl_unit(&mut self) -> TranslationUnit<'a> {
         let mut functions = Vec::<Function<'a>>::new();
         let mut variable_declarations = Vec::<Statement<'a>>::new();
         loop {
@@ -275,7 +91,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             return Some(parameters);
         }
 
-        let parameter = self.parameter()?;
+        let parameter = self.param()?;
         parameters.push(parameter);
 
         let mut invalid_params = false;
@@ -286,7 +102,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 invalid_params = invalid_params || self.expect(TokenKind::Comma).is_none();
                 if !invalid_params {
-                    let parameter = self.parameter();
+                    let parameter = self.param();
                     invalid_params = invalid_params || parameter.is_none();
                     parameters.push(parameter?);
                 }
@@ -297,7 +113,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(parameters)
     }
 
-    fn parameter(&mut self) -> Option<Variable<'a>> {
+    fn param(&mut self) -> Option<Variable<'a>> {
         let position = self.position;
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
@@ -311,7 +127,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut statements = Vec::<Statement<'a>>::new();
 
         while !self.matches_token_kind(TokenKind::CloseBrace) {
-            if let Some(statement) = self.statement() {
+            if let Some(statement) = self.stat() {
                 statements.push(statement);
             }
         }
@@ -320,16 +136,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(Block::new(position, statements))
     }
 
-    // Wrappers for print! and println! macros to use
-    // inside the Statement::PrintStatement.
-    fn print(str: &str) {
-        print!("{str}");
-    }
-    fn println(str: &str) {
-        println!("{str}");
-    }
-
-    fn statement(&mut self) -> Option<Statement<'a>> {
+    fn stat(&mut self) -> Option<Statement<'a>> {
         let token = self.token()?;
         let token_kind = token.kind();
 
@@ -340,10 +147,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
 
-                let statement = self.statement()?;
+                let statement = self.stat()?;
                 if self.matches_token_kind(TokenKind::ElseKeyword) {
                     self.expect(TokenKind::ElseKeyword)?;
-                    let else_statement = self.statement()?;
+                    let else_statement = self.stat()?;
                     Some(Statement::IfElse {
                         position: self.position,
                         expression,
@@ -372,7 +179,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::ToKeyword)?;
                 let length_expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
-                let statement = self.statement()?;
+                let statement = self.stat()?;
 
                 return Some(Statement::For {
                     position: self.position,
@@ -387,7 +194,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.expect(TokenKind::OpenParen)?;
                 let expression = self.expr()?;
                 self.expect(TokenKind::CloseParen)?;
-                let statement = self.statement()?;
+                let statement = self.stat()?;
 
                 return Some(Statement::While {
                     position: self.position,
@@ -556,7 +363,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.add_error("statement");
                 self.error = true;
                 self.go_into_panic_mode();
-                return self.statement();
+                return self.stat();
             }
         };
     }
@@ -595,23 +402,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(statement)
     }
 
-    fn matches_data_type(&self) -> bool {
-        if let Some(token) = self.token() {
-            return matches!(
-                token.kind(),
-                TokenKind::XxlppKeyword
-                    | TokenKind::PpKeyword
-                    | TokenKind::SppKeyword
-                    | TokenKind::XsppKeyword
-                    | TokenKind::PKeyword
-                    | TokenKind::NoppKeyword
-                    | TokenKind::BoobaKeyword
-                    | TokenKind::YarnKeyword
-            );
-        }
-        false
-    }
-
     fn data_type(&mut self) -> Option<DataType<'a>> {
         let token = self.expect_one_from(&[
             TokenKind::XxlppKeyword,
@@ -634,10 +424,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::YarnKeyword => Some(DataType::Yarn),
             _ => None,
         }
-    }
-
-    fn _struct_(&mut self) -> DataType<'a> {
-        todo!()
     }
 
     fn expr(&mut self) -> Option<Expression<'a>> {
@@ -860,5 +646,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         self.expect(TokenKind::CloseParen)?;
         Some(args)
+    }
+
+    fn _struct_(&mut self) -> DataType<'a> {
+        todo!()
     }
 }
