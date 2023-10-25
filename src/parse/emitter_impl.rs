@@ -4,10 +4,8 @@ use std::rc::Rc;
 
 use crate::parse::analysis::{FunctionScope, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation, EMIT_DEBUG};
-use crate::parse::parser::{Block, DataType, TranslationUnit};
-use crate::parse::{BinaryOperator, Emitter, Expression, Function, Statement, Variable};
-
-const PL0_DATA_SIZE: usize = std::mem::size_of::<i32>();
+use crate::parse::parser::{BinaryOperator, Block, DataType, Statement, TranslationUnit};
+use crate::parse::{Emitter, Expression, Function, Variable};
 
 impl<'a> Emitter<'a> {
     pub fn new(symbol_table: Rc<SymbolTable<'a>>) -> Self {
@@ -190,26 +188,27 @@ impl<'a> Emitter<'a> {
             Expression::Binary { lhs, rhs, op, .. } => {
                 self.emit_expression(lhs);
                 self.emit_expression(rhs);
+                use BinaryOperator::*;
                 match op {
-                    BinaryOperator::Add => {
+                    Add => {
                         self.emit_instruction(Instruction::Operation {
                             operation: Operation::Add,
                         });
                     }
-                    BinaryOperator::Subtract => {
+                    Subtract => {
                         self.emit_instruction(Instruction::Operation {
                             operation: Operation::Subtract,
                         });
                     }
-                    BinaryOperator::Multiply => {
+                    Multiply => {
                         self.emit_instruction(Instruction::Operation {
                             operation: Operation::Multiply,
                         });
                     }
-                    BinaryOperator::Equal => self.emit_instruction(Instruction::Operation {
+                    Equal => self.emit_instruction(Instruction::Operation {
                         operation: Operation::Equal,
                     }),
-                    BinaryOperator::GreaterThan => self.emit_instruction(Instruction::Operation {
+                    GreaterThan => self.emit_instruction(Instruction::Operation {
                         operation: Operation::GreaterThan,
                     }),
                     _ => todo!("Binary operator {:?}", op),
@@ -315,10 +314,6 @@ impl<'a> Emitter<'a> {
         self.emit_instruction(Instruction::Call { level, address });
     }
 
-    fn emit_ret(&mut self) {
-        self.emit_instruction(Instruction::Return);
-    }
-
     pub fn emit_literal(&mut self, value: i32) {
         self.emit_instruction(Instruction::Literal { value })
     }
@@ -390,8 +385,6 @@ impl<'a> Emitter<'a> {
             });
         }
     }
-
-    fn emit_start_while_label(&mut self) {}
 
     fn create_label(&mut self, label: &str) -> String {
         let control_label;

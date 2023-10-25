@@ -1,6 +1,6 @@
 //! The tokenizer for the dpp language.
 
-use crate::parse::error_diagnosis::ErrorDiagnosis;
+use crate::parse::error_diagnosis::{ErrorDiagnosis, SyntaxError};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -52,7 +52,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// // ...
     /// // The tokens then can be used for parsing.
     /// ```
-    pub fn lex(&mut self) -> Vec<Token<'a>> {
+    pub fn lex(&mut self) -> Result<Vec<Token<'a>>, SyntaxError> {
         let mut tokens = Vec::new();
         let mut token = self.parse_token();
         loop {
@@ -63,7 +63,8 @@ impl<'a, 'b> Lexer<'a, 'b> {
             }
             token = self.parse_token();
         }
-        tokens
+        self.error_diag.borrow().check_errors()?;
+        Ok(tokens)
     }
 
     fn new_token(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
@@ -231,13 +232,13 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
     fn handle_whitespace(&mut self) -> Token<'a> {
         let start = self.cursor;
-        let mut end = start;
+        let mut _end = start;
         while self.peek().is_whitespace() {
             if self.peek() == '\n' {
                 self.row += 1;
                 self.col = 0;
             }
-            end += self.advance();
+            _end += self.advance();
         }
 
         self.new_token(TokenKind::Whitespace, "")

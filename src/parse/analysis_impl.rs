@@ -1,20 +1,36 @@
 use dpp_macros::PosMacro;
 
 use crate::parse::analysis::SymbolTable;
-use crate::parse::parser::{Block, DataType, TranslationUnit};
-use crate::parse::{Expression, Function, Number, SemanticAnalyzer, Statement, UnaryOperator};
+use crate::parse::error_diagnosis::SyntaxError;
+use crate::parse::parser::{Block, DataType, Number, Statement, TranslationUnit, UnaryOperator};
+use crate::parse::{Expression, Function, SemanticAnalyzer};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
-    pub fn analyze(&mut self, translation_unit: &TranslationUnit<'a>) {
+    pub fn analyze(
+        mut self,
+        translation_unit: &TranslationUnit<'a>,
+    ) -> Result<SymbolTable<'a>, SyntaxError> {
         // Analyze global statements.
         translation_unit.functions().iter().for_each(|function| {
+            if self
+                .symbol_table()
+                .has_global_function(function.identifier())
+            {
+                self.error_diag.borrow_mut().function_already_exists(
+                    function.row(),
+                    function.col(),
+                    function.identifier(),
+                );
+            }
             self.symbol_table_mut()
                 .push_global_function(function.clone())
         });
+
         translation_unit
             .global_statements()
             .iter()
             .for_each(|statement| self.analyze_global_statement(statement));
+        self.error_diag.borrow().check_errors()?;
 
         // Analyze the parsed functions.
         translation_unit
@@ -25,10 +41,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         if !self.symbol_table().find_function("main").is_some() {
             self.error_diag.borrow_mut().no_main_method_found_error();
         }
-    }
-
-    pub fn into_symbol_table(self) -> SymbolTable<'a> {
-        self.symbol_table
+        self.error_diag.borrow().check_errors()?;
+        Ok(self.symbol_table)
     }
 
     fn analyze_function(&mut self, function: &Function<'a>) {
@@ -321,7 +335,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 self.check_if_mixed_data_types(&lhs_data_type, &rhs_data_type, &position);
                 // TODO: Check whether the binary operator is available for the given data type.
-                use crate::parse::BinaryOperator::*;
+                use crate::parse::parser::BinaryOperator::*;
                 match op {
                     Add | Subtract | Multiply | Divide => lhs_data_type,
                     NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan

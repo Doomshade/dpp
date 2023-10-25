@@ -1,8 +1,12 @@
+use std::cell;
+use std::collections;
+use std::rc;
+
 use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::Instruction;
 use crate::parse::error_diagnosis::ErrorDiagnosis;
+use crate::parse::lexer::Token;
 use crate::parse::parser::{Block, Expression, Function, Variable};
-use std::fmt::{Display, Formatter};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -20,10 +24,41 @@ pub struct Lexer<'a, 'b> {
     cursor: usize,
     row: u32,
     col: u32,
-    error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Parser<'a, 'b> {
+    tokens: rc::Rc<Vec<Token<'a>>>,
+    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    curr_token_index: usize,
+    position: (u32, u32),
+    error: bool,
+    fixing_parsing: bool,
+}
+
+pub struct SemanticAnalyzer<'a, 'b> {
+    symbol_table: SymbolTable<'a>,
+    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    current_function: Option<&'a str>,
+    loop_stack: usize,
+}
+
+pub struct Emitter<'a> {
+    /// The instructions to be emitted.
+    code: Vec<Instruction>,
+    /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
+    symbol_table: rc::Rc<SymbolTable<'a>>,
+    /// The labels of the program.
+    labels: collections::HashMap<String, u32>,
+    current_function: Option<&'a str>,
+    function_scope_depth: collections::HashMap<&'a str, u32>,
+    control_statement_count: u32,
 }
 
 mod lexer {
+    use std::fmt;
+
     use dpp_macros::PosMacro;
     use dpp_macros_derive::PosMacro;
 
@@ -75,8 +110,8 @@ mod lexer {
         }
     }
 
-    impl std::fmt::Display for Token<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl fmt::Display for Token<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{} ({})", self.value, self.kind)
         }
     }
@@ -238,11 +273,143 @@ mod lexer {
 }
 
 mod parser {
+    use std::fmt;
+
     use dpp_macros::PosMacro;
     use dpp_macros_derive::PosMacro;
 
-    use crate::parse::{BinaryOperator, Number, Statement, UnaryOperator};
+    #[derive(Clone, Debug)]
+    pub struct Case<'a> {
+        expression: Expression<'a>,
+        block: Box<Block<'a>>,
+    }
 
+    impl<'a> Case<'a> {
+        pub fn new(expression: Expression<'a>, block: Box<Block<'a>>) -> Self {
+            Case { expression, block }
+        }
+
+        pub fn expression(&self) -> &Expression<'a> {
+            &self.expression
+        }
+        pub fn block(&self) -> &Box<Block<'a>> {
+            &self.block
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub enum Number {
+        Pp,
+        Spp,
+        Xspp,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Struct {}
+
+    #[derive(Clone, Debug)]
+    pub enum BinaryOperator {
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        NotEqual,
+        Equal,
+        GreaterThan,
+        GreaterThanOrEqual,
+        LessThan,
+        LessThanOrEqual,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum UnaryOperator {
+        Not,
+        Negate,
+    }
+
+    impl fmt::Display for UnaryOperator {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                UnaryOperator::Not => write!(f, "!"),
+                UnaryOperator::Negate => write!(f, "-"),
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum Statement<'a> {
+        VariableDeclaration {
+            variable: Variable<'a>,
+        },
+        If {
+            position: (u32, u32),
+            expression: Expression<'a>,
+            statement: Box<Statement<'a>>,
+        },
+        IfElse {
+            position: (u32, u32),
+            expression: Expression<'a>,
+            statement: Box<Statement<'a>>,
+            else_statement: Box<Statement<'a>>,
+        },
+        Bye {
+            position: (u32, u32),
+            expression: Option<Expression<'a>>,
+        },
+        Print {
+            position: (u32, u32),
+            print_function: fn(&str),
+            expression: Expression<'a>,
+        },
+        Block {
+            position: (u32, u32),
+            block: Box<Block<'a>>,
+        },
+        Expression {
+            position: (u32, u32),
+            expression: Expression<'a>,
+        },
+        Empty {
+            position: (u32, u32),
+        },
+        For {
+            position: (u32, u32),
+            index_ident: &'a str,
+            ident_expression: Option<Expression<'a>>,
+            length_expression: Expression<'a>,
+            statement: Box<Statement<'a>>,
+        },
+        While {
+            position: (u32, u32),
+            expression: Expression<'a>,
+            statement: Box<Statement<'a>>,
+        },
+        DoWhile {
+            position: (u32, u32),
+            block: Block<'a>,
+            expression: Expression<'a>,
+        },
+        Loop {
+            position: (u32, u32),
+            block: Box<Block<'a>>,
+        },
+        Break {
+            position: (u32, u32),
+        },
+        Continue {
+            position: (u32, u32),
+        },
+        Switch {
+            position: (u32, u32),
+            expression: Expression<'a>,
+            cases: Vec<Case<'a>>,
+        },
+        Assignment {
+            position: (u32, u32),
+            identifier: &'a str,
+            expression: Expression<'a>,
+        },
+    }
     #[derive(Clone, Debug, PosMacro)]
     pub struct TranslationUnit<'a> {
         position: (u32, u32),
@@ -405,9 +572,6 @@ mod parser {
         pub fn scope_id(&self) -> Option<usize> {
             self.scope_id
         }
-        pub fn is_parameter(&self) -> bool {
-            self.is_parameter
-        }
     }
 
     #[derive(Clone, Debug)]
@@ -484,7 +648,7 @@ mod parser {
         }
     }
 
-    impl std::fmt::Display for Expression<'_> {
+    impl fmt::Display for Expression<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let formatted = match self {
                 Expression::Number { value, .. } => value.to_string(),
@@ -534,7 +698,7 @@ mod parser {
         }
     }
 
-    impl std::fmt::Display for DataType<'_> {
+    impl fmt::Display for DataType<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 DataType::Number(_) => write!(f, "number")?,
@@ -579,7 +743,9 @@ mod analysis {
     use std::collections;
     use std::rc;
 
+    use crate::parse::error_diagnosis::ErrorDiagnosis;
     use crate::parse::parser::{Function, Variable};
+    use crate::parse::SemanticAnalyzer;
 
     #[derive(Clone, Debug)]
     pub struct SymbolTable<'a> {
@@ -587,6 +753,25 @@ mod analysis {
         global_scope: GlobalScope<'a>,
         /// Current stack of function scopes.
         function_scopes: Vec<FunctionScope<'a>>,
+    }
+
+    impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
+        pub fn new(error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
+            Self {
+                symbol_table: SymbolTable::new(),
+                error_diag,
+                current_function: None,
+                loop_stack: 0,
+            }
+        }
+
+        pub fn symbol_table_mut(&mut self) -> &mut SymbolTable<'a> {
+            &mut self.symbol_table
+        }
+
+        pub fn symbol_table(&self) -> &SymbolTable<'a> {
+            &self.symbol_table
+        }
     }
 
     impl<'a> SymbolTable<'a> {
@@ -647,6 +832,10 @@ mod analysis {
 
         pub fn push_local_variable(&mut self, variable: Variable<'a>) {
             self.current_function_scope_mut().push_variable(variable);
+        }
+
+        pub fn has_global_function(&self, identifier: &str) -> bool {
+            self.global_scope.has_function(identifier)
         }
 
         pub fn push_global_function(&mut self, function: Function<'a>) {
@@ -740,21 +929,7 @@ mod analysis {
             None
         }
 
-        pub fn remove_variable(&mut self, identifier: &str) {
-            self.variables.remove(identifier);
-        }
-
-        pub fn get_variables(
-            &self,
-        ) -> collections::hash_map::Values<'_, &'a str, rc::Rc<Variable<'a>>> {
-            self.variables.values()
-        }
-
-        pub fn has_variable(&self, identifier: &str) -> bool {
-            self.variables.contains_key(identifier)
-        }
-
-        fn push_function(&mut self, mut function: Function<'a>) {
+        fn push_function(&mut self, function: Function<'a>) {
             self.functions
                 .insert(function.identifier(), rc::Rc::new(function));
         }
@@ -763,24 +938,8 @@ mod analysis {
             self.functions.get(identifier)
         }
 
-        pub fn remove_function(&mut self, identifier: &str) {
-            self.functions.remove(identifier);
-        }
-
-        pub fn get_functions(
-            &self,
-        ) -> collections::hash_map::Values<'_, &'a str, rc::Rc<Function<'a>>> {
-            self.functions.values()
-        }
-
         pub fn has_function(&self, identifier: &str) -> bool {
             self.functions.contains_key(identifier)
-        }
-        pub fn variables(&self) -> &collections::HashMap<&'a str, rc::Rc<Variable<'a>>> {
-            &self.variables
-        }
-        pub fn functions(&self) -> &collections::HashMap<&'a str, rc::Rc<Function<'a>>> {
-            &self.functions
         }
     }
 
@@ -864,21 +1023,12 @@ mod analysis {
             self.scope_stack.push(scope.clone());
             self.generated_scopes.push(scope);
         }
-
-        pub fn current_scope(&self) -> Option<&rc::Rc<cell::RefCell<Scope<'a>>>> {
-            self.scope_stack.last()
-        }
-
         pub fn current_scope_mut(&mut self) -> Option<&mut rc::Rc<cell::RefCell<Scope<'a>>>> {
             self.scope_stack.last_mut()
         }
 
         pub fn pop_scope(&mut self) {
             self.scope_stack.pop();
-        }
-
-        pub fn scopes(&self) -> &Vec<rc::Rc<cell::RefCell<Scope<'a>>>> {
-            &self.scope_stack
         }
     }
 
@@ -905,16 +1055,8 @@ mod analysis {
             self.scope.push_variable(variable);
         }
 
-        pub fn has_variable(&self, identifier: &str) -> bool {
-            self.scope.has_variable(identifier)
-        }
-
         pub fn get_variable(&self, identifier: &str) -> Option<rc::Rc<Variable<'a>>> {
             self.scope.get_variable(identifier)
-        }
-
-        pub fn scope(&self) -> &Scope<'a> {
-            &self.scope
         }
 
         pub fn push_function(&mut self, function: Function<'a>) {
@@ -927,163 +1069,6 @@ mod analysis {
 
         pub fn has_function(&self, identifier: &str) -> bool {
             self.scope.has_function(identifier)
-        }
-    }
-}
-
-pub struct SemanticAnalyzer<'a, 'b> {
-    symbol_table: SymbolTable<'a>,
-    error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
-    current_function: Option<&'a str>,
-    loop_stack: usize,
-    scope_index: usize,
-}
-
-impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
-    pub fn new(error_diag: std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
-        Self {
-            symbol_table: SymbolTable::new(),
-            error_diag,
-            current_function: None,
-            loop_stack: 0,
-            scope_index: 0,
-        }
-    }
-
-    pub fn symbol_table_mut(&mut self) -> &mut SymbolTable<'a> {
-        &mut self.symbol_table
-    }
-
-    pub fn symbol_table(&self) -> &SymbolTable<'a> {
-        &self.symbol_table
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Statement<'a> {
-    VariableDeclaration {
-        variable: Variable<'a>,
-    },
-    If {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-    },
-    IfElse {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-        else_statement: Box<Statement<'a>>,
-    },
-    Bye {
-        position: (u32, u32),
-        expression: Option<Expression<'a>>,
-    },
-    Print {
-        position: (u32, u32),
-        print_function: fn(&str),
-        expression: Expression<'a>,
-    },
-    Block {
-        position: (u32, u32),
-        block: Box<Block<'a>>,
-    },
-    Expression {
-        position: (u32, u32),
-        expression: Expression<'a>,
-    },
-    Empty {
-        position: (u32, u32),
-    },
-    For {
-        position: (u32, u32),
-        index_ident: &'a str,
-        ident_expression: Option<Expression<'a>>,
-        length_expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-    },
-    While {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        statement: Box<Statement<'a>>,
-    },
-    DoWhile {
-        position: (u32, u32),
-        block: Block<'a>,
-        expression: Expression<'a>,
-    },
-    Loop {
-        position: (u32, u32),
-        block: Box<Block<'a>>,
-    },
-    Break {
-        position: (u32, u32),
-    },
-    Continue {
-        position: (u32, u32),
-    },
-    Switch {
-        position: (u32, u32),
-        expression: Expression<'a>,
-        cases: Vec<Case<'a>>,
-    },
-    Assignment {
-        position: (u32, u32),
-        identifier: &'a str,
-        expression: Expression<'a>,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub struct Case<'a> {
-    expression: Expression<'a>,
-    block: Box<Block<'a>>,
-}
-
-impl<'a> Case<'a> {
-    pub fn expression(&self) -> &Expression<'a> {
-        &self.expression
-    }
-    pub fn block(&self) -> &Box<Block<'a>> {
-        &self.block
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Number {
-    Pp,
-    Spp,
-    Xspp,
-}
-
-#[derive(Clone, Debug)]
-pub struct Struct {}
-
-#[derive(Clone, Debug)]
-pub enum BinaryOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    NotEqual,
-    Equal,
-    GreaterThan,
-    GreaterThanOrEqual,
-    LessThan,
-    LessThanOrEqual,
-}
-
-#[derive(Clone, Debug)]
-pub enum UnaryOperator {
-    Not,
-    Negate,
-}
-
-impl Display for UnaryOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnaryOperator::Not => write!(f, "!"),
-            UnaryOperator::Negate => write!(f, "-"),
         }
     }
 }
@@ -1205,30 +1190,20 @@ mod emitter {
     pub(crate) const EMIT_DEBUG: bool = true;
 }
 
-pub struct Emitter<'a> {
-    /// The instructions to be emitted.
-    code: Vec<Instruction>,
-    /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
-    symbol_table: std::rc::Rc<SymbolTable<'a>>,
-    /// The labels of the program.
-    labels: std::collections::HashMap<String, u32>,
-    current_function: Option<&'a str>,
-    function_scope_depth: std::collections::HashMap<&'a str, u32>,
-    control_statement_count: u32,
-}
-
 pub mod compiler {
     use std::cell;
     use std::error;
     use std::fs;
+    use std::io;
+    use std::process;
     use std::rc;
+    use std::time;
 
     use crate::parse::analysis::SymbolTable;
-    use crate::parse::error_diagnosis::ErrorDiagnosis;
+    use crate::parse::error_diagnosis::{ErrorDiagnosis, SyntaxError};
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
-    use crate::parse::parser_impl::Parser;
-    use crate::parse::{Emitter, Lexer, SemanticAnalyzer};
+    use crate::parse::{Emitter, Lexer, Parser, SemanticAnalyzer};
 
     pub struct DppCompiler;
 
@@ -1241,94 +1216,81 @@ pub mod compiler {
             pl0_interpret_path: &str,
         ) -> Result<(), Box<dyn error::Error>> {
             let file_contents = fs::read_to_string(file_path)?;
-            let error_diag = std::rc::Rc::new(std::cell::RefCell::new(ErrorDiagnosis::new(
+            let error_diag = rc::Rc::new(cell::RefCell::new(ErrorDiagnosis::new(
                 file_path,
                 &file_contents,
             )));
-            // Lex -> parse -> analyze -> emit.
+
             // Pass error diag to each step.
             println!("Parsing program...");
-            let start = std::time::Instant::now();
-            let tokens = Self::lex(&file_contents, &error_diag)?;
-            dbg!(&tokens);
-            let translation_unit = Self::parse(tokens, &error_diag)?;
-            dbg!(&translation_unit);
-            let symbol_table = Self::analyze(&error_diag, &translation_unit)?;
+            let start = time::Instant::now();
+            {
+                // Lex -> parse -> analyze -> emit.
+                let tokens = Self::lex(&file_contents, &error_diag)?;
+                let translation_unit = Self::parse(tokens, &error_diag)?;
+                let symbol_table = Self::analyze(&error_diag, &translation_unit)?;
+                Self::emit(output_file, &translation_unit, symbol_table)?;
+            }
             let duration = start.elapsed();
             println!("Program parsed in {:?}", duration);
 
-            // Create a Rc<T> because the emitter is NOT allowed to modify the symbol table.
-            // The emitter is only allowed to look up functions, variables etc.
-            println!("Emitting program...");
-            let start = std::time::Instant::now();
-            Self::emit(output_file, &translation_unit, symbol_table)?;
-            let duration = start.elapsed();
-            println!("Program emitted in {:?}", duration);
             println!("Running program...");
-            let start = std::time::Instant::now();
-            let child = std::process::Command::new(pl0_interpret_path)
-                .args(["-a", "+d", "+l", "+i", "+t", "+s", output_file])
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?;
+            let start = time::Instant::now();
+            {
+                let child = process::Command::new(pl0_interpret_path)
+                    .args(["-a", "+d", "+l", "+i", "+t", "+s", output_file])
+                    .stdout(process::Stdio::piped())
+                    .stderr(process::Stdio::piped())
+                    .spawn()?;
 
-            let out = child.wait_with_output()?;
-            let stdout = String::from_utf8(out.stdout)?;
-            let stderr = String::from_utf8(out.stderr)?;
+                let out = child.wait_with_output()?;
+                let stdout = String::from_utf8(out.stdout)?;
+                let stderr = String::from_utf8(out.stderr)?;
 
-            if DEBUG {
-                println!("{stdout}");
-            }
+                if DEBUG {
+                    println!("{stdout}");
+                }
 
-            if !stderr.is_empty() {
-                eprintln!("ERROR: {stderr}");
+                if !stderr.is_empty() {
+                    eprintln!("ERROR: {stderr}");
+                }
             }
             let duration = start.elapsed();
             println!("Program finished in {:?}", duration);
+
             Ok(())
+        }
+
+        fn lex<'a>(
+            input: &'a str,
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
+        ) -> Result<Vec<Token<'a>>, SyntaxError> {
+            Lexer::new(input, error_diag.clone()).lex()
+        }
+
+        fn parse<'a>(
+            tokens: Vec<Token<'a>>,
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
+        ) -> Result<TranslationUnit<'a>, SyntaxError> {
+            Parser::new(rc::Rc::new(tokens), error_diag.clone()).parse()
+        }
+
+        fn analyze<'a>(
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
+            translation_unit: &TranslationUnit<'a>,
+        ) -> Result<SymbolTable<'a>, SyntaxError> {
+            SemanticAnalyzer::new(rc::Rc::clone(&error_diag)).analyze(&translation_unit)
         }
 
         fn emit<'a>(
             output_file: &str,
             translation_unit: &TranslationUnit<'a>,
             symbol_table: SymbolTable<'a>,
-        ) -> Result<(), Box<dyn error::Error>> {
-            let mut emitter = Emitter::new(rc::Rc::new(symbol_table));
-
-            let file = fs::File::create(output_file)?;
-            let mut writer = std::io::BufWriter::new(file);
-            emitter.emit_all(&mut writer, &translation_unit)?;
-            Ok(())
-        }
-
-        fn analyze<'a>(
-            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
-            translation_unit: &TranslationUnit<'a>,
-        ) -> Result<SymbolTable<'a>, Box<dyn error::Error>> {
-            let mut analyzer = SemanticAnalyzer::new(rc::Rc::clone(&error_diag));
-            analyzer.analyze(&translation_unit);
-            error_diag.borrow().check_errors()?;
-            Ok(analyzer.into_symbol_table())
-        }
-
-        fn lex<'a>(
-            input: &'a str,
-            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
-        ) -> Result<Vec<Token<'a>>, Box<dyn error::Error>> {
-            let mut lexer = Lexer::new(input, error_diag.clone());
-            let tokens = lexer.lex();
-            error_diag.borrow().check_errors()?;
-            Ok(tokens)
-        }
-
-        fn parse<'a>(
-            tokens: Vec<Token<'a>>,
-            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
-        ) -> Result<TranslationUnit<'a>, Box<dyn error::Error>> {
-            let mut parser = Parser::new(rc::Rc::new(tokens), error_diag.clone());
-            let result = parser.parse();
-            error_diag.borrow().check_errors()?;
-            Ok(result)
+        ) -> io::Result<()> {
+            Emitter::new(rc::Rc::new(symbol_table)).emit_all(
+                &mut io::BufWriter::new(fs::File::create(output_file)?),
+                &translation_unit,
+            )
         }
     }
 

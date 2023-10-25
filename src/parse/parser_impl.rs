@@ -11,26 +11,14 @@
 //! Each enum also derives Debug that lets us print the tree structure of the AST.
 
 use std::cell::RefCell;
-use std::fmt::Debug;
 use std::rc::Rc;
 
-use crate::parse::error_diagnosis::ErrorDiagnosis;
+use crate::parse::error_diagnosis::{ErrorDiagnosis, SyntaxError};
 use crate::parse::lexer::{Token, TokenKind};
-use crate::parse::parser::{DataType, TranslationUnit};
-use crate::parse::{
-    BinaryOperator, Block, Case, Expression, Function, Number, Statement, UnaryOperator, Variable,
+use crate::parse::parser::{
+    BinaryOperator, Case, DataType, Number, Statement, TranslationUnit, UnaryOperator,
 };
-
-#[derive(Clone, Debug)]
-pub struct Parser<'a, 'b> {
-    tokens: Rc<Vec<Token<'a>>>,
-    error_diag: Rc<RefCell<ErrorDiagnosis<'a, 'b>>>,
-    curr_token_index: usize,
-    position: (u32, u32),
-    error: bool,
-    // TODO: rename this
-    fixing_parsing: bool,
-}
+use crate::parse::{Block, Expression, Function, Parser, Variable};
 
 impl<'a, 'b> Parser<'a, 'b> {
     pub fn new(
@@ -214,8 +202,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             .expected_something_error(error_message, self.token_offset(-1));
     }
 
-    pub fn parse(&mut self) -> TranslationUnit<'a> {
-        self.translation_unit()
+    pub fn parse(&mut self) -> Result<TranslationUnit<'a>, SyntaxError> {
+        let translation_unit = self.translation_unit();
+        self.error_diag.borrow().check_errors()?;
+
+        Ok(translation_unit)
     }
 
     fn translation_unit(&mut self) -> TranslationUnit<'a> {
@@ -574,10 +565,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.expect(TokenKind::CaseKeyword)?;
         let expression = self.expr()?;
         let block = self.block()?;
-        Some(Case {
-            expression,
-            block: Box::new(block),
-        })
+        Some(Case::new(expression, Box::new(block)))
     }
 
     fn var_decl(&mut self) -> Option<Statement<'a>> {

@@ -52,7 +52,7 @@ impl PartialOrd for ErrorMessage {
 #[derive(Debug)]
 pub struct ErrorDiagnosis<'a, 'b> {
     file_name: &'b str,
-    file_contents: &'a str,
+    _file_contents: &'a str,
     /// Using hash map to remove duplicate messages
     error_messages: HashMap<String, ErrorMessage>,
 }
@@ -62,17 +62,13 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     pub fn new(file_name: &'b str, file_contents: &'a str) -> Self {
         Self {
             file_name,
-            file_contents,
+            _file_contents: file_contents,
             error_messages: HashMap::new(),
         }
     }
 
     pub fn missing_return_statement(&mut self, row: u32, col: u32) {
         self.insert_error_message(row, col, "Missing return statement.");
-    }
-
-    pub fn handle(&mut self, error: &str) {
-        self.handle_error_at(0, 0, error);
     }
 
     pub fn invalid_escaped_character(&mut self, row: u32, col: u32, character: char) {
@@ -183,10 +179,6 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             token.col(),
             format!("Expected {expected_token_kind}.").as_str(),
         );
-    }
-
-    pub fn handle_error_at(&mut self, row: u32, col: u32, error: &str) {
-        self.insert_error_message(row, col, error);
     }
 
     pub fn variable_already_exists(&mut self, row: u32, col: u32, var_name: &str) {
