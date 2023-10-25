@@ -111,7 +111,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::While {
                 expression,
                 statement,
-                position,
+                ..
             } => {
                 let data_type = self.eval(expression);
                 self.check_data_type(
@@ -123,7 +123,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.analyze_statement(statement);
                 self.loop_stack -= 1;
             }
-            Statement::Loop { block, position } => {
+            Statement::Loop { block, .. } => {
                 self.loop_stack += 1;
                 block
                     .statements()
@@ -195,15 +195,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // Nothing :)
             }
             Statement::Switch {
-                expression,
-                cases,
-                position,
+                expression, cases, ..
             } => {
                 let switch_data_type = self.eval(expression);
                 if let Some(mismatched_data_type) = cases
                     .iter()
                     .map(|case| (case.block().position(), self.eval(case.expression())))
-                    .find(|(position, data_type)| *data_type != switch_data_type)
+                    .find(|(_, data_type)| *data_type != switch_data_type)
                 {
                     self.check_data_type(
                         &switch_data_type,
@@ -237,6 +235,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         &(ident_expression.row(), ident_expression.col()),
                     );
                 }
+                self.check_data_type(
+                    &DataType::Number(Number::Pp),
+                    &self.eval(length_expression),
+                    &(length_expression.row(), length_expression.col()),
+                );
+                self.analyze_statement(statement);
             }
             _ => {
                 self.error_diag
@@ -394,7 +398,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn begin_function(&mut self, function: &Function<'a>) {
         self.loop_stack = 0;
         self.current_function = Some(function.identifier());
-        let mut ref_mut = self.symbol_table_mut();
+        let ref_mut = self.symbol_table_mut();
         ref_mut.push_function(function.clone());
         ref_mut.push_scope();
         function

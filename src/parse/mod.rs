@@ -2,6 +2,7 @@ use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::Instruction;
 use crate::parse::error_diagnosis::ErrorDiagnosis;
 use crate::parse::parser::{Block, Expression, Function, Variable};
+use std::fmt::{Display, Formatter};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -490,7 +491,9 @@ mod parser {
                 Expression::P { value, .. } => value.to_string(),
                 Expression::Booba { value, .. } => value.to_string(),
                 Expression::Yarn { value, .. } => value.to_string(),
-                Expression::Unary { operand, .. } => "Unary expression".to_string(),
+                Expression::Unary { operand, op, .. } => {
+                    format!("Unary expression {}{}", op, operand)
+                }
                 Expression::Binary { .. } => "Binary expression".to_string(),
                 Expression::Identifier { identifier, .. } => identifier.to_string(),
                 Expression::FunctionCall { identifier, .. } => {
@@ -655,7 +658,7 @@ mod analysis {
                 .push(FunctionScope::new(function_identifier))
         }
 
-        pub fn find_function(&self, identifier: &str) -> Option<&std::rc::Rc<Function<'a>>> {
+        pub fn find_function(&self, identifier: &str) -> Option<&rc::Rc<Function<'a>>> {
             self.global_scope.get_function(identifier)
         }
 
@@ -710,9 +713,9 @@ mod analysis {
     #[derive(Clone, Debug)]
     pub struct Scope<'a> {
         /// Variable symbol table.
-        variables: std::collections::HashMap<&'a str, std::rc::Rc<Variable<'a>>>,
+        variables: collections::HashMap<&'a str, rc::Rc<Variable<'a>>>,
         /// Function symbol table.
-        functions: std::collections::HashMap<&'a str, std::rc::Rc<Function<'a>>>,
+        functions: collections::HashMap<&'a str, rc::Rc<Function<'a>>>,
         id: usize,
     }
 
@@ -727,10 +730,10 @@ mod analysis {
         fn push_variable(&mut self, mut variable: Variable<'a>) {
             variable.set_scope_id(self.id);
             self.variables
-                .insert(variable.identifier(), std::rc::Rc::new(variable));
+                .insert(variable.identifier(), rc::Rc::new(variable));
         }
 
-        pub fn get_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
+        pub fn get_variable(&self, identifier: &str) -> Option<rc::Rc<Variable<'a>>> {
             if let Some(variable) = self.variables.get(identifier) {
                 return Some(variable.clone());
             }
@@ -743,7 +746,7 @@ mod analysis {
 
         pub fn get_variables(
             &self,
-        ) -> std::collections::hash_map::Values<'_, &'a str, std::rc::Rc<Variable<'a>>> {
+        ) -> collections::hash_map::Values<'_, &'a str, rc::Rc<Variable<'a>>> {
             self.variables.values()
         }
 
@@ -753,10 +756,10 @@ mod analysis {
 
         fn push_function(&mut self, mut function: Function<'a>) {
             self.functions
-                .insert(function.identifier(), std::rc::Rc::new(function));
+                .insert(function.identifier(), rc::Rc::new(function));
         }
 
-        pub fn get_function(&self, identifier: &str) -> Option<&std::rc::Rc<Function<'a>>> {
+        pub fn get_function(&self, identifier: &str) -> Option<&rc::Rc<Function<'a>>> {
             self.functions.get(identifier)
         }
 
@@ -766,17 +769,17 @@ mod analysis {
 
         pub fn get_functions(
             &self,
-        ) -> std::collections::hash_map::Values<'_, &'a str, std::rc::Rc<Function<'a>>> {
+        ) -> collections::hash_map::Values<'_, &'a str, rc::Rc<Function<'a>>> {
             self.functions.values()
         }
 
         pub fn has_function(&self, identifier: &str) -> bool {
             self.functions.contains_key(identifier)
         }
-        pub fn variables(&self) -> &std::collections::HashMap<&'a str, std::rc::Rc<Variable<'a>>> {
+        pub fn variables(&self) -> &collections::HashMap<&'a str, rc::Rc<Variable<'a>>> {
             &self.variables
         }
-        pub fn functions(&self) -> &std::collections::HashMap<&'a str, std::rc::Rc<Function<'a>>> {
+        pub fn functions(&self) -> &collections::HashMap<&'a str, rc::Rc<Function<'a>>> {
             &self.functions
         }
     }
@@ -906,7 +909,7 @@ mod analysis {
             self.scope.has_variable(identifier)
         }
 
-        pub fn get_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {
+        pub fn get_variable(&self, identifier: &str) -> Option<rc::Rc<Variable<'a>>> {
             self.scope.get_variable(identifier)
         }
 
@@ -918,7 +921,7 @@ mod analysis {
             self.scope.push_function(function);
         }
 
-        pub fn get_function(&self, identifier: &str) -> Option<&std::rc::Rc<Function<'a>>> {
+        pub fn get_function(&self, identifier: &str) -> Option<&rc::Rc<Function<'a>>> {
             self.scope.get_function(identifier)
         }
 
@@ -1076,6 +1079,15 @@ pub enum UnaryOperator {
     Negate,
 }
 
+impl Display for UnaryOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOperator::Not => write!(f, "!"),
+            UnaryOperator::Negate => write!(f, "-"),
+        }
+    }
+}
+
 mod emitter {
     #[derive(Clone, Debug)]
     pub enum Address {
@@ -1206,10 +1218,10 @@ pub struct Emitter<'a> {
 }
 
 pub mod compiler {
-    use std::cell::RefCell;
-    use std::error::Error;
+    use std::cell;
+    use std::error;
     use std::fs;
-    use std::rc::Rc;
+    use std::rc;
 
     use crate::parse::analysis::SymbolTable;
     use crate::parse::error_diagnosis::ErrorDiagnosis;
@@ -1227,7 +1239,7 @@ pub mod compiler {
             file_path: &str,
             output_file: &str,
             pl0_interpret_path: &str,
-        ) -> Result<(), Box<dyn Error>> {
+        ) -> Result<(), Box<dyn error::Error>> {
             let file_contents = fs::read_to_string(file_path)?;
             let error_diag = std::rc::Rc::new(std::cell::RefCell::new(ErrorDiagnosis::new(
                 file_path,
@@ -1280,8 +1292,8 @@ pub mod compiler {
             output_file: &str,
             translation_unit: &TranslationUnit<'a>,
             symbol_table: SymbolTable<'a>,
-        ) -> Result<(), Box<dyn Error>> {
-            let mut emitter = Emitter::new(std::rc::Rc::new(symbol_table));
+        ) -> Result<(), Box<dyn error::Error>> {
+            let mut emitter = Emitter::new(rc::Rc::new(symbol_table));
 
             let file = fs::File::create(output_file)?;
             let mut writer = std::io::BufWriter::new(file);
@@ -1290,10 +1302,10 @@ pub mod compiler {
         }
 
         fn analyze<'a>(
-            error_diag: &Rc<RefCell<ErrorDiagnosis<'a, '_>>>,
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
             translation_unit: &TranslationUnit<'a>,
-        ) -> Result<SymbolTable<'a>, Box<dyn Error>> {
-            let mut analyzer = SemanticAnalyzer::new(std::rc::Rc::clone(&error_diag));
+        ) -> Result<SymbolTable<'a>, Box<dyn error::Error>> {
+            let mut analyzer = SemanticAnalyzer::new(rc::Rc::clone(&error_diag));
             analyzer.analyze(&translation_unit);
             error_diag.borrow().check_errors()?;
             Ok(analyzer.into_symbol_table())
@@ -1301,8 +1313,8 @@ pub mod compiler {
 
         fn lex<'a>(
             input: &'a str,
-            error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
-        ) -> Result<Vec<Token<'a>>, Box<dyn Error>> {
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
+        ) -> Result<Vec<Token<'a>>, Box<dyn error::Error>> {
             let mut lexer = Lexer::new(input, error_diag.clone());
             let tokens = lexer.lex();
             error_diag.borrow().check_errors()?;
@@ -1311,9 +1323,9 @@ pub mod compiler {
 
         fn parse<'a>(
             tokens: Vec<Token<'a>>,
-            error_diag: &std::rc::Rc<std::cell::RefCell<ErrorDiagnosis<'a, '_>>>,
-        ) -> Result<TranslationUnit<'a>, Box<dyn Error>> {
-            let mut parser = Parser::new(std::rc::Rc::new(tokens), error_diag.clone());
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
+        ) -> Result<TranslationUnit<'a>, Box<dyn error::Error>> {
+            let mut parser = Parser::new(rc::Rc::new(tokens), error_diag.clone());
             let result = parser.parse();
             error_diag.borrow().check_errors()?;
             Ok(result)

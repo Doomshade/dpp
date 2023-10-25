@@ -240,10 +240,13 @@ impl<'a> Emitter<'a> {
 
     fn emit_function_call(&mut self, arguments: &Vec<Expression<'a>>, identifier: &str) {
         // Size in instructions.
-        let mut return_type_size: usize = 0;
-        let mut arguments_size: usize = 0;
+        let return_type_size;
+        let arguments_size;
         if identifier == "main" {
-            (return_type_size, arguments_size) = self.main_function_descriptor();
+            // Doing this only because the IntelliJ Idea plugin considers this an error :(
+            let (r, a) = self.main_function_descriptor();
+            return_type_size = r;
+            arguments_size = a;
         } else {
             let symbol_table = self.symbol_table();
             let function = symbol_table
