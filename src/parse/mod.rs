@@ -675,7 +675,6 @@ mod analysis {
 
         pub fn push_function(&mut self, function: Function<'a>) {
             self.push_function_scope(function.identifier());
-            self.global_scope.push_function(function);
         }
 
         pub fn find_global_variable(&self, identifier: &str) -> Option<std::rc::Rc<Variable<'a>>> {

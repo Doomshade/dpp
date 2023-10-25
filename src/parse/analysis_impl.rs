@@ -7,10 +7,15 @@ use crate::parse::{Expression, Function, Number, SemanticAnalyzer, Statement, Un
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     pub fn analyze(&mut self, translation_unit: &TranslationUnit<'a>) {
         // Analyze global statements.
+        translation_unit.functions().iter().for_each(|function| {
+            self.symbol_table_mut()
+                .push_global_function(function.clone())
+        });
         translation_unit
             .global_statements()
             .iter()
             .for_each(|statement| self.analyze_global_statement(statement));
+
         // Analyze the parsed functions.
         translation_unit
             .functions()

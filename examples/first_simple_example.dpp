@@ -50,6 +50,11 @@ FUNc asd(firstarg: pp, aa: pp) -> pp {
 }
 
 
+FUNc main() -> pp {
+    pp -> y = 123;
+    pp -> z = hellyea(y, 123);
+    bye 0;
+}
 
 FUNc hellyea(fuk: pp, dis: pp) -> pp {
     pp -> yup = (1 + 3) * 3;
@@ -66,10 +71,4 @@ FUNc hellyea(fuk: pp, dis: pp) -> pp {
     }
 
     bye 69;
-}
-
-FUNc main() -> pp {
-    pp -> y = 123;
-    pp -> z = hellyea(y, 123);
-    bye 0;
 }
