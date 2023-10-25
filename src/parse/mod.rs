@@ -27,7 +27,7 @@ pub struct Lexer<'a, 'b> {
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Parser<'a, 'b> {
     tokens: rc::Rc<Vec<Token<'a>>>,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
@@ -37,6 +37,7 @@ pub struct Parser<'a, 'b> {
     fixing_parsing: bool,
 }
 
+#[derive(Debug)]
 pub struct SemanticAnalyzer<'a, 'b> {
     symbol_table: SymbolTable<'a>,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
@@ -44,6 +45,7 @@ pub struct SemanticAnalyzer<'a, 'b> {
     loop_stack: usize,
 }
 
+#[derive(Debug)]
 pub struct Emitter<'a> {
     /// The instructions to be emitted.
     code: Vec<Instruction>,
@@ -74,46 +76,6 @@ mod lexer {
         /// tokens are consumed until it's synchronized. Note that it does not matter we
         /// use Option there, there could be Result as well.
         value: &'a str,
-    }
-
-    impl<'a> Token<'a> {
-        pub fn new(kind: TokenKind, position: (u32, u32), value: &'a str) -> Self {
-            Token {
-                kind,
-                position,
-                value,
-            }
-        }
-
-        #[must_use]
-        pub fn value(&self) -> &'a str {
-            self.value
-        }
-
-        #[must_use]
-        pub const fn row(&self) -> u32 {
-            self.position.0
-        }
-        #[must_use]
-        pub const fn col(&self) -> u32 {
-            self.position.1
-        }
-
-        #[must_use]
-        pub const fn position(&self) -> (u32, u32) {
-            self.position
-        }
-
-        #[must_use]
-        pub const fn kind(&self) -> TokenKind {
-            self.kind
-        }
-    }
-
-    impl fmt::Display for Token<'_> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{} ({})", self.value, self.kind)
-        }
     }
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -201,8 +163,48 @@ mod lexer {
         SwitchKeyword,
     }
 
-    impl std::fmt::Display for TokenKind {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl<'a> Token<'a> {
+        pub fn new(kind: TokenKind, position: (u32, u32), value: &'a str) -> Self {
+            Token {
+                kind,
+                position,
+                value,
+            }
+        }
+
+        #[must_use]
+        pub fn value(&self) -> &'a str {
+            self.value
+        }
+
+        #[must_use]
+        pub const fn row(&self) -> u32 {
+            self.position.0
+        }
+        #[must_use]
+        pub const fn col(&self) -> u32 {
+            self.position.1
+        }
+
+        #[must_use]
+        pub const fn position(&self) -> (u32, u32) {
+            self.position
+        }
+
+        #[must_use]
+        pub const fn kind(&self) -> TokenKind {
+            self.kind
+        }
+    }
+
+    impl fmt::Display for Token<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{} ({})", self.value, self.kind)
+        }
+    }
+
+    impl fmt::Display for TokenKind {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let text_representation = match self {
                 Self::Identifier => "identifier",
                 Self::Number => "integer",
@@ -278,62 +280,26 @@ mod parser {
     use dpp_macros::PosMacro;
     use dpp_macros_derive::PosMacro;
 
-    #[derive(Clone, Debug)]
-    pub struct Case<'a> {
-        expression: Expression<'a>,
-        block: Box<Block<'a>>,
+    #[derive(Clone, Debug, PosMacro)]
+    pub struct TranslationUnit<'a> {
+        position: (u32, u32),
+        functions: Vec<Function<'a>>,
+        global_statements: Vec<Statement<'a>>,
     }
 
-    impl<'a> Case<'a> {
-        pub fn new(expression: Expression<'a>, block: Box<Block<'a>>) -> Self {
-            Case { expression, block }
-        }
-
-        pub fn expression(&self) -> &Expression<'a> {
-            &self.expression
-        }
-        pub fn block(&self) -> &Box<Block<'a>> {
-            &self.block
-        }
-    }
-
-    #[derive(Debug, PartialEq, Eq, Clone)]
-    pub enum Number {
-        Pp,
-        Spp,
-        Xspp,
+    #[derive(Clone, Debug, PosMacro)]
+    pub struct Function<'a> {
+        position: (u32, u32),
+        identifier: &'a str,
+        return_type: DataType<'a>,
+        parameters: Vec<Variable<'a>>,
+        block: Block<'a>,
     }
 
     #[derive(Clone, Debug)]
-    pub struct Struct {}
-
-    #[derive(Clone, Debug)]
-    pub enum BinaryOperator {
-        Add,
-        Subtract,
-        Multiply,
-        Divide,
-        NotEqual,
-        Equal,
-        GreaterThan,
-        GreaterThanOrEqual,
-        LessThan,
-        LessThanOrEqual,
-    }
-
-    #[derive(Clone, Debug)]
-    pub enum UnaryOperator {
-        Not,
-        Negate,
-    }
-
-    impl fmt::Display for UnaryOperator {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                UnaryOperator::Not => write!(f, "!"),
-                UnaryOperator::Negate => write!(f, "-"),
-            }
-        }
+    pub struct Block<'a> {
+        position: (u32, u32),
+        statements: Vec<Statement<'a>>,
     }
 
     #[derive(Clone, Debug)]
@@ -410,11 +376,111 @@ mod parser {
             expression: Expression<'a>,
         },
     }
-    #[derive(Clone, Debug, PosMacro)]
-    pub struct TranslationUnit<'a> {
+
+    #[derive(Clone, Debug)]
+    pub struct Variable<'a> {
         position: (u32, u32),
-        functions: Vec<Function<'a>>,
-        global_statements: Vec<Statement<'a>>,
+        position_in_scope: Option<usize>,
+        scope_id: Option<usize>,
+        identifier: &'a str,
+        data_type: DataType<'a>,
+        size: usize,
+        value: Option<Expression<'a>>,
+        is_parameter: bool,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Case<'a> {
+        expression: Expression<'a>,
+        block: Box<Block<'a>>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum DataType<'a> {
+        // Xxlpp, Pp, Spp, Xspp
+        Number(Number),
+        // char
+        P,
+        // string
+        Yarn,
+        // bool
+        Booba,
+        // void
+        Nopp,
+        Struct { name: &'a str },
+    }
+
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub enum Number {
+        Pp,
+        Spp,
+        Xspp,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Struct {}
+
+    #[derive(Clone, Debug)]
+    pub enum Expression<'a> {
+        // TODO: Use LiteralExpression instead.
+        Number {
+            position: (u32, u32),
+            number_type: Number,
+            value: i32,
+        },
+        P {
+            position: (u32, u32),
+            value: char,
+        },
+        Booba {
+            position: (u32, u32),
+            value: bool,
+        },
+        Yarn {
+            position: (u32, u32),
+            value: &'a str,
+        },
+        Unary {
+            position: (u32, u32),
+            op: UnaryOperator,
+            operand: Box<Expression<'a>>,
+        },
+        Binary {
+            position: (u32, u32),
+            lhs: Box<Expression<'a>>,
+            op: BinaryOperator,
+            rhs: Box<Expression<'a>>,
+        },
+        Identifier {
+            position: (u32, u32),
+            identifier: &'a str,
+        },
+        FunctionCall {
+            position: (u32, u32),
+            identifier: &'a str,
+            arguments: Vec<Expression<'a>>,
+        },
+        Invalid,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum BinaryOperator {
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        NotEqual,
+        Equal,
+        GreaterThan,
+        GreaterThanOrEqual,
+        LessThan,
+        LessThanOrEqual,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum UnaryOperator {
+        Not,
+        Negate,
     }
 
     impl<'a> TranslationUnit<'a> {
@@ -432,15 +498,6 @@ mod parser {
         pub fn global_statements(&self) -> &Vec<Statement<'a>> {
             &self.global_statements
         }
-    }
-
-    #[derive(Clone, Debug, PosMacro)]
-    pub struct Function<'a> {
-        position: (u32, u32),
-        identifier: &'a str,
-        return_type: DataType<'a>,
-        parameters: Vec<Variable<'a>>,
-        block: Block<'a>,
     }
 
     impl<'a> Function<'a> {
@@ -481,12 +538,6 @@ mod parser {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct Block<'a> {
-        position: (u32, u32),
-        statements: Vec<Statement<'a>>,
-    }
-
     impl<'a> Block<'a> {
         pub fn new(position: (u32, u32), statements: Vec<Statement<'a>>) -> Self {
             Block {
@@ -501,18 +552,6 @@ mod parser {
         pub fn statements(&self) -> &Vec<Statement<'a>> {
             &self.statements
         }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct Variable<'a> {
-        position: (u32, u32),
-        position_in_scope: Option<usize>,
-        scope_id: Option<usize>,
-        identifier: &'a str,
-        data_type: DataType<'a>,
-        size: usize,
-        value: Option<Expression<'a>>,
-        is_parameter: bool,
     }
 
     impl<'a> Variable<'a> {
@@ -574,47 +613,41 @@ mod parser {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub enum Expression<'a> {
-        // TODO: Use LiteralExpression instead.
-        Number {
-            position: (u32, u32),
-            number_type: Number,
-            value: i32,
-        },
-        P {
-            position: (u32, u32),
-            value: char,
-        },
-        Booba {
-            position: (u32, u32),
-            value: bool,
-        },
-        Yarn {
-            position: (u32, u32),
-            value: &'a str,
-        },
-        Unary {
-            position: (u32, u32),
-            op: UnaryOperator,
-            operand: Box<Expression<'a>>,
-        },
-        Binary {
-            position: (u32, u32),
-            lhs: Box<Expression<'a>>,
-            op: BinaryOperator,
-            rhs: Box<Expression<'a>>,
-        },
-        Identifier {
-            position: (u32, u32),
-            identifier: &'a str,
-        },
-        FunctionCall {
-            position: (u32, u32),
-            identifier: &'a str,
-            arguments: Vec<Expression<'a>>,
-        },
-        Invalid,
+    impl<'a> Case<'a> {
+        pub fn new(expression: Expression<'a>, block: Box<Block<'a>>) -> Self {
+            Case { expression, block }
+        }
+
+        pub fn expression(&self) -> &Expression<'a> {
+            &self.expression
+        }
+        pub fn block(&self) -> &Box<Block<'a>> {
+            &self.block
+        }
+    }
+
+    impl<'a> DataType<'a> {
+        pub fn size(&self) -> usize {
+            match self {
+                DataType::Number(number) => match number {
+                    Number::Pp => std::mem::size_of::<i32>(),
+                    Number::Spp => std::mem::size_of::<i16>(),
+                    Number::Xspp => std::mem::size_of::<i8>(),
+                },
+                DataType::P => std::mem::size_of::<char>(),
+                DataType::Booba => std::mem::size_of::<bool>(),
+                DataType::Nopp => 0,
+                _ => panic!("Invalid data type {self}"),
+            }
+        }
+
+        pub fn size_in_instructions(&self) -> usize {
+            let size = self.size();
+            if size == 0 {
+                return 0;
+            }
+            return ((size - 1) / 4) + 1;
+        }
     }
 
     impl PosMacro for Expression<'_> {
@@ -649,7 +682,7 @@ mod parser {
     }
 
     impl fmt::Display for Expression<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let formatted = match self {
                 Expression::Number { value, .. } => value.to_string(),
                 Expression::P { value, .. } => value.to_string(),
@@ -670,21 +703,6 @@ mod parser {
         }
     }
 
-    #[derive(Debug, Clone)]
-    pub enum DataType<'a> {
-        // Xxlpp, Pp, Spp, Xspp
-        Number(Number),
-        // char
-        P,
-        // string
-        Yarn,
-        // bool
-        Booba,
-        // void
-        Nopp,
-        Struct { name: &'a str },
-    }
-
     impl PartialEq for DataType<'_> {
         fn eq(&self, other: &Self) -> bool {
             matches!(
@@ -699,7 +717,7 @@ mod parser {
     }
 
     impl fmt::Display for DataType<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 DataType::Number(_) => write!(f, "number")?,
                 DataType::P => write!(f, "p")?,
@@ -713,27 +731,12 @@ mod parser {
         }
     }
 
-    impl<'a> DataType<'a> {
-        pub fn size(&self) -> usize {
+    impl fmt::Display for UnaryOperator {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                DataType::Number(number) => match number {
-                    Number::Pp => std::mem::size_of::<i32>(),
-                    Number::Spp => std::mem::size_of::<i16>(),
-                    Number::Xspp => std::mem::size_of::<i8>(),
-                },
-                DataType::P => std::mem::size_of::<char>(),
-                DataType::Booba => std::mem::size_of::<bool>(),
-                DataType::Nopp => 0,
-                _ => panic!("Invalid data type {self}"),
+                UnaryOperator::Not => write!(f, "!"),
+                UnaryOperator::Negate => write!(f, "-"),
             }
-        }
-
-        pub fn size_in_instructions(&self) -> usize {
-            let size = self.size();
-            if size == 0 {
-                return 0;
-            }
-            return ((size - 1) / 4) + 1;
         }
     }
 }
@@ -747,12 +750,36 @@ mod analysis {
     use crate::parse::parser::{Function, Variable};
     use crate::parse::SemanticAnalyzer;
 
-    #[derive(Clone, Debug)]
+    #[derive(Debug)]
     pub struct SymbolTable<'a> {
         /// The global scope holding global variables and function identifiers.
         global_scope: GlobalScope<'a>,
         /// Current stack of function scopes.
         function_scopes: Vec<FunctionScope<'a>>,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Scope<'a> {
+        /// Variable symbol table.
+        variables: collections::HashMap<&'a str, rc::Rc<Variable<'a>>>,
+        /// Function symbol table.
+        functions: collections::HashMap<&'a str, rc::Rc<Function<'a>>>,
+        id: usize,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GlobalScope<'a> {
+        scope: Scope<'a>,
+        current_position: usize,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FunctionScope<'a> {
+        generated_scopes: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
+        scope_stack: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
+        function_identifier: &'a str,
+        scope_counter: usize,
+        current_position: usize,
     }
 
     impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -899,15 +926,6 @@ mod analysis {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct Scope<'a> {
-        /// Variable symbol table.
-        variables: collections::HashMap<&'a str, rc::Rc<Variable<'a>>>,
-        /// Function symbol table.
-        functions: collections::HashMap<&'a str, rc::Rc<Function<'a>>>,
-        id: usize,
-    }
-
     impl<'a> Scope<'a> {
         pub fn new(id: usize) -> Self {
             Scope {
@@ -943,13 +961,38 @@ mod analysis {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct FunctionScope<'a> {
-        generated_scopes: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
-        scope_stack: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
-        function_identifier: &'a str,
-        scope_counter: usize,
-        current_position: usize,
+    impl<'a> GlobalScope<'a> {
+        pub fn new() -> Self {
+            // TODO: Need to offset this because we need the first
+            // thing on the stack to be "1" because we call
+            // main and then it fucking has to read the first thing
+            // on the stack.
+            GlobalScope {
+                scope: Scope::new(0),
+                current_position: 1,
+            }
+        }
+        pub fn push_variable(&mut self, mut variable: Variable<'a>) {
+            variable.set_position_in_scope(self.current_position);
+            self.current_position += variable.size_in_instructions();
+            self.scope.push_variable(variable);
+        }
+
+        pub fn get_variable(&self, identifier: &str) -> Option<rc::Rc<Variable<'a>>> {
+            self.scope.get_variable(identifier)
+        }
+
+        pub fn push_function(&mut self, function: Function<'a>) {
+            self.scope.push_function(function);
+        }
+
+        pub fn get_function(&self, identifier: &str) -> Option<&rc::Rc<Function<'a>>> {
+            self.scope.get_function(identifier)
+        }
+
+        pub fn has_function(&self, identifier: &str) -> bool {
+            self.scope.has_function(identifier)
+        }
     }
 
     impl<'a> FunctionScope<'a> {
@@ -1031,68 +1074,11 @@ mod analysis {
             self.scope_stack.pop();
         }
     }
-
-    #[derive(Clone, Debug)]
-    pub struct GlobalScope<'a> {
-        scope: Scope<'a>,
-        current_position: usize,
-    }
-
-    impl<'a> GlobalScope<'a> {
-        pub fn new() -> Self {
-            // TODO: Need to offset this because we need the first
-            // thing on the stack to be "1" because we call
-            // main and then it fucking has to read the first thing
-            // on the stack.
-            GlobalScope {
-                scope: Scope::new(0),
-                current_position: 1,
-            }
-        }
-        pub fn push_variable(&mut self, mut variable: Variable<'a>) {
-            variable.set_position_in_scope(self.current_position);
-            self.current_position += variable.size_in_instructions();
-            self.scope.push_variable(variable);
-        }
-
-        pub fn get_variable(&self, identifier: &str) -> Option<rc::Rc<Variable<'a>>> {
-            self.scope.get_variable(identifier)
-        }
-
-        pub fn push_function(&mut self, function: Function<'a>) {
-            self.scope.push_function(function);
-        }
-
-        pub fn get_function(&self, identifier: &str) -> Option<&rc::Rc<Function<'a>>> {
-            self.scope.get_function(identifier)
-        }
-
-        pub fn has_function(&self, identifier: &str) -> bool {
-            self.scope.has_function(identifier)
-        }
-    }
 }
 
 mod emitter {
     #[derive(Clone, Debug)]
-    pub enum Address {
-        Absolute(u32),
-        Label(String),
-    }
-
-    impl std::fmt::Display for Address {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
-                Self::Label(label) => write!(f, "@{label}")?,
-            };
-
-            Ok(())
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub(crate) enum Instruction {
+    pub enum Instruction {
         /// Push the literal value arg onto the stack.
         Literal {
             value: i32,
@@ -1139,14 +1125,6 @@ mod emitter {
         Label(String),
     }
 
-    impl std::fmt::Display for Instruction {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{self:?}")
-            // or, alternatively:
-            // fmt::Debug::fmt(self, f)
-        }
-    }
-
     #[derive(Clone, Copy, Debug)]
     pub enum Operation {
         Return = 0,
@@ -1178,6 +1156,12 @@ mod emitter {
     }
 
     #[derive(Clone, Debug)]
+    pub enum Address {
+        Absolute(u32),
+        Label(String),
+    }
+
+    #[derive(Clone, Debug)]
     pub enum DebugKeyword {
         Registers,
         Stack,
@@ -1187,7 +1171,24 @@ mod emitter {
         Echo { message: String },
     }
 
-    pub(crate) const EMIT_DEBUG: bool = true;
+    impl std::fmt::Display for Instruction {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{self:?}")
+            // or, alternatively:
+            // fmt::Debug::fmt(self, f)
+        }
+    }
+
+    impl std::fmt::Display for Address {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
+                Self::Label(label) => write!(f, "@{label}")?,
+            };
+
+            Ok(())
+        }
+    }
 }
 
 pub mod compiler {
@@ -1207,7 +1208,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    const DEBUG: bool = true;
+    pub const DEBUG: bool = true;
 
     impl DppCompiler {
         pub fn compile_translation_unit(

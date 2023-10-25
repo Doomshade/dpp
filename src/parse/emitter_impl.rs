@@ -3,7 +3,8 @@ use std::io::{BufWriter, Write};
 use std::rc::Rc;
 
 use crate::parse::analysis::{FunctionScope, SymbolTable};
-use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation, EMIT_DEBUG};
+use crate::parse::compiler;
+use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation};
 use crate::parse::parser::{BinaryOperator, Block, DataType, Statement, TranslationUnit};
 use crate::parse::{Emitter, Expression, Function, Variable};
 
@@ -59,7 +60,7 @@ impl<'a> Emitter<'a> {
                     writer.write_all(format!("INT 0 {size}\r\n").as_bytes())?;
                 }
                 Instruction::Dbg { debug_keyword } => {
-                    if EMIT_DEBUG {
+                    if compiler::DEBUG {
                         match debug_keyword {
                             DebugKeyword::Registers => {
                                 writer.write_all(b"&REGS\r\n")?;
@@ -388,7 +389,7 @@ impl<'a> Emitter<'a> {
 
     fn create_label(&mut self, label: &str) -> String {
         let control_label;
-        if EMIT_DEBUG {
+        if compiler::DEBUG {
             control_label = format!("0{label}_{}", self.control_statement_count);
         } else {
             control_label = format!("{}", self.control_statement_count);
