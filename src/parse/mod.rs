@@ -1,6 +1,4 @@
-use std::cell;
-use std::collections;
-use std::rc;
+use std::{cell, collections, rc};
 
 use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::Instruction;
@@ -417,9 +415,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
 }
 
 mod error_diagnosis {
-    use std::cmp;
-    use std::error;
-    use std::fmt;
+    use std::{cmp, error, fmt};
 
     pub struct SyntaxError {
         error_messages: Vec<String>,
@@ -688,10 +684,11 @@ mod lexer {
 }
 
 mod parser {
-    use dpp_macros::Pos;
-    use dpp_macros_derive::Pos;
     use std::fmt;
     use std::mem;
+
+    use dpp_macros::Pos;
+    use dpp_macros_derive::Pos;
 
     #[derive(Clone, Debug, Pos)]
     pub struct TranslationUnit<'a> {
@@ -1180,9 +1177,7 @@ mod parser {
 }
 
 mod analysis {
-    use std::cell;
-    use std::collections;
-    use std::rc;
+    use std::{cell, collections, rc};
 
     use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
 
@@ -1508,6 +1503,8 @@ mod analysis {
 }
 
 mod emitter {
+    use std::fmt;
+
     #[derive(Clone, Debug)]
     pub enum Instruction {
         /// Push the literal value arg onto the stack.
@@ -1602,16 +1599,14 @@ mod emitter {
         Echo { message: String },
     }
 
-    impl std::fmt::Display for Instruction {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl fmt::Display for Instruction {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{self:?}")
-            // or, alternatively:
-            // fmt::Debug::fmt(self, f)
         }
     }
 
-    impl std::fmt::Display for Address {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl fmt::Display for Address {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 Self::Absolute(absolute_address) => write!(f, "{absolute_address}")?,
                 Self::Label(label) => write!(f, "@{label}")?,
