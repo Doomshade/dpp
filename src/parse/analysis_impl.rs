@@ -68,7 +68,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn analyze_global_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
-            Statement::VariableDeclaration { variable } => {
+            Statement::VariableDeclaration { variable, position } => {
                 if self
                     .symbol_table()
                     .find_local_variable_in_scope_stack(
@@ -97,7 +97,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
-            Statement::VariableDeclaration { variable } => {
+            Statement::VariableDeclaration { variable, position } => {
                 if self
                     .symbol_table()
                     .find_local_variable_in_scope_stack(

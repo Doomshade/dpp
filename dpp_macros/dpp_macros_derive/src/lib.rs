@@ -6,7 +6,7 @@ use syn;
 use syn::spanned::Spanned;
 use syn::{Data, Fields};
 
-#[proc_macro_derive(PosMacro)]
+#[proc_macro_derive(Pos)]
 pub fn pos_macro_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_pos_macro(&ast)

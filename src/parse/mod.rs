@@ -490,9 +490,9 @@ mod lexer {
     use std::fmt;
 
     use dpp_macros::PosMacro;
-    use dpp_macros_derive::PosMacro;
+    use dpp_macros_derive::Pos;
 
-    #[derive(Debug, PosMacro)]
+    #[derive(Debug, Pos)]
     pub struct Token<'a> {
         /// The kind of the token.
         kind: TokenKind,
@@ -704,19 +704,18 @@ mod lexer {
 
 mod parser {
     use std::fmt;
-    use std::fmt::Formatter;
 
     use dpp_macros::PosMacro;
-    use dpp_macros_derive::PosMacro;
+    use dpp_macros_derive::Pos;
 
-    #[derive(Clone, Debug, PosMacro)]
+    #[derive(Clone, Debug, Pos)]
     pub struct TranslationUnit<'a> {
         position: (u32, u32),
         functions: Vec<Function<'a>>,
         global_statements: Vec<Statement<'a>>,
     }
 
-    #[derive(Clone, Debug, PosMacro)]
+    #[derive(Clone, Debug, Pos)]
     pub struct Function<'a> {
         position: (u32, u32),
         identifier: &'a str,
@@ -725,7 +724,7 @@ mod parser {
         block: Block<'a>,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Pos)]
     pub struct Block<'a> {
         position: (u32, u32),
         statements: Vec<Statement<'a>>,
@@ -734,6 +733,7 @@ mod parser {
     #[derive(Clone, Debug)]
     pub enum Statement<'a> {
         VariableDeclaration {
+            position: (u32, u32),
             variable: Variable<'a>,
         },
         If {
@@ -806,7 +806,7 @@ mod parser {
         },
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Pos)]
     pub struct Variable<'a> {
         position: (u32, u32),
         position_in_scope: Option<usize>,
@@ -818,8 +818,9 @@ mod parser {
         is_parameter: bool,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Pos)]
     pub struct Case<'a> {
+        position: (u32, u32),
         expression: Expression<'a>,
         block: Box<Block<'a>>,
     }
@@ -1043,8 +1044,9 @@ mod parser {
     }
 
     impl<'a> Case<'a> {
-        pub fn new(expression: Expression<'a>, block: Box<Block<'a>>) -> Self {
-            Case { expression, block }
+        pub fn new(position: (u32, u32), expression: Expression<'a>, block: Box<Block<'a>>) ->
+        Self {
+            Case { position, expression, block }
         }
 
         pub fn expression(&self) -> &Expression<'a> {
@@ -1082,7 +1084,7 @@ mod parser {
     impl PosMacro for Statement<'_> {
         fn row(&self) -> u32 {
             match self {
-                Statement::VariableDeclaration { variable } => variable.position.0,
+                Statement::VariableDeclaration { position, .. } => position.0,
                 Statement::If { position, .. } => position.0,
                 Statement::IfElse { position, .. } => position.0,
                 Statement::Bye { position, .. } => position.0,
@@ -1103,7 +1105,7 @@ mod parser {
 
         fn col(&self) -> u32 {
             match self {
-                Statement::VariableDeclaration { variable } => variable.position.1,
+                Statement::VariableDeclaration { position, .. } => position.1,
                 Statement::If { position, .. } => position.1,
                 Statement::IfElse { position, .. } => position.1,
                 Statement::Bye { position, .. } => position.1,
@@ -1219,7 +1221,7 @@ mod analysis {
     use std::collections;
     use std::rc;
 
-    use crate::parse::parser::{Function, Variable};
+    use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
 
     #[derive(Debug)]
     pub struct SymbolTable<'a> {
@@ -1251,6 +1253,26 @@ mod analysis {
         function_identifier: &'a str,
         scope_counter: usize,
         current_position: usize,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct VariableDescriptor<'a> {
+        position: (u32, u32),
+        position_in_scope: usize,
+        scope_id: usize,
+        data_type: DataType<'a>,
+        size: usize,
+        value: Option<Expression<'a>>,
+        is_parameter: bool,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FunctionDescriptor<'a> {
+        position: (u32, u32),
+        identifier: &'a str,
+        return_type: DataType<'a>,
+        parameters: Vec<Variable<'a>>,
+        block: Block<'a>,
     }
 
     impl<'a> SymbolTable<'a> {
@@ -1654,7 +1676,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    pub const DEBUG: bool = false;
+    pub const DEBUG: bool = true;
 
     impl DppCompiler {
         pub fn compile_translation_unit(

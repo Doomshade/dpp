@@ -363,13 +363,15 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn case(&mut self) -> Option<Case<'a>> {
+        let position = self.position;
         self.expect(TokenKind::CaseKeyword)?;
         let expression = self.expr()?;
         let block = self.block()?;
-        Some(Case::new(expression, Box::new(block)))
+        Some(Case::new(position, expression, Box::new(block)))
     }
 
     fn var_decl(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
         let data_type = self.data_type()?;
         self.expect(TokenKind::Arrow)?;
 
@@ -378,6 +380,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.expect(TokenKind::Equal);
             let expression = self.expr()?;
             Statement::VariableDeclaration {
+                position,
                 variable: Variable::new(
                     self.position,
                     identifier,
@@ -388,6 +391,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         } else {
             Statement::VariableDeclaration {
+                position,
                 variable: Variable::new(self.position, identifier, data_type, None, false),
             }
         };

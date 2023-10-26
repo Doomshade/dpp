@@ -89,7 +89,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 .iter()
                 .fold(0, |mut acc, stat| {
                     match stat {
-                        Statement::VariableDeclaration { variable } => {
+                        Statement::VariableDeclaration { variable, .. } => {
                             acc += variable.size_in_instructions();
                         }
                         _ => panic!("Invalid global statement"),
