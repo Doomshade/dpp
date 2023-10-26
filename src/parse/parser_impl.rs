@@ -32,6 +32,12 @@
 //! ```
 //! For each declaration in grammar we declare either an enum or a struct and a function that
 //! parses the grammar construct.
+//!
+//! Each function returns an `Option<T>` where `T` is the type of the grammar construct. Each
+//! function name starts with _ to indicate that it is a rewrite function. If the function returns
+//! `None` it means that the function did not accept the current token in the current state. This
+//! means that the parser should try to parse the current token with another function or handle
+//! the error.
 
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::TokenKind;
@@ -120,7 +126,6 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _params(&mut self) -> Option<Vec<Variable<'a>>> {
-        // TODO: Create a params variant.
         self.expect(TokenKind::OpenParen)?;
         let mut parameters = Vec::<Variable<'a>>::new();
 
