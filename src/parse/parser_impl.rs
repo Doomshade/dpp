@@ -417,8 +417,6 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         match token.1 {
             TokenKind::PpKeyword => Some(DataType::Number(Number::Pp)),
-            TokenKind::SppKeyword => Some(DataType::Number(Number::Spp)),
-            TokenKind::XsppKeyword => Some(DataType::Number(Number::Xspp)),
             TokenKind::PKeyword => Some(DataType::P),
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),

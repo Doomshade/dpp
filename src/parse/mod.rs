@@ -808,9 +808,9 @@ mod parser {
 
     #[derive(Debug, PartialEq, Eq, Clone)]
     pub enum Number {
-        Pp,
-        Spp,
-        Xspp,
+        Pp,    // int
+        Ratio, // ratio
+        Glide, // float
     }
 
     #[derive(Clone, Debug)]
@@ -1037,8 +1037,8 @@ mod parser {
             match self {
                 DataType::Number(number) => match number {
                     Number::Pp => mem::size_of::<i32>(),
-                    Number::Spp => mem::size_of::<i16>(),
-                    Number::Xspp => mem::size_of::<i8>(),
+                    Number::Ratio => mem::size_of::<i32>() * 2,
+                    Number::Glide => mem::size_of::<i32>() * 2,
                 },
                 DataType::P => mem::size_of::<char>(),
                 DataType::Booba => mem::size_of::<bool>(),
