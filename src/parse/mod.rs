@@ -1231,6 +1231,7 @@ mod analysis {
         }
 
         /// Gets the variable from the generated scopes.
+        /// Must only be used in emitter - this functions panics if the variable does not exist.
         pub fn get_variable_level_and_offset(
             &self,
             identifier: &str,
