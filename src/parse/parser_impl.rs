@@ -1,5 +1,5 @@
 //! This module contains the implementation of the parser. The parser is implemented using a
-//! recursive descent parser. The grammar is defined in `src/parse/grammar.txt`. The parser is
+//! recursive descent parser. The grammar is defined in `grammar.pdf`. The parser is
 //! implemented using the following rules:
 //! ```
 //! translation_unit -> (function | var_decl)*
@@ -18,7 +18,7 @@
 //! switch -> "switch" "(" expr ")" "{" (case ("," case)*)? "}"
 //! case -> "case" expr block
 //! bye -> "bye" expr? ";"
-//! print -> ("pp" | "pprint") "(" expr ")" ";"
+//! print -> ("pprintln" | "pprint") "(" expr ")" ";"
 //! expr -> equ
 //! equ -> comp (("!=" | "==") comp)*
 //! comp -> term ((">" | ">=" | "<" | "<=" | "||" | "&&") term)*

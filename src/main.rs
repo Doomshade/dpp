@@ -1,4 +1,17 @@
-//! The compiler for the dpp language.
+//! The compiler for the dpp language. The full grammar is in the grammar.pdf file.
+//!
+//! # Usage
+//! ./dpp <file.dpp>
+//!
+//! # Example
+//! ./dpp resources/test.dpp
+//!
+//! # Output
+//! out/dpp/test.pl0
+//!
+//! # Interpret
+//! resources/pl0_interpret/bin/refint_pl0_ext.exe out/dpp/test.pl0
+//!
 #![deny(unsafe_code)]
 #![warn(
     clippy::all,
