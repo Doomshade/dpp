@@ -489,7 +489,7 @@ mod error_diagnosis {
 mod lexer {
     use std::fmt;
 
-    use dpp_macros::PosMacro;
+    use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
 
     #[derive(Debug, Pos)]
@@ -705,7 +705,7 @@ mod lexer {
 mod parser {
     use std::fmt;
 
-    use dpp_macros::PosMacro;
+    use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
 
     #[derive(Clone, Debug, Pos)]
@@ -730,7 +730,7 @@ mod parser {
         statements: Vec<Statement<'a>>,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Pos)]
     pub enum Statement<'a> {
         VariableDeclaration {
             position: (u32, u32),
@@ -1044,9 +1044,16 @@ mod parser {
     }
 
     impl<'a> Case<'a> {
-        pub fn new(position: (u32, u32), expression: Expression<'a>, block: Box<Block<'a>>) ->
-        Self {
-            Case { position, expression, block }
+        pub fn new(
+            position: (u32, u32),
+            expression: Expression<'a>,
+            block: Box<Block<'a>>,
+        ) -> Self {
+            Case {
+                position,
+                expression,
+                block,
+            }
         }
 
         pub fn expression(&self) -> &Expression<'a> {
@@ -1081,51 +1088,51 @@ mod parser {
         }
     }
 
-    impl PosMacro for Statement<'_> {
-        fn row(&self) -> u32 {
-            match self {
-                Statement::VariableDeclaration { position, .. } => position.0,
-                Statement::If { position, .. } => position.0,
-                Statement::IfElse { position, .. } => position.0,
-                Statement::Bye { position, .. } => position.0,
-                Statement::Print { position, .. } => position.0,
-                Statement::Block { position, .. } => position.0,
-                Statement::Expression { position, .. } => position.0,
-                Statement::Empty { position, .. } => position.0,
-                Statement::For { position, .. } => position.0,
-                Statement::While { position, .. } => position.0,
-                Statement::DoWhile { position, .. } => position.0,
-                Statement::Loop { position, .. } => position.0,
-                Statement::Break { position, .. } => position.0,
-                Statement::Continue { position, .. } => position.0,
-                Statement::Switch { position, .. } => position.0,
-                Statement::Assignment { position, .. } => position.0,
-            }
-        }
+    // impl PosMacro for Statement<'_> {
+    //     fn row(&self) -> u32 {
+    //         match self {
+    //             Statement::VariableDeclaration { position, .. } => position.0,
+    //             Statement::If { position, .. } => position.0,
+    //             Statement::IfElse { position, .. } => position.0,
+    //             Statement::Bye { position, .. } => position.0,
+    //             Statement::Print { position, .. } => position.0,
+    //             Statement::Block { position, .. } => position.0,
+    //             Statement::Expression { position, .. } => position.0,
+    //             Statement::Empty { position, .. } => position.0,
+    //             Statement::For { position, .. } => position.0,
+    //             Statement::While { position, .. } => position.0,
+    //             Statement::DoWhile { position, .. } => position.0,
+    //             Statement::Loop { position, .. } => position.0,
+    //             Statement::Break { position, .. } => position.0,
+    //             Statement::Continue { position, .. } => position.0,
+    //             Statement::Switch { position, .. } => position.0,
+    //             Statement::Assignment { position, .. } => position.0,
+    //         }
+    //     }
+    //
+    //     fn col(&self) -> u32 {
+    //         match self {
+    //             Statement::VariableDeclaration { position, .. } => position.1,
+    //             Statement::If { position, .. } => position.1,
+    //             Statement::IfElse { position, .. } => position.1,
+    //             Statement::Bye { position, .. } => position.1,
+    //             Statement::Print { position, .. } => position.1,
+    //             Statement::Block { position, .. } => position.1,
+    //             Statement::Expression { position, .. } => position.1,
+    //             Statement::Empty { position, .. } => position.1,
+    //             Statement::For { position, .. } => position.1,
+    //             Statement::While { position, .. } => position.1,
+    //             Statement::DoWhile { position, .. } => position.1,
+    //             Statement::Loop { position, .. } => position.1,
+    //             Statement::Break { position, .. } => position.1,
+    //             Statement::Continue { position, .. } => position.1,
+    //             Statement::Switch { position, .. } => position.1,
+    //             Statement::Assignment { position, .. } => position.1,
+    //         }
+    //     }
+    // }
 
-        fn col(&self) -> u32 {
-            match self {
-                Statement::VariableDeclaration { position, .. } => position.1,
-                Statement::If { position, .. } => position.1,
-                Statement::IfElse { position, .. } => position.1,
-                Statement::Bye { position, .. } => position.1,
-                Statement::Print { position, .. } => position.1,
-                Statement::Block { position, .. } => position.1,
-                Statement::Expression { position, .. } => position.1,
-                Statement::Empty { position, .. } => position.1,
-                Statement::For { position, .. } => position.1,
-                Statement::While { position, .. } => position.1,
-                Statement::DoWhile { position, .. } => position.1,
-                Statement::Loop { position, .. } => position.1,
-                Statement::Break { position, .. } => position.1,
-                Statement::Continue { position, .. } => position.1,
-                Statement::Switch { position, .. } => position.1,
-                Statement::Assignment { position, .. } => position.1,
-            }
-        }
-    }
-
-    impl PosMacro for Expression<'_> {
+    impl Pos for Expression<'_> {
         // TODO: Implement the macro for this later.
         fn row(&self) -> u32 {
             match self {

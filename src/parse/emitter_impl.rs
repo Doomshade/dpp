@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::io::Write;
 
-use dpp_macros::PosMacro;
+use dpp_macros::Pos;
 
 use crate::parse::analysis::FunctionScope;
 use crate::parse::compiler;

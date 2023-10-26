@@ -1,4 +1,4 @@
-use dpp_macros::PosMacro;
+use dpp_macros::Pos;
 
 use crate::parse::analysis::SymbolTable;
 use crate::parse::error_diagnosis::SyntaxError;

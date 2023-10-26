@@ -2,7 +2,7 @@ pub trait HelloMacro {
     fn hello_macro();
 }
 
-pub trait PosMacro {
+pub trait Pos {
     #[must_use]
     fn row(&self) -> u32;
     #[must_use]

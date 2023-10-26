@@ -16,47 +16,51 @@ fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     match &ast.data {
         Data::Enum(data_enum) => {
-            let mut variant_checker_functions = TokenStream2::new();
+            let mut row_matches = TokenStream2::new();
+            let mut col_matches = TokenStream2::new();
 
             for variant in &data_enum.variants {
                 let variant_name = &variant.ident;
-
                 let fields_in_variant = match &variant.fields {
                     Fields::Unnamed(_) => quote_spanned! {variant.span()=> (..) },
                     Fields::Unit => quote_spanned! { variant.span()=> },
-                    Fields::Named(_) => quote_spanned! {variant.span()=> {..} },
+                    Fields::Named(_) => quote_spanned! {variant.span()=> {position, ..} },
                 };
 
-                variant_checker_functions.extend(quote_spanned! {
-                    variant.span() => {
+                let row = quote_spanned! {
+                    variant.span() => #name::#variant_name #fields_in_variant => position.0,
+                };
+                let col = quote_spanned! {
+                    variant.span() => #name::#variant_name #fields_in_variant => position.1,
+                };
+
+                row_matches.extend(row);
+                col_matches.extend(col);
+            }
+
+            let gen = quote! {
+                impl<'a> Pos for #name<'a> {
 
                     #[must_use]
                     fn row(&self) -> u32 {
                         match self {
-                                #name::#variant_name #fields_in_variant => {
-                                    &#variant_name.position
-                                }
-                            }
+                            #row_matches
+                        }
                     }
 
                     #[must_use]
                     fn col(&self) -> u32 {
-                        self.position.1
+                        match self {
+                            #col_matches
+                        }
                     }
-                    }
-                })
-            }
-
-            let gen = quote! {
-                impl<'a> PosMacro for #name<'a> {
-                    #variant_checker_functions
                 }
             };
             gen.into()
         }
         Data::Struct(_) => {
             let gen = quote! {
-                impl<'a> PosMacro for #name<'a> {
+                impl<'a> Pos for #name<'a> {
                     #[must_use]
                     fn row(&self) -> u32 {
                         self.position.0
