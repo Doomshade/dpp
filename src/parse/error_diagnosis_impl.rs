@@ -35,6 +35,10 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(position, "Invalid continue placement.");
     }
 
+    pub fn invalid_token(&mut self, token: &Token<'a>) {
+        self.insert_error_message(token.position(), format!("Invalid token {token}.").as_str());
+    }
+
     pub fn unexpected_token_error(&mut self, token: &Token<'a>) {
         self.insert_error_message(token.position(), format!("Unexpected {token}.").as_str());
     }

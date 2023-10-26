@@ -39,6 +39,11 @@ impl<'a, 'b> Lexer<'a, 'b> {
         Ok(tokens)
     }
 
+    /// # Summary
+    /// Lexes a single token from the input. Skips over comments and whitespace characters.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn lex_token(&mut self) -> Token<'a> {
         // Parse the token based on the first character prefix.
         let token = match self.peek() {
@@ -53,7 +58,11 @@ impl<'a, 'b> Lexer<'a, 'b> {
             }
             '#' => self.comment(),
             '\'' => self.p(),
-            _ => self.unknown(),
+            _ => {
+                let unknown_token = self.unknown();
+                self.error_diag.borrow_mut().invalid_token(&unknown_token);
+                unknown_token
+            }
         };
 
         // If it's a whitespace or a comment, try to parse the next token as this one is useless
@@ -67,6 +76,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
         token
     }
 
+    /// # Summary
+    /// Lexes a character (p) literal including escaped characters. Currently, any character can
+    /// be escaped. The escaped characters are not handled yet (e.g. \n \t \r).
+    ///
+    /// # Returns
+    /// The lexed token.
     fn p(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
@@ -90,12 +105,22 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::PLiteral, &self.raw_input[start + 1..end - 1])
     }
 
+    /// # Summary
+    /// Handles unknown characters.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn unknown(&mut self) -> Token<'a> {
         let end = self.advance();
 
         self.new_token(TokenKind::Unknown, &self.raw_input[self.cursor - 1..end])
     }
 
+    /// # Summary
+    /// Handles the comments. Comments start with `#`.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn comment(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
@@ -109,6 +134,13 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::Comment, &self.raw_input[start..end])
     }
 
+    /// # Summary
+    /// Handles the operators. Currently, operators are any of the following:
+    /// `->`, `>=`, `<=`, `!=`, `==`, `+=`, `-=`, `*=`, `/=`, `%=`, `&&`, `||`, `+`, `-`, `*`, `/`,
+    /// `%`, `=`, `>`, `<`, `!`, `&`, `|`.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn operator(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
@@ -176,6 +208,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(kind, op)
     }
 
+    /// # Summary
+    /// Handles the punctuation. Currently, punctuation is any of the following:
+    /// `(`, `)`, `{`, `}`, `[`, `]`, `,`, `:`, `;`.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn punctuation(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
@@ -196,6 +234,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(kind, &self.raw_input[start..end])
     }
 
+    /// # Summary
+    /// Handles the whitespace. Currently, whitespace is any of the following:
+    /// ` `, `\t`, `\n`, `\r`.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn whitespace(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut _end = start;
@@ -210,6 +254,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::Whitespace, "")
     }
 
+    /// # Summary
+    /// Handles the yarns. Yarns are strings enclosed in double quotes. They can contain escaped
+    /// characters.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn yarn(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
@@ -248,6 +298,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::YarnLiteral, &self.raw_input[start + 1..end - 1])
     }
 
+    /// # Summary
+    /// Handles the numbers. Numbers are any sequence of digits. They can also contain a decimal
+    /// point.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn number(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
@@ -270,6 +326,14 @@ impl<'a, 'b> Lexer<'a, 'b> {
         self.new_token(TokenKind::NumberLiteral, &self.raw_input[start..end])
     }
 
+    /// # Summary
+    /// Handles the identifiers. Identifiers are any sequence of alphanumeric characters and
+    /// underscores. They cannot start with a digit. This function also checks if the identifier
+    /// is a keyword. If it is, it returns the corresponding keyword token. Otherwise, it returns
+    /// an identifier token.
+    ///
+    /// # Returns
+    /// The lexed token.
     fn identifier(&mut self) -> Token<'a> {
         let start = self.cursor;
         let mut end = start;
