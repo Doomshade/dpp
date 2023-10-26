@@ -278,7 +278,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     false,
                 );
                 self.symbol_table_mut().push_local_variable(variable);
+                self.loop_stack += 1;
                 self.analyze_statement(statement);
+                self.loop_stack -= 1;
                 self.symbol_table_mut().pop_scope();
             }
             _ => {

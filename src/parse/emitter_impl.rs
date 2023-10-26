@@ -176,6 +176,32 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     .for_each(|four_packed_chars| self.emit_literal(four_packed_chars));
             }
             Expression::Binary { lhs, rhs, op, .. } => {
+                // Ok so this is a little complicated, but bear with me:
+                // We need to check what kind of binary operator we have.
+                // If it's a boolean operator we need to treat it VERY differently.
+                // We emit the lhs and compare it with true value.
+                //     AND: if any value is false, we jump to short-circuit code and emit false
+                //     OR : if any value is true, we jump to short-circuit code and emit true
+                //     AND: if no value is false we jump to the end of the expression and emit true
+                //     OR : if no value is true we jump to the end of the expression and emit false
+                // In essence what happens:
+                // yem && yem && nom && yem && yem && yem
+                // this is parsed as
+                // (((((yem && yem) && nom) && yem) && yem) && yem)
+                //      ^^^    ^^^
+                // So we first compare these two and then the result with "nom".
+                // 1. compare value at the top of the stack. emit true, ok, continue, emit rhs
+                // 2. compare value at the top of the stack. emit true, ok, continue, emit rhs
+                // 3. compare value at the top of the stack. emit false, OOF, jump to short-circuit
+                // code and ***emit false***
+                // 4. compare value at the top of the stack. emit false, OOF, jump to short-circuit
+                // code and emit false
+                // 5. ...
+                // 6. ...
+                // IMPORTANT: the last value is false because of the short-circuit!
+                //
+                // Similar thing happens to OR, except we emit false instead of true and short
+                // circuit on true.
                 use BinaryOperator as BinOp;
                 use OperationType as Op;
                 self.emit_expression(lhs);
@@ -215,9 +241,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     }
                 };
 
-                // If we reached at the end of the expression we DID not short circuit (see below).
-                // If we don't short circuit AND it means the value is true.
-                // If we don't short circuit OR it means the value is false.
+                // If we reached at the end of the expression we DID not short-circuit (see below).
+                // If we don't short-circuit AND it means the value is true.
+                // If we don't short-circuit OR it means the value is false.
                 if after_expr_label.is_some() {
                     match op {
                         BinaryOperator::And => self.emit_booba(true),
@@ -230,14 +256,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     self.emit_jump(Address::Label(after_expr_label.clone().unwrap()));
                 }
 
-                // If we short circuit the boolean expression we need to emit the value of the
-                // expression. For AND short circuiting means we found a false value. For OR it
+                // If we short-circuit the boolean expression we need to emit the value of the
+                // expression. For AND short-circuiting it means we found a false value. For OR it
                 // means we found a true value.
                 //
-                // If we short circuit AND it means the value is false.
-                // If we short circuit OR it means the value is true.
+                // If we short-circuit AND it means the value is false.
+                // If we short-circuit OR it means the value is true.
                 if let Some(label) = short_circuit_label {
-                    self.echo(format!("Reached short circuit label for {:?}", op).as_str());
+                    self.echo(format!("Reached short-circuit label for {:?}", op).as_str());
                     self.emit_label(label.as_str());
                     match op {
                         BinaryOperator::And => self.emit_booba(false),
@@ -246,6 +272,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     };
                 }
 
+                // We jump here if the expression is not short-circuited.
                 if let Some(label) = after_expr_label {
                     self.emit_label(label.as_str());
                 }
@@ -613,10 +640,50 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 });
                 self.emit_finishing_label(end.as_str());
             }
+            Statement::For {
+                index_ident,
+                ident_expression,
+                length_expression,
+                statement,
+                ..
+            } => {
+                let cmp_label = self.create_label("for_cmp");
+                let end = self.create_label("for_end");
+                let (level, var_loc) = self
+                    .symbol_table()
+                    .get_variable_level_and_offset(index_ident, self.current_function);
+
+                // Create a new variable for the for loop and store its value.
+                if let Some(expression) = ident_expression {
+                    self.emit_expression(expression);
+                } else {
+                    self.emit_literal(0);
+                }
+                self.store(level, var_loc as i32, 1);
+
+                // Compare the variable with the length.
+                self.emit_label(cmp_label.as_str());
+                self.load(level, var_loc as i32, 1);
+                self.emit_expression(length_expression);
+                self.emit_operation(OperationType::LessThan);
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(end.clone()),
+                });
+
+                self.emit_statement(statement);
+
+                // Increment i.
+                self.load(level, var_loc as i32, 1);
+                self.emit_literal(1);
+                self.emit_operation(OperationType::Add);
+                self.store(level, var_loc as i32, 1);
+                self.emit_jump(Address::Label(cmp_label.clone()));
+                self.emit_label(end.as_str());
+            }
+
             Statement::Empty { .. } => {
                 // Emit nothing I guess :)
             }
-
             Statement::Block { block, .. } => {
                 self.push_scope();
                 block
@@ -675,46 +742,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_expression(expression);
                 self.store(level, var_loc as i32, 1);
             }
-            Statement::For {
-                index_ident,
-                ident_expression,
-                length_expression,
-                statement,
-                ..
-            } => {
-                let cmp_label = self.create_label("for_cmp");
-                let end = self.create_label("for_end");
-                let (level, var_loc) = self
-                    .symbol_table()
-                    .get_variable_level_and_offset(index_ident, self.current_function);
-
-                // Create a new variable for the for loop and store its value.
-                if let Some(expression) = ident_expression {
-                    self.emit_expression(expression);
-                } else {
-                    self.emit_literal(0);
-                }
-                self.store(level, var_loc as i32, 1);
-
-                // Compare the variable with the length.
-                self.emit_label(cmp_label.as_str());
-                self.load(level, var_loc as i32, 1);
-                self.emit_expression(length_expression);
-                self.emit_operation(OperationType::LessThan);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(end.clone()),
-                });
-
-                self.emit_statement(statement);
-
-                // Increment i.
-                self.load(level, var_loc as i32, 1);
-                self.emit_literal(1);
-                self.emit_operation(OperationType::Add);
-                self.store(level, var_loc as i32, 1);
-                self.emit_jump(Address::Label(cmp_label.clone()));
-                self.emit_label(end.as_str());
-            }
+            Statement::Break { .. } => {}
             _ => self.error_diag.borrow_mut().not_implemented(
                 statement.position(),
                 format!("statement {:?}", statement).as_str(),
