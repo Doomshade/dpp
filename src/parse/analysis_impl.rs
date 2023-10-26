@@ -49,8 +49,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .borrow_mut()
                     .function_already_exists(function.position(), function.identifier());
             }
-            self.symbol_table_mut()
-                .push_global_function(function.clone())
+            self.symbol_table_mut().push_global_function(function)
         });
 
         // Analyze global statements.
@@ -123,8 +122,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         variable.position(),
                     );
                 }
-                self.symbol_table_mut()
-                    .push_global_variable(variable.clone());
+                self.symbol_table_mut().push_global_variable(variable);
             }
             _ => {}
         };
@@ -159,8 +157,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         variable.position(),
                     );
                 }
-                self.symbol_table_mut()
-                    .push_local_variable(variable.clone());
+                self.symbol_table_mut().push_local_variable(variable, false);
                 // dbg!(&expression);
             }
             Statement::Expression { expression, .. } => {
@@ -327,7 +324,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     ident_expression.clone(),
                     false,
                 );
-                self.symbol_table_mut().push_local_variable(variable);
+                self.symbol_table_mut()
+                    .push_local_variable(&variable, false);
                 self.loop_stack += 1;
                 self.analyze_statement(statement);
                 self.loop_stack -= 1;
