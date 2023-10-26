@@ -18,7 +18,7 @@ use crate::parse::parser::{
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
 impl<'a, 'b> Parser<'a, 'b> {
-    pub fn parse(&mut self) -> Result<TranslationUnit<'a>, SyntaxError> {
+    pub fn parse(mut self) -> Result<TranslationUnit<'a>, SyntaxError> {
         let translation_unit = self.transl_unit();
         self.error_diag.borrow().check_errors()?;
 

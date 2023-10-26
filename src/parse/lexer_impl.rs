@@ -5,8 +5,9 @@ use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::Lexer;
 
 impl<'a, 'b> Lexer<'a, 'b> {
+    /// # Summary
     ///
-    /// Lexes the input into a vector of Tokens.
+    /// Lexes the input into a vector of Tokens. Consumes self and returns the vector of tokens.
     ///
     /// # Arguments
     ///
@@ -23,7 +24,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// // ...
     /// // The tokens then can be used for parsing.
     /// ```
-    pub fn lex(&mut self) -> Result<Vec<Token<'a>>, SyntaxError> {
+    pub fn lex(mut self) -> Result<Vec<Token<'a>>, SyntaxError> {
         let mut tokens = Vec::new();
         let mut token = self.lex_token();
         loop {

@@ -10,22 +10,35 @@ use crate::parse::{Expression, Function, SemanticAnalyzer};
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// # Summary
     ///
+    /// Analyzes the translation unit and consumes self to produce a symbol table.
     ///
     /// # Arguments
     ///
-    /// * `translation_unit`:
+    /// * `translation_unit`: the translation unit to analyze
     ///
-    /// returns: Result<SymbolTable, SyntaxError>
-    ///
-    /// # Examples
-    ///
-    /// ```
-    ///
-    /// ```
+    /// # Returns
+    /// Result<SymbolTable, SyntaxError> - the symbol table if no errors were found
     pub fn analyze(
         mut self,
         translation_unit: &TranslationUnit<'a>,
     ) -> Result<SymbolTable<'a>, SyntaxError> {
+        self.analyze_translation_unit(translation_unit);
+
+        if !self.symbol_table().find_function("main").is_some() {
+            self.error_diag.borrow_mut().no_main_method_found_error();
+        }
+        self.error_diag.borrow().check_errors()?;
+        Ok(self.symbol_table)
+    }
+
+    /// # Summary
+    /// Analyzes the translation unit. First registers the function names, then analyzes the
+    /// global statements, and lastly analyzes the functions.
+    ///
+    /// # Arguments
+    ///
+    /// * `translation_unit`: the translation unit to analyze
+    fn analyze_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
         // Register the global functions.
         translation_unit.functions().iter().for_each(|function| {
             if self
@@ -47,21 +60,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .for_each(|statement| {
                 self.analyze_global_statement(statement);
             });
-        self.error_diag.borrow().check_errors()?;
 
         // Analyze the parsed functions.
         translation_unit
             .functions()
             .iter()
             .for_each(|function| self.analyze_function(function));
-
-        if !self.symbol_table().find_function("main").is_some() {
-            self.error_diag.borrow_mut().no_main_method_found_error();
-        }
-        self.error_diag.borrow().check_errors()?;
-        Ok(self.symbol_table)
     }
 
+    /// # Summary
+    /// Analyzes the function. Pushes the function to the function stack, registers it as
+    /// the currently analyzed function. Then analyzes the block and checks whether the last
+    /// statement is a return statement provided this function has a return type other than Nopp.
+    ///
+    /// # Arguments
+    ///
+    /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) {
         self.begin_function(&function);
         self.analyze_block(function.block());
@@ -80,6 +94,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.end_function();
     }
 
+    /// # Summary
+    /// Analyzes the global statements. The only global statement that is currently supported is
+    /// a variable declaration. This function differs very slightly from the analyze_statement -
+    /// this function only supports the variable declaration statement and registers the variables
+    /// in the global scope instead of the local scope.
+    ///
+    /// # Arguments
+    ///
+    /// * `statement`: the global statement to analyze
     fn analyze_global_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable, .. } => {
@@ -107,6 +130,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         };
     }
 
+    /// # Summary
+    /// Analyzes the (local) statements.
+    ///
+    /// # Arguments
+    ///
+    /// * `statement`: the (local) statement to analyze
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
             Statement::VariableDeclaration { variable, .. } => {
@@ -312,6 +341,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         };
     }
 
+    /// # Summary
+    /// Analyzes the block. Essentially just pushes a scope onto the stack and analyzes the
+    /// statements inside the block. Once the block finishes the scope is popped off the stack.
+    ///
+    /// # Arguments
+    ///
+    /// * `block`: the block to analyze
     fn analyze_block(&mut self, block: &Block<'a>) {
         self.symbol_table.push_scope();
         block
@@ -321,6 +357,17 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.symbol_table.pop_scope();
     }
 
+    /// # Summary
+    /// Analyzes the expression. This function is the core of the semantic analyzer. It analyzes
+    /// the expression and returns the data type of the expression. If the expression is invalid
+    /// then it returns None. This function is recursive and will analyze the sub-expressions
+    /// of the expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `expression`: the expression to analyze
+    /// # Returns
+    /// Option<DataType> - the data type of the expression if it is valid, None otherwise
     fn analyze_expr(&self, expr: &Expression<'a>) -> Option<DataType<'a>> {
         return match expr {
             Expression::Number { number_type, .. } => Some(DataType::Number(number_type.clone())),
