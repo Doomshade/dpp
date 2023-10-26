@@ -15,6 +15,8 @@ FUNc test(par: pp) -> pp {
 }
 
 FUNc fibonacci(num: pp) -> pp {
+    asdd();
+
     if (num == 1) {
         bye 1;
     }
@@ -30,8 +32,8 @@ FUNc main() -> pp {
     pp -> main0 = test + 120000;
     pp -> main1 = main0 + 4;
     testt();
-    pp -> asd;
-    pp -> main3 = testt();
+    p -> asd;
+    pp -> main3 = testt() + asd;
     pp -> main4 = test(123);
     pp -> i = 10;
     while (i > 0) {

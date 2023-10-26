@@ -366,13 +366,20 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn check_data_type(
         &self,
         expected_data_type: &DataType<'a>,
-        got: &DataType<'a>,
+        got: Option<DataType<'a>>,
         position: (u32, u32),
     ) {
-        if expected_data_type != got {
-            self.error_diag
-                .borrow_mut()
-                .invalid_data_type(position, expected_data_type, got)
+        match got {
+            Some(data_type) => {
+                if *expected_data_type != data_type {
+                    self.error_diag.borrow_mut().invalid_data_type(
+                        position,
+                        expected_data_type,
+                        &data_type,
+                    )
+                }
+            }
+            None => {}
         }
     }
 

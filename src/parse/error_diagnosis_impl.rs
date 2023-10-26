@@ -61,8 +61,11 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message((0, 0), "No main method found.");
     }
 
-    pub fn function_does_not_exist(&mut self, position: (u32, u32)) {
-        self.insert_error_message(position, "Function does not exist.");
+    pub fn function_does_not_exist(&mut self, position: (u32, u32), identifier: &str) {
+        self.insert_error_message(
+            position,
+            format!("Function \"{identifier}\" does not exist.").as_str(),
+        );
     }
 
     pub fn invalid_number_of_arguments(
@@ -147,7 +150,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     ) {
         self.insert_error_message(
             position,
-            format!("Mixed two data types - {lhs} and {rhs}.").as_str(),
+            format!("Incompatible data types on lhs and rhs - {lhs} and {rhs}.").as_str(),
         );
     }
 
