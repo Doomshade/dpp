@@ -131,7 +131,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     pub fn variable_not_found(&mut self, position: (u32, u32), var_name: &str) {
         self.insert_error_message(
             position,
-            format!("Variable \"{var_name}\" was not found.").as_str(),
+            format!("Variable \"{var_name}\" does not exist.").as_str(),
         );
     }
 

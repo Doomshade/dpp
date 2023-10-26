@@ -194,13 +194,20 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 expression,
                 position,
             } => {
-                let variable = self
+                if let Some(variable) = self
                     .symbol_table()
                     .find_variable_in_scope_stack(identifier, self.current_function)
-                    .expect("A variable")
-                    .data_type()
-                    .clone();
-                self.check_data_type(&variable, self.analyze_expr(expression), *position);
+                {
+                    self.check_data_type(
+                        variable.data_type(),
+                        self.analyze_expr(expression),
+                        *position,
+                    );
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_not_found(*position, identifier);
+                }
             }
             Statement::Empty { .. } => {
                 // Nothing :)
