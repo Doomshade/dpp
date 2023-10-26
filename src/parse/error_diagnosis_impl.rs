@@ -1,5 +1,6 @@
 use crate::parse::error_diagnosis::{ErrorMessage, SyntaxError};
 use crate::parse::ErrorDiagnosis;
+use dpp_macros::Pos;
 use std::collections::{BinaryHeap, HashMap};
 
 use crate::parse::lexer::{Token, TokenKind};

@@ -5,6 +5,7 @@ use crate::parse::emitter::Instruction;
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
+use dpp_macros::Pos;
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -498,87 +499,72 @@ mod lexer {
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub enum TokenKind {
-        Identifier,
-        Number,
-        P,
-        Yarn,
-        BangEqual,
-        Comment,
-        Whitespace,
-        Eof,
-        Unknown,
-        EqualEqual,
-        Equal,
-        Bang,
-        Star,
-        ForwardSlash,
-        BackSlash,
-        Plus,
-        MinusEqual,
-        PlusEqual,
-        PlusDash,
-        Dash,
-        Greater,
-        GreaterEqual,
-        Less,
-        LessEqual,
-        NomKeyword,
-        YemKeyword,
-        OpenParen,
-        CloseParen,
-        OpenBrace,
-        CloseBrace,
-        OpenBracket,
-        CloseBracket,
-        Colon,
-        Semicolon,
-        Ampersand,
-        Pipe,
-        Comma,
-        IfKeyword,
-        // if
-        LetKeyword,
-        // let
-        ByeKeyword,
-        // return
-        FUNcKeyword,
-        // function
-        PprintKeyword,
-        // write()
-        PprintlnKeyword,
-        // writeln()
-        PpanicKeyword,
-        // panic()
-        PpinKeyword,
-        // read()
-        XxlppKeyword,
-        // i64
-        PpKeyword,
-        // i32
-        SppKeyword,
-        // i16
-        XsppKeyword,
-        // i8
-        PKeyword,
-        // char
-        BoobaKeyword,
-        // bool
-        NoppKeyword,
-        // void
-        YarnKeyword,
-        // String
-        ForKeyword,
-        ElseKeyword,
-        DoubleQuote,
-        ToKeyword,
-        Arrow,
-        WhileKeyword,
-        DoKeyword,
-        LoopKeyword,
-        BreakKeyword,
-        ContinueKeyword,
-        CaseKeyword,
-        SwitchKeyword,
+        Identifier,      // identifier literal
+        NumberLiteral,   // number literal
+        PLiteral,        // char literal
+        YarnLiteral,     // String literal
+        BangEqual,       // !=
+        Comment,         // #
+        Whitespace,      //
+        Eof,             // EOF
+        Unknown,         // idk
+        EqualEqual,      // ==
+        Equal,           // =
+        Bang,            // !
+        Star,            // *
+        ForwardSlash,    // /
+        BackSlash,       // \
+        Plus,            // +
+        MinusEqual,      // -=
+        PlusEqual,       // +=
+        PlusDash,        // +-
+        Dash,            // -
+        Greater,         // >
+        GreaterEqual,    // >=
+        Less,            // <
+        LessEqual,       // <=
+        NomKeyword,      // nom
+        YemKeyword,      // yem
+        OpenParen,       // (
+        CloseParen,      // )
+        OpenBrace,       // {
+        CloseBrace,      // }
+        OpenBracket,     // [
+        CloseBracket,    // ]
+        Colon,           // :
+        Semicolon,       // ;
+        Ampersand,       // &
+        Pipe,            // |
+        Comma,           // ,
+        IfKeyword,       // if
+        LetKeyword,      // let
+        ByeKeyword,      // return
+        FUNcKeyword,     // function
+        PprintKeyword,   // write()
+        PprintlnKeyword, // writeln()
+        PpanicKeyword,   // panic()
+        PpinKeyword,     // read()
+        XxlppKeyword,    // i64
+        PpKeyword,       // i32
+        SppKeyword,      // i16
+        XsppKeyword,     // i8
+        PKeyword,        // char
+        BoobaKeyword,    // bool
+        NoppKeyword,     // void
+        YarnKeyword,     // String
+        RatioKeyword,    // ratio
+        ForKeyword,      // for
+        ElseKeyword,     // else
+        DoubleQuote,     // "
+        ToKeyword,       // to
+        Arrow,           // ->
+        WhileKeyword,    // while
+        DoKeyword,       // do
+        LoopKeyword,     // loop
+        BreakKeyword,    // break
+        ContinueKeyword, // continue
+        CaseKeyword,     // case
+        SwitchKeyword,   // switch
     }
 
     impl<'a> Token<'a> {
@@ -593,11 +579,6 @@ mod lexer {
         #[must_use]
         pub fn value(&self) -> &'a str {
             self.value
-        }
-
-        #[must_use]
-        pub const fn position(&self) -> (u32, u32) {
-            self.position
         }
 
         #[must_use]
@@ -616,9 +597,9 @@ mod lexer {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let text_representation = match self {
                 Self::Identifier => "identifier",
-                Self::Number => "integer",
-                Self::P => "p",
-                Self::Yarn => "yarn",
+                Self::NumberLiteral => "integer",
+                Self::PLiteral => "p",
+                Self::YarnLiteral => "yarn",
                 Self::BangEqual => "\"!=\"",
                 Self::Comment | Self::Whitespace | Self::Eof | Self::Unknown => "",
                 Self::EqualEqual => "\"==\"",
@@ -677,6 +658,7 @@ mod lexer {
                 Self::ContinueKeyword => "\"continue\"",
                 Self::SwitchKeyword => "\"switch\"",
                 Self::CaseKeyword => "\"case\"",
+                Self::RatioKeyword => "\"ratio\"",
             };
             write!(f, "{text_representation}")
         }
@@ -819,6 +801,8 @@ mod parser {
         Booba,
         // void
         Nopp,
+        // ratio
+        Ratio,
         Struct { name: &'a str },
     }
 
@@ -1159,6 +1143,7 @@ mod parser {
                 DataType::Yarn => write!(f, "yarn")?,
                 DataType::Booba => write!(f, "booba")?,
                 DataType::Nopp => write!(f, "nopp")?,
+                DataType::Ratio => write!(f, "ratio")?,
                 DataType::Struct { name } => write!(f, "struct {name}")?,
             };
 

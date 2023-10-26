@@ -78,14 +78,15 @@ impl<'a, 'b> Lexer<'a, 'b> {
         end += self.advance(); // Consume the character.
 
         if self.peek() != '\'' {
-            self.error_diag
-                .borrow_mut()
-                .expected_different_token_error(&self.new_token(TokenKind::P, ""), TokenKind::P);
+            self.error_diag.borrow_mut().expected_different_token_error(
+                &self.new_token(TokenKind::PLiteral, ""),
+                TokenKind::PLiteral,
+            );
             return self.new_token(TokenKind::Eof, "EOF");
         }
 
         end += self.advance(); // Consume closing quote.
-        self.new_token(TokenKind::P, &self.raw_input[start + 1..end - 1])
+        self.new_token(TokenKind::PLiteral, &self.raw_input[start + 1..end - 1])
     }
 
     fn unknown(&mut self) -> Token<'a> {
@@ -221,11 +222,11 @@ impl<'a, 'b> Lexer<'a, 'b> {
             let _ = self.advance(); // Consume the closing quote.
         } else {
             self.error_diag.borrow_mut().expected_different_token_error(
-                &self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..end]),
+                &self.new_token(TokenKind::YarnLiteral, &self.raw_input[start + 1..end]),
                 TokenKind::DoubleQuote,
             );
         }
-        self.new_token(TokenKind::Yarn, &self.raw_input[start + 1..end - 1])
+        self.new_token(TokenKind::YarnLiteral, &self.raw_input[start + 1..end - 1])
     }
 
     fn number(&mut self) -> Token<'a> {
@@ -247,7 +248,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             }
         }
 
-        self.new_token(TokenKind::Number, &self.raw_input[start..end])
+        self.new_token(TokenKind::NumberLiteral, &self.raw_input[start..end])
     }
 
     fn identifier(&mut self) -> Token<'a> {
@@ -292,6 +293,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "switch" => TokenKind::SwitchKeyword,
             "case" => TokenKind::CaseKeyword,
             "yarn" => TokenKind::YarnKeyword,
+            "ratio" => TokenKind::RatioKeyword,
             _ => TokenKind::Identifier,
         };
 

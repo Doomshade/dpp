@@ -303,8 +303,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::YemKeyword
             | TokenKind::NomKeyword
-            | TokenKind::Number
-            | TokenKind::Yarn
+            | TokenKind::NumberLiteral
+            | TokenKind::YarnLiteral
             | TokenKind::OpenParen => {
                 let expression = self.expr()?;
                 self.expect(TokenKind::Semicolon)?;
@@ -347,6 +347,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::SppKeyword
             | TokenKind::XsppKeyword
             | TokenKind::PKeyword
+            | TokenKind::RatioKeyword
             | TokenKind::NoppKeyword
             | TokenKind::BoobaKeyword
             | TokenKind::YarnKeyword => {
@@ -411,6 +412,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::NoppKeyword,
             TokenKind::BoobaKeyword,
             TokenKind::YarnKeyword,
+            TokenKind::RatioKeyword,
         ])?;
 
         match token.1 {
@@ -421,6 +423,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),
             TokenKind::YarnKeyword => Some(DataType::Yarn),
+            TokenKind::RatioKeyword => Some(DataType::Ratio),
             _ => None,
         }
     }
@@ -584,9 +587,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                     value: false,
                 })
             }
-            TokenKind::Number => {
+            TokenKind::NumberLiteral => {
                 let position = self.position;
-                let number = self.expect(TokenKind::Number)?;
+                let number = self.expect(TokenKind::NumberLiteral)?;
                 if let Ok(value) = number.parse::<i32>() {
                     Some(Expression::Number {
                         position,
@@ -597,18 +600,18 @@ impl<'a, 'b> Parser<'a, 'b> {
                     panic!("Invalid number")
                 }
             }
-            TokenKind::P => {
+            TokenKind::PLiteral => {
                 let position = self.position;
-                let char = self.expect(TokenKind::P)?;
+                let char = self.expect(TokenKind::PLiteral)?;
                 if let Some(value) = char.chars().next() {
                     Some(Expression::P { position, value })
                 } else {
                     panic!("Invalid character")
                 }
             }
-            TokenKind::Yarn => {
+            TokenKind::YarnLiteral => {
                 let position = self.position;
-                let yarn = self.expect(TokenKind::Yarn)?;
+                let yarn = self.expect(TokenKind::YarnLiteral)?;
                 Some(Expression::Yarn {
                     position,
                     value: yarn,
