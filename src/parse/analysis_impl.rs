@@ -65,13 +65,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn analyze_global_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
-            Statement::VariableDeclaration { variable, position } => {
+            Statement::VariableDeclaration { variable, .. } => {
                 if self
                     .symbol_table()
-                    .find_local_variable_in_scope_stack(
-                        variable.identifier(),
-                        self.current_function,
-                    )
+                    .find_global_variable(variable.identifier())
                     .is_some()
                 {
                     self.error_diag
@@ -80,8 +77,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
 
                 if let Some(expression) = variable.value() {
-                    let data_type = self.analyze_expr(expression);
-                    self.check_data_type(variable.data_type(), &data_type, variable.position());
+                    self.check_data_type(
+                        variable.data_type(),
+                        &self.analyze_expr(expression),
+                        variable.position(),
+                    );
                 }
                 self.symbol_table_mut()
                     .push_global_variable(variable.clone());
@@ -92,7 +92,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn analyze_statement(&mut self, statement: &Statement<'a>) {
         match &statement {
-            Statement::VariableDeclaration { variable, position } => {
+            Statement::VariableDeclaration { variable, .. } => {
                 if self
                     .symbol_table()
                     .find_local_variable_in_scope_stack(
@@ -107,8 +107,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
 
                 if let Some(expression) = variable.value() {
-                    let data_type = self.analyze_expr(expression);
-                    self.check_data_type(variable.data_type(), &data_type, variable.position());
+                    self.check_data_type(
+                        variable.data_type(),
+                        &self.analyze_expr(expression),
+                        variable.position(),
+                    );
                 }
                 self.symbol_table_mut()
                     .push_local_variable(variable.clone());
