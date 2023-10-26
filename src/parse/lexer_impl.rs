@@ -113,15 +113,31 @@ impl<'a, 'b> Lexer<'a, 'b> {
         let mut end = start;
 
         match self.peek() {
+            // -= ->
             '-' => {
                 end += self.advance();
                 if self.peek() == '=' || self.peek() == '>' {
                     end += self.advance();
                 }
             }
+            // >= <= != == += *= /= %=
             '>' | '<' | '!' | '=' | '+' | '*' | '/' | '%' => {
                 end += self.advance();
                 if self.peek() == '=' {
+                    end += self.advance();
+                }
+            }
+            // &&
+            '&' => {
+                end += self.advance();
+                if self.peek() == '&' {
+                    end += self.advance();
+                }
+            }
+            // ||
+            '|' => {
+                end += self.advance();
+                if self.peek() == '|' {
                     end += self.advance();
                 }
             }
@@ -150,7 +166,9 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "+=" => TokenKind::PlusEqual,
             "-=" => TokenKind::MinusEqual,
             "&" => TokenKind::Ampersand,
+            "&&" => TokenKind::AmpersandAmpersand,
             "|" => TokenKind::Pipe,
+            "||" => TokenKind::PipePipe,
             _ => panic!("Unknown operator: {op}"),
         };
 

@@ -13,7 +13,7 @@
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::TokenKind;
 use crate::parse::parser::{
-    BinaryOperator, Case, DataType, Number, Statement, TranslationUnit, UnaryOperator,
+    BinaryOperator, Case, DataType, NumberType, Statement, TranslationUnit, UnaryOperator,
 };
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
@@ -416,7 +416,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         ])?;
 
         match token.1 {
-            TokenKind::PpKeyword => Some(DataType::Number(Number::Pp)),
+            TokenKind::PpKeyword => Some(DataType::Number(NumberType::Pp)),
             TokenKind::PKeyword => Some(DataType::P),
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),
@@ -462,12 +462,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             || self.matches_token_kind(TokenKind::GreaterEqual)
             || self.matches_token_kind(TokenKind::Less)
             || self.matches_token_kind(TokenKind::LessEqual)
+            || self.matches_token_kind(TokenKind::PipePipe)
+            || self.matches_token_kind(TokenKind::AmpersandAmpersand)
         {
             let op = match self.token()?.kind() {
                 TokenKind::Greater => BinaryOperator::GreaterThan,
                 TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
                 TokenKind::Less => BinaryOperator::LessThan,
                 TokenKind::LessEqual => BinaryOperator::LessThanOrEqual,
+                TokenKind::PipePipe => BinaryOperator::Or,
+                TokenKind::AmpersandAmpersand => BinaryOperator::And,
                 _ => unreachable!(),
             };
             self.consume_token();
@@ -591,7 +595,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if let Ok(value) = number.parse::<i32>() {
                     Some(Expression::Number {
                         position,
-                        number_type: Number::Pp,
+                        number_type: NumberType::Pp,
                         value,
                     })
                 } else {

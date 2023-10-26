@@ -3,7 +3,7 @@ use dpp_macros::Pos;
 use crate::parse::analysis::SymbolTable;
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
-    Block, DataType, Number, Statement, TranslationUnit, UnaryOperator, Variable,
+    Block, DataType, NumberType, Statement, TranslationUnit, UnaryOperator, Variable,
 };
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
@@ -258,13 +258,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
                 if let Some(ident_expression) = ident_expression {
                     self.check_data_type(
-                        &DataType::Number(Number::Pp),
+                        &DataType::Number(NumberType::Pp),
                         self.analyze_expr(ident_expression),
                         ident_expression.position(),
                     );
                 }
                 self.check_data_type(
-                    &DataType::Number(Number::Pp),
+                    &DataType::Number(NumberType::Pp),
                     self.analyze_expr(length_expression),
                     length_expression.position(),
                 );
@@ -273,7 +273,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let variable = Variable::new(
                     *position,
                     index_ident,
-                    DataType::Number(Number::Pp),
+                    DataType::Number(NumberType::Pp),
                     ident_expression.clone(),
                     false,
                 );
@@ -304,16 +304,34 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Expression::P { .. } => Some(DataType::P),
             Expression::Booba { .. } => Some(DataType::Booba),
             Expression::Yarn { .. } => Some(DataType::Yarn),
-            Expression::Unary { operand, op, .. } => {
+            Expression::Unary {
+                operand,
+                op,
+                position,
+            } => {
                 let data_type = self.analyze_expr(operand)?;
                 return match op {
                     UnaryOperator::Not => match data_type {
                         DataType::Booba => Some(data_type),
-                        _ => panic!("Invalid type for unary operator"),
+                        _ => {
+                            self.error_diag.borrow_mut().invalid_data_type(
+                                *position,
+                                &DataType::Booba,
+                                &data_type,
+                            );
+                            Some(data_type)
+                        }
                     },
                     UnaryOperator::Negate => match data_type {
                         DataType::Number(..) => Some(data_type),
-                        _ => panic!("Invalid type for unary operator"),
+                        _ => {
+                            self.error_diag.borrow_mut().invalid_data_type(
+                                *position,
+                                &DataType::Number(NumberType::Pp),
+                                &data_type,
+                            );
+                            Some(data_type)
+                        }
                     },
                 };
             }
@@ -332,7 +350,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 match op {
                     Add | Subtract | Multiply | Divide => Some(lhs_data_type),
                     NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan
-                    | LessThanOrEqual => Some(DataType::Booba),
+                    | LessThanOrEqual | And | Or => Some(DataType::Booba),
                 }
             }
             Expression::Identifier {

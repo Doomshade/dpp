@@ -10,9 +10,9 @@ FUNc a(a: pp) -> pp {
 FUNc asd(firstarg: pp, aa: pp) -> pp {
     pp -> expr = (1 + 2) * 3 + 4 * 5;
     booba -> decl = yem;
+    booba -> c = !yem;
     pp -> assign = 123;
-    pp -> c = 0;
-    pp -> another_expr = (aa + (a(1))) + c;
+    pp -> another_expr = (aa + (a(1)));
 
     abcde(aa > 456, aa);
     # blocc
@@ -35,6 +35,8 @@ FUNc asd(firstarg: pp, aa: pp) -> pp {
 FUNc main() -> pp {
     pp -> y = 123;
     pp -> z = hellyea(y, 123);
+    booba -> d = nom || yem;
+    booba -> c = !nom && yem && d && nom && yem;
     bye 0;
 }
 

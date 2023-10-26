@@ -6,8 +6,10 @@ use dpp_macros::Pos;
 
 use crate::parse::analysis::FunctionScope;
 use crate::parse::compiler;
-use crate::parse::emitter::{Address, DebugKeyword, Instruction, Operation};
-use crate::parse::parser::{BinaryOperator, Block, DataType, Statement, TranslationUnit};
+use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
+use crate::parse::parser::{
+    BinaryOperator, Block, DataType, Statement, TranslationUnit, UnaryOperator,
+};
 use crate::parse::{Emitter, Expression, Function, Variable};
 
 impl<'a, 'b> Emitter<'a, 'b> {
@@ -174,18 +176,78 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     .for_each(|four_packed_chars| self.emit_literal(four_packed_chars));
             }
             Expression::Binary { lhs, rhs, op, .. } => {
-                self.emit_expression(lhs);
-                self.emit_expression(rhs);
                 use BinaryOperator as BinOp;
-                use Operation as Op;
+                use OperationType as Op;
+                self.emit_expression(lhs);
+                let after_expr_label;
+                let short_circuit_label;
+                match op {
+                    BinOp::And | BinOp::Or => {
+                        short_circuit_label = Some(self.create_label("short_crct"));
+                        after_expr_label = Some(self.create_label("after_bool_expr"));
+                        self.emit_binary_boolean_expression(
+                            op,
+                            short_circuit_label.clone().unwrap().as_str(),
+                        );
+                    }
+                    _ => {
+                        after_expr_label = None;
+                        short_circuit_label = None;
+                    }
+                }
+                self.emit_expression(rhs);
                 match op {
                     BinOp::Add => self.emit_operation(Op::Add),
                     BinOp::Subtract => self.emit_operation(Op::Subtract),
                     BinOp::Multiply => self.emit_operation(Op::Multiply),
                     BinOp::Equal => self.emit_operation(Op::Equal),
                     BinOp::GreaterThan => self.emit_operation(Op::GreaterThan),
+                    BinOp::NotEqual => self.emit_operation(Op::NotEqual),
+                    BinOp::LessThanOrEqual => self.emit_operation(Op::LessThanOrEqualTo),
+                    BinOp::GreaterThanOrEqual => self.emit_operation(Op::GreaterThanOrEqualTo),
+                    BinOp::Divide => self.emit_operation(Op::Divide),
+                    BinOp::LessThan => self.emit_operation(Op::LessThan),
+                    BinOp::And | BinOp::Or => {
+                        self.emit_binary_boolean_expression(
+                            op,
+                            short_circuit_label.clone().unwrap().as_str(),
+                        );
+                    }
+                };
 
-                    _ => todo!("Binary operator {:?}", op),
+                // If we reached at the end of the expression we DID not short circuit (see below).
+                // If we don't short circuit AND it means the value is true.
+                // If we don't short circuit OR it means the value is false.
+                if after_expr_label.is_some() {
+                    match op {
+                        BinaryOperator::And => self.emit_booba(true),
+                        BinaryOperator::Or => self.emit_booba(false),
+                        _ => {}
+                    };
+
+                    // Jump to the END of the expression because below this is the short
+                    // circuiting code.
+                    self.emit_jump(Address::Label(after_expr_label.clone().unwrap()));
+                }
+
+                // If we short circuit the boolean expression we need to emit the value of the
+                // expression. For AND short circuiting means we found a false value. For OR it
+                // means we found a true value.
+                //
+                // If we short circuit AND it means the value is false.
+                // If we short circuit OR it means the value is true.
+                if let Some(label) = short_circuit_label {
+                    self.echo(format!("Reached short circuit label for {:?}", op).as_str());
+                    self.emit_label(label.as_str());
+                    match op {
+                        BinaryOperator::And => self.emit_booba(false),
+                        BinaryOperator::Or => self.emit_booba(true),
+                        _ => {}
+                    };
+                }
+
+                if let Some(label) = after_expr_label {
+                    self.emit_label(label.as_str());
                 }
             }
             Expression::Identifier { identifier, .. } => {
@@ -203,7 +265,74 @@ impl<'a, 'b> Emitter<'a, 'b> {
             } => {
                 self.emit_function_call(arguments, identifier);
             }
-            _ => todo!("Not implemented"),
+            Expression::Unary { op, operand, .. } => {
+                self.emit_expression(operand);
+                match op {
+                    UnaryOperator::Not => {
+                        self.emit_expression(&Expression::Booba {
+                            position: (0, 0),
+                            value: true,
+                        });
+                        self.emit_operation(OperationType::NotEqual);
+                    }
+                    UnaryOperator::Negate => self.emit_operation(OperationType::Negate),
+                }
+            }
+            _ => todo!("Not implemented {expression}"),
+        }
+    }
+
+    fn emit_booba(&mut self, value: bool) {
+        self.emit_expression(&Expression::Booba {
+            position: (0, 0),
+            value,
+        });
+    }
+
+    fn emit_value_on_top_of_stack_equals(&mut self) {
+        // Compare the value to true.
+        self.emit_booba(true);
+        self.echo("Emitted true value to compare the value with.");
+        self.emit_operation(OperationType::Equal);
+    }
+
+    fn emit_binary_boolean_expression(
+        &mut self,
+        binop: &BinaryOperator,
+        short_circuit_label: &str,
+    ) {
+        match binop {
+            BinaryOperator::And => {
+                self.emit_value_on_top_of_stack_equals();
+
+                // Need to duplicate the value on top of the stack because Jmc consumes
+                // the boolean value and we need to store it.
+                self.emit_booba(true);
+                self.emit_operation(OperationType::Equal);
+                self.echo("Duplicated value for AND");
+
+                // If the value is FALSE stop executing the rest of the expression.
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(short_circuit_label.to_string()),
+                });
+            }
+            BinaryOperator::Or => {
+                self.emit_value_on_top_of_stack_equals();
+
+                // Need to duplicate the value on top of the stack because Jmc consumes
+                // the boolean value and we need to store it.
+                self.emit_booba(true);
+                self.emit_operation(OperationType::NotEqual);
+                self.echo("Duplicated value for OR");
+
+                // If the value is TRUE stop executing the rest of the expression.
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(short_circuit_label.to_string()),
+                });
+            }
+            _ => {
+                panic!("Invalid boolean expression");
+            }
         }
     }
 
@@ -399,7 +528,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.code.push(instruction);
     }
 
-    fn emit_operation(&mut self, operation: Operation) {
+    fn emit_operation(&mut self, operation: OperationType) {
         self.emit_instruction(Instruction::Operation { operation });
     }
 
@@ -571,7 +700,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_label(cmp_label.as_str());
                 self.load(level, var_loc as i32, 1);
                 self.emit_expression(length_expression);
-                self.emit_operation(Operation::LessThan);
+                self.emit_operation(OperationType::LessThan);
                 self.emit_instruction(Instruction::Jmc {
                     address: Address::Label(end.clone()),
                 });
@@ -581,7 +710,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 // Increment i.
                 self.load(level, var_loc as i32, 1);
                 self.emit_literal(1);
-                self.emit_operation(Operation::Add);
+                self.emit_operation(OperationType::Add);
                 self.store(level, var_loc as i32, 1);
                 self.emit_jump(Address::Label(cmp_label.clone()));
                 self.emit_label(end.as_str());

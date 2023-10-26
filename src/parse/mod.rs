@@ -506,72 +506,74 @@ mod lexer {
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub enum TokenKind {
-        Identifier,      // identifier literal
-        NumberLiteral,   // number literal
-        PLiteral,        // char literal
-        YarnLiteral,     // String literal
-        BangEqual,       // !=
-        Comment,         // #
-        Whitespace,      //
-        Eof,             // EOF
-        Unknown,         // idk
-        EqualEqual,      // ==
-        Equal,           // =
-        Bang,            // !
-        Star,            // *
-        ForwardSlash,    // /
-        BackSlash,       // \
-        Plus,            // +
-        MinusEqual,      // -=
-        PlusEqual,       // +=
-        PlusDash,        // +-
-        Dash,            // -
-        Greater,         // >
-        GreaterEqual,    // >=
-        Less,            // <
-        LessEqual,       // <=
-        NomKeyword,      // nom
-        YemKeyword,      // yem
-        OpenParen,       // (
-        CloseParen,      // )
-        OpenBrace,       // {
-        CloseBrace,      // }
-        OpenBracket,     // [
-        CloseBracket,    // ]
-        Colon,           // :
-        Semicolon,       // ;
-        Ampersand,       // &
-        Pipe,            // |
-        Comma,           // ,
-        IfKeyword,       // if
-        LetKeyword,      // let
-        ByeKeyword,      // return
-        FUNcKeyword,     // function
-        PprintKeyword,   // write()
-        PprintlnKeyword, // writeln()
-        PpanicKeyword,   // panic()
-        PpinKeyword,     // read()
-        XxlppKeyword,    // i64
-        PpKeyword,       // i32
-        SppKeyword,      // i16
-        XsppKeyword,     // i8
-        PKeyword,        // char
-        BoobaKeyword,    // bool
-        NoppKeyword,     // void
-        YarnKeyword,     // String
-        RatioKeyword,    // ratio
-        ForKeyword,      // for
-        ElseKeyword,     // else
-        DoubleQuote,     // "
-        ToKeyword,       // to
-        Arrow,           // ->
-        WhileKeyword,    // while
-        DoKeyword,       // do
-        LoopKeyword,     // loop
-        BreakKeyword,    // break
-        ContinueKeyword, // continue
-        CaseKeyword,     // case
-        SwitchKeyword,   // switch
+        Identifier,         // identifier literal
+        NumberLiteral,      // number literal
+        PLiteral,           // char literal
+        YarnLiteral,        // String literal
+        BangEqual,          // !=
+        Comment,            // #
+        Whitespace,         //
+        Eof,                // EOF
+        Unknown,            // idk
+        EqualEqual,         // ==
+        Equal,              // =
+        Bang,               // !
+        Star,               // *
+        ForwardSlash,       // /
+        BackSlash,          // \
+        Plus,               // +
+        MinusEqual,         // -=
+        PlusEqual,          // +=
+        PlusDash,           // +-
+        Dash,               // -
+        Greater,            // >
+        GreaterEqual,       // >=
+        Less,               // <
+        LessEqual,          // <=
+        NomKeyword,         // nom
+        YemKeyword,         // yem
+        OpenParen,          // (
+        CloseParen,         // )
+        OpenBrace,          // {
+        CloseBrace,         // }
+        OpenBracket,        // [
+        CloseBracket,       // ]
+        Colon,              // :
+        Semicolon,          // ;
+        Ampersand,          // &
+        Pipe,               // |
+        Comma,              // ,
+        IfKeyword,          // if
+        LetKeyword,         // let
+        ByeKeyword,         // return
+        FUNcKeyword,        // function
+        PprintKeyword,      // write()
+        PprintlnKeyword,    // writeln()
+        PpanicKeyword,      // panic()
+        PpinKeyword,        // read()
+        XxlppKeyword,       // i64
+        PpKeyword,          // i32
+        SppKeyword,         // i16
+        XsppKeyword,        // i8
+        PKeyword,           // char
+        BoobaKeyword,       // bool
+        NoppKeyword,        // void
+        YarnKeyword,        // String
+        RatioKeyword,       // ratio
+        ForKeyword,         // for
+        ElseKeyword,        // else
+        DoubleQuote,        // "
+        ToKeyword,          // to
+        Arrow,              // ->
+        WhileKeyword,       // while
+        DoKeyword,          // do
+        LoopKeyword,        // loop
+        BreakKeyword,       // break
+        ContinueKeyword,    // continue
+        CaseKeyword,        // case
+        SwitchKeyword,      // switch
+        PipePipe,           // ||
+        AmpersandAmpersand, // &&
     }
 
     impl<'a> Token<'a> {
@@ -635,7 +637,9 @@ mod lexer {
                 Self::Colon => "\":\"",
                 Self::Semicolon => "\";\"",
                 Self::Ampersand => "\"&\"",
+                Self::AmpersandAmpersand => "\"&&\"",
                 Self::Pipe => "\"|\"",
+                Self::PipePipe => "\"||\"",
                 Self::Comma => "\",\"",
                 Self::IfKeyword => "\"if\"",
                 Self::LetKeyword => "\"let\"",
@@ -799,7 +803,7 @@ mod parser {
     #[derive(Debug, Clone)]
     pub enum DataType<'a> {
         // Xxlpp, Pp, Spp, Xspp
-        Number(Number),
+        Number(NumberType),
         // char
         P,
         // string
@@ -814,7 +818,7 @@ mod parser {
     }
 
     #[derive(Debug, PartialEq, Eq, Clone)]
-    pub enum Number {
+    pub enum NumberType {
         Pp,    // int
         Ratio, // ratio
         Glide, // float
@@ -828,7 +832,7 @@ mod parser {
         // TODO: Use LiteralExpression instead.
         Number {
             position: (u32, u32),
-            number_type: Number,
+            number_type: NumberType,
             value: i32,
         },
         P {
@@ -871,6 +875,8 @@ mod parser {
     #[derive(Clone, Debug)]
     pub enum BinaryOperator {
         Add,
+        And,
+        Or,
         Subtract,
         Multiply,
         Divide,
@@ -1043,9 +1049,9 @@ mod parser {
         pub fn size(&self) -> usize {
             match self {
                 DataType::Number(number) => match number {
-                    Number::Pp => mem::size_of::<i32>(),
-                    Number::Ratio => mem::size_of::<i32>() * 2,
-                    Number::Glide => mem::size_of::<i32>() * 2,
+                    NumberType::Pp => mem::size_of::<i32>(),
+                    NumberType::Ratio => mem::size_of::<i32>() * 2,
+                    NumberType::Glide => mem::size_of::<i32>() * 2,
                 },
                 DataType::P => mem::size_of::<char>(),
                 DataType::Booba => mem::size_of::<bool>(),
@@ -1506,7 +1512,7 @@ mod emitter {
         },
         /// Return from a subroutine. This instruction uses the stack frame (or block mark) from the current invocation of the subroutine to clear the stack of all data local to the current subroutine, restore the base register, and restore the program counter. Like all operations which require no arguments, it uses the op code OPR, with a second argument (here zero) indicating which of the zero-argument operations to perform.
         Operation {
-            operation: Operation,
+            operation: OperationType,
         },
         /// Load (i.e. push onto the stack) the value of the cell identified by level and offset. A level value of 0 means the variable is in the currently executing procedure; 1 means it's in the immediately enclosing region of the program. 2 means it's the region outside that (in PL/0 as in Pascal procedures can nest indefinitely). The offset distinguishes among the variables declared at that level.
         Load {
@@ -1547,7 +1553,7 @@ mod emitter {
     }
 
     #[derive(Clone, Copy, Debug)]
-    pub enum Operation {
+    pub enum OperationType {
         Return = 0,
         /// Negate the value on the top of the stack (i.e. multiply by -1).
         Negate = 1,
@@ -1642,6 +1648,7 @@ pub mod compiler {
                 // Lex -> parse -> analyze -> emit.
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
+                dbg!(&translation_unit);
                 let symbol_table = Self::analyze(&translation_unit, &error_diag)?;
                 Self::emit(output_file, &translation_unit, symbol_table, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
