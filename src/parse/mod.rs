@@ -893,13 +893,10 @@ mod parser {
     #[derive(Clone, Debug, Pos)]
     pub struct Variable<'a> {
         position: (u32, u32),
-        position_in_scope: Option<usize>,
-        scope_id: Option<usize>,
         identifier: &'a str,
         data_type: DataType<'a>,
         size: usize,
         value: Option<Expression<'a>>,
-        is_parameter: bool,
     }
 
     #[derive(Clone, Debug, Pos)]
@@ -1049,13 +1046,6 @@ mod parser {
         pub fn parameters(&self) -> &Vec<Variable<'a>> {
             &self.parameters
         }
-
-        /// The size of parameters in instructions.
-        pub fn parameters_size(&self) -> usize {
-            self.parameters().iter().fold(0, |acc, parameter| {
-                acc + parameter.data_type().size_in_instructions()
-            })
-        }
     }
 
     impl<'a> Block<'a> {
@@ -1080,29 +1070,18 @@ mod parser {
             identifier: &'a str,
             data_type: DataType<'a>,
             value: Option<Expression<'a>>,
-            is_parameter: bool,
         ) -> Self {
             Variable {
                 position,
-                position_in_scope: None,
-                scope_id: None,
                 identifier,
                 size: data_type.size(),
                 data_type,
                 value,
-                is_parameter,
             }
-        }
-
-        pub fn is_initialized(&self) -> bool {
-            self.is_parameter || self.value.is_some()
         }
 
         pub fn position(&self) -> (u32, u32) {
             self.position
-        }
-        pub fn position_in_scope(&self) -> Option<usize> {
-            self.position_in_scope
         }
         pub fn identifier(&self) -> &'a str {
             self.identifier
@@ -1116,20 +1095,8 @@ mod parser {
         pub fn value(&self) -> Option<&Expression<'a>> {
             self.value.as_ref()
         }
-
-        pub fn set_scope_id(&mut self, scope_id: usize) {
-            self.scope_id = Some(scope_id);
-        }
-
-        pub fn set_position_in_scope(&mut self, position_in_scope: usize) {
-            self.position_in_scope = Some(position_in_scope);
-        }
-
         pub fn size_in_instructions(&self) -> usize {
             ((self.size() - 1) / 4) + 1
-        }
-        pub fn scope_id(&self) -> Option<usize> {
-            self.scope_id
         }
     }
 
@@ -1286,7 +1253,7 @@ mod parser {
 mod analysis {
     use std::{cell, collections, rc};
 
-    use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
+    use crate::parse::parser::{DataType, Expression, Function, Variable};
 
     #[derive(Debug)]
     pub struct SymbolTable<'a> {
@@ -1334,7 +1301,6 @@ mod analysis {
     pub struct FunctionDescriptor<'a> {
         return_type: DataType<'a>,
         parameters: Vec<Variable<'a>>,
-        block: Block<'a>,
     }
 
     impl<'a> SymbolTable<'a> {
@@ -1516,7 +1482,7 @@ mod analysis {
                 current_position: 1,
             }
         }
-        pub fn push_variable(&mut self, mut variable: &Variable<'a>) {
+        pub fn push_variable(&mut self, variable: &Variable<'a>) {
             let variable_descriptor =
                 VariableDescriptor::new(variable, self.scope.id, self.current_position, false);
             self.current_position += variable_descriptor.size_in_instructions();
@@ -1668,18 +1634,11 @@ mod analysis {
         pub fn size(&self) -> usize {
             self.size
         }
-        pub fn value(&self) -> &Option<Expression<'a>> {
-            &self.value
-        }
-        pub fn is_parameter(&self) -> bool {
-            self.is_parameter
-        }
     }
 
     impl<'a> FunctionDescriptor<'a> {
         pub fn new(function: &Function<'a>) -> Self {
             FunctionDescriptor {
-                block: function.block().clone(),
                 return_type: function.return_type().clone(),
                 parameters: function.parameters().clone(),
             }
@@ -1690,9 +1649,6 @@ mod analysis {
         }
         pub fn parameters(&self) -> &Vec<Variable<'a>> {
             &self.parameters
-        }
-        pub fn block(&self) -> &Block<'a> {
-            &self.block
         }
 
         /// The size of parameters in instructions.

@@ -322,7 +322,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     index_ident,
                     DataType::Number(NumberType::Pp),
                     ident_expression.clone(),
-                    false,
                 );
                 self.symbol_table_mut()
                     .push_local_variable(&variable, false);

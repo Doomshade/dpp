@@ -165,7 +165,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let data_type = self._data_type()?;
         self.expect(TokenKind::Arrow)?;
         let identifier = self.expect(TokenKind::Identifier)?;
-        Some(Variable::new(position, identifier, data_type, None, true))
+        Some(Variable::new(position, identifier, data_type, None))
     }
 
     fn _block(&mut self) -> Option<Block<'a>> {
@@ -454,18 +454,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             let expression = self._expr()?;
             Statement::VariableDeclaration {
                 position,
-                variable: Variable::new(
-                    self.position,
-                    identifier,
-                    data_type,
-                    Some(expression),
-                    false,
-                ),
+                variable: Variable::new(self.position, identifier, data_type, Some(expression)),
             }
         } else {
             Statement::VariableDeclaration {
                 position,
-                variable: Variable::new(self.position, identifier, data_type, None, false),
+                variable: Variable::new(self.position, identifier, data_type, None),
             }
         };
 
