@@ -1504,7 +1504,7 @@ mod analysis {
     }
 
     impl<'a> FunctionScope<'a> {
-        pub const ACTIVATION_RECORD_SIZE: usize = 3;
+        const ACTIVATION_RECORD_SIZE: usize = 3;
 
         pub fn new(function_identifier: &'a str) -> Self {
             FunctionScope {

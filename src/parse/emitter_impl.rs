@@ -228,7 +228,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     let return_type_size;
                     {
                         let symbol_table = self.symbol_table();
-                        let function = symbol_table.function(identifier).expect("A function");
+                        let function = symbol_table.function(identifier).unwrap();
                         return_type_size = function.return_type().size_in_instructions();
                     }
                     if return_type_size > 0 {
@@ -266,16 +266,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 let function_descriptor =
                     self.symbol_table().function(function_identifier).unwrap();
                 let parameters_size = function_descriptor.parameters_size();
+                let return_type_size = function_descriptor.return_type().size_in_instructions();
 
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
                     self.echo(format!("Returning {}", expression).as_str());
-                    // TODO: The return value offset should consider the size of the return value.
-                    self.store(0, -1 - parameters_size as i32, 1);
+                    self.store(0, -(return_type_size as i32) - parameters_size as i32, 1);
                 }
                 self.emit_instruction(Instruction::Return);
-                // Don't emit RET. The function `emit_function` will handle this
-                // because in case of main function we want to JMP 0 0 instead of RET 0 0.
             }
             Statement::While {
                 expression,
@@ -655,9 +653,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             arguments_size = a;
         } else {
             let symbol_table = self.symbol_table();
-            let function = symbol_table
-                .function(identifier)
-                .expect("Function to exist");
+            let function = symbol_table.function(identifier).unwrap();
             return_type_size = function.return_type().size_in_instructions();
             arguments_size = function.parameters_size();
         }
