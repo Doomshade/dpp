@@ -207,11 +207,9 @@ impl<'a, 'b> Lexer<'a, 'b> {
                     '\\' => '\\',
                     '0' => '\0',
                     _ => {
-                        self.error_diag.borrow_mut().invalid_escaped_character(
-                            self.row,
-                            self.col,
-                            self.peek(),
-                        );
+                        self.error_diag
+                            .borrow_mut()
+                            .invalid_escaped_character((self.row, self.col), self.peek());
                         self.peek()
                     }
                 };
@@ -242,7 +240,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             if !self.peek().is_ascii_digit() {
                 self.error_diag
                     .borrow_mut()
-                    .invalid_number(self.row, self.col);
+                    .invalid_number((self.row, self.col));
             }
             while self.peek().is_ascii_digit() {
                 end += self.advance();

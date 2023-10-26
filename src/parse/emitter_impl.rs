@@ -587,8 +587,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_label(end.as_str());
             }
             _ => self.error_diag.borrow_mut().not_implemented(
-                statement.row(),
-                statement.col(),
+                statement.position(),
                 format!("statement {:?}", statement).as_str(),
             ),
         };

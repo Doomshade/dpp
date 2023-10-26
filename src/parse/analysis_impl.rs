@@ -18,11 +18,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 .symbol_table()
                 .has_global_function(function.identifier())
             {
-                self.error_diag.borrow_mut().function_already_exists(
-                    function.row(),
-                    function.col(),
-                    function.identifier(),
-                );
+                self.error_diag
+                    .borrow_mut()
+                    .function_already_exists(function.position(), function.identifier());
             }
             self.symbol_table_mut()
                 .push_global_function(function.clone())
@@ -57,10 +55,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             if let Some(Statement::Bye { .. }) = last_statement {
                 // Do nothing.
             } else {
-                self.error_diag.borrow_mut().missing_return_statement(
-                    function.block().position().0,
-                    function.block().position().1,
-                );
+                self.error_diag
+                    .borrow_mut()
+                    .missing_return_statement(function.block().position());
             }
         }
         self.end_function();
@@ -77,16 +74,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     )
                     .is_some()
                 {
-                    self.error_diag.borrow_mut().variable_already_exists(
-                        variable.position().0,
-                        variable.position().1,
-                        variable.identifier(),
-                    );
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_already_exists(variable.position(), variable.identifier());
                 }
 
                 if let Some(expression) = variable.value() {
                     let data_type = self.analyze_expr(expression);
-                    self.check_data_type(variable.data_type(), &data_type, &variable.position());
+                    self.check_data_type(variable.data_type(), &data_type, variable.position());
                 }
                 self.symbol_table_mut()
                     .push_global_variable(variable.clone());
@@ -106,16 +101,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     )
                     .is_some()
                 {
-                    self.error_diag.borrow_mut().variable_already_exists(
-                        variable.position().0,
-                        variable.position().1,
-                        variable.identifier(),
-                    );
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_already_exists(variable.position(), variable.identifier());
                 }
 
                 if let Some(expression) = variable.value() {
                     let data_type = self.analyze_expr(expression);
-                    self.check_data_type(variable.data_type(), &data_type, &variable.position());
+                    self.check_data_type(variable.data_type(), &data_type, variable.position());
                 }
                 self.symbol_table_mut()
                     .push_local_variable(variable.clone());
@@ -130,11 +123,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 ..
             } => {
                 let data_type = self.analyze_expr(expression);
-                self.check_data_type(
-                    &DataType::Booba,
-                    &data_type,
-                    &(expression.row(), expression.col()),
-                );
+                self.check_data_type(&DataType::Booba, &data_type, expression.position());
                 self.loop_stack += 1;
                 self.analyze_statement(statement);
                 self.loop_stack -= 1;
@@ -153,7 +142,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 let data_type = self.analyze_expr(expression);
-                self.check_data_type(&DataType::Booba, &data_type, position);
+                self.check_data_type(&DataType::Booba, &data_type, *position);
                 self.loop_stack += 1;
                 block
                     .statements()
@@ -165,7 +154,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 if self.loop_stack == 0 {
                     self.error_diag
                         .borrow_mut()
-                        .invalid_break_placement(position.0, position.1);
+                        .invalid_break_placement(*position);
                 }
             }
             Statement::Block { block, .. } => {
@@ -179,7 +168,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let data_type = self.analyze_expr(expression);
 
-                self.check_data_type(&DataType::Booba, &data_type, position);
+                self.check_data_type(&DataType::Booba, &data_type, *position);
                 self.analyze_statement(statement);
             }
             Statement::IfElse {
@@ -190,7 +179,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let data_type = self.analyze_expr(expression);
 
-                self.check_data_type(&DataType::Booba, &data_type, position);
+                self.check_data_type(&DataType::Booba, &data_type, *position);
                 self.analyze_statement(statement);
                 self.analyze_statement(else_statement);
             }
@@ -205,7 +194,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .expect("A variable")
                     .data_type()
                     .clone();
-                self.check_data_type(&variable, &self.analyze_expr(expression), position);
+                self.check_data_type(&variable, &self.analyze_expr(expression), *position);
             }
             Statement::Empty { .. } => {
                 // Nothing :)
@@ -227,7 +216,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.check_data_type(
                         &switch_data_type,
                         &mismatched_data_type.1,
-                        &mismatched_data_type.0,
+                        mismatched_data_type.0,
                     );
                 }
             }
@@ -243,23 +232,21 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .find_local_variable_in_scope_stack(index_ident, self.current_function)
                     .is_some()
                 {
-                    self.error_diag.borrow_mut().variable_already_exists(
-                        position.0,
-                        position.1,
-                        index_ident,
-                    );
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_already_exists(*position, index_ident);
                 }
                 if let Some(ident_expression) = ident_expression {
                     self.check_data_type(
                         &DataType::Number(Number::Pp),
                         &self.analyze_expr(ident_expression),
-                        &(ident_expression.row(), ident_expression.col()),
+                        ident_expression.position(),
                     );
                 }
                 self.check_data_type(
                     &DataType::Number(Number::Pp),
                     &self.analyze_expr(length_expression),
-                    &(length_expression.row(), length_expression.col()),
+                    length_expression.position(),
                 );
 
                 self.symbol_table_mut().push_scope();
@@ -275,11 +262,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut().pop_scope();
             }
             _ => {
-                self.error_diag.borrow_mut().not_implemented(
-                    statement.row(),
-                    statement.col(),
-                    format!("{:?}", statement).as_str(),
-                );
+                self.error_diag
+                    .borrow_mut()
+                    .not_implemented(statement.position(), format!("{:?}", statement).as_str());
             }
         };
     }
@@ -321,7 +306,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let lhs_data_type = self.analyze_expr(lhs);
                 let rhs_data_type = self.analyze_expr(rhs);
 
-                self.check_if_mixed_data_types(&lhs_data_type, &rhs_data_type, &position);
+                self.check_if_mixed_data_types(&lhs_data_type, &rhs_data_type, *position);
                 // TODO: Check whether the binary operator is available for the given data type.
                 use crate::parse::parser::BinaryOperator::*;
                 match op {
@@ -343,13 +328,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     } else {
                         self.error_diag
                             .borrow_mut()
-                            .variable_not_initialized(position.0, position.1, identifier);
+                            .variable_not_initialized(*position, identifier);
                         DataType::Nopp
                     }
                 } else {
                     self.error_diag
                         .borrow_mut()
-                        .variable_not_found(position.0, position.1, identifier);
+                        .variable_not_found(*position, identifier);
                     DataType::Nopp
                 }
             }
@@ -362,8 +347,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     if function.parameters().len() != arguments.len() {
                         // Check the argument count.
                         self.error_diag.borrow_mut().invalid_number_of_arguments(
-                            position.0,
-                            position.1,
+                            *position,
                             identifier,
                             function.parameters().len(),
                             arguments.len(),
@@ -377,8 +361,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         {
                             let got = self.analyze_expr(mismatched_arg.0);
                             self.error_diag.borrow_mut().invalid_data_type(
-                                mismatched_arg.0.row(),
-                                mismatched_arg.0.col(),
+                                mismatched_arg.0.position(),
                                 mismatched_arg.1,
                                 &got,
                             )
@@ -388,7 +371,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 } else {
                     self.error_diag
                         .borrow_mut()
-                        .function_does_not_exist(position.0, position.1);
+                        .function_does_not_exist(*position);
                     DataType::Nopp
                 };
             }

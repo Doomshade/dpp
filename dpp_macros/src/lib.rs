@@ -4,7 +4,5 @@ pub trait HelloMacro {
 
 pub trait Pos {
     #[must_use]
-    fn row(&self) -> u32;
-    #[must_use]
-    fn col(&self) -> u32;
+    fn position(&self) -> (u32, u32);
 }

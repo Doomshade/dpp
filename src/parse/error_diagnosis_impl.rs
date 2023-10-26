@@ -15,73 +15,64 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         }
     }
 
-    pub fn missing_return_statement(&mut self, row: u32, col: u32) {
-        self.insert_error_message(row, col, "Missing return statement.");
+    pub fn missing_return_statement(&mut self, position: (u32, u32)) {
+        self.insert_error_message(position, "Missing return statement.");
     }
 
-    pub fn invalid_escaped_character(&mut self, row: u32, col: u32, character: char) {
+    pub fn invalid_escaped_character(&mut self, position: (u32, u32), character: char) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!("Invalid escaped character: {character}.").as_str(),
         );
     }
 
-    pub fn invalid_break_placement(&mut self, row: u32, col: u32) {
-        self.insert_error_message(row, col, "Invalid break placement.");
+    pub fn invalid_break_placement(&mut self, position: (u32, u32)) {
+        self.insert_error_message(position, "Invalid break placement.");
     }
 
     pub fn unexpected_token_error(&mut self, token: &Token<'a>) {
-        self.insert_error_message(
-            token.row(),
-            token.col(),
-            format!("Unexpected {token}.").as_str(),
-        );
+        self.insert_error_message(token.position(), format!("Unexpected {token}.").as_str());
     }
 
-    pub fn not_implemented(&mut self, row: u32, col: u32, error: &str) {
-        self.insert_error_message(row, col, format!("Not yet implemented: {error}").as_str());
+    pub fn not_implemented(&mut self, position: (u32, u32), error: &str) {
+        self.insert_error_message(position, format!("Not yet implemented: {error}").as_str());
     }
 
     pub fn expected_something_error(&mut self, error: &str, optional_token: Option<&Token<'a>>) {
         self.insert_error_message(
-            optional_token.map_or(0, Token::row),
-            optional_token.map_or(0, Token::col),
+            optional_token.map_or((0, 0), Token::position),
             format!("Expected {error}.").as_str(),
         );
     }
 
-    pub fn function_already_exists(&mut self, row: u32, col: u32, function_name: &'a str) {
+    pub fn function_already_exists(&mut self, position: (u32, u32), function_name: &'a str) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!("Function \"{function_name}\" already exists.").as_str(),
         );
     }
 
-    pub fn invalid_number(&mut self, row: u32, col: u32) {
-        self.insert_error_message(row, col, "Invalid number.");
+    pub fn invalid_number(&mut self, position: (u32, u32)) {
+        self.insert_error_message(position, "Invalid number.");
     }
 
     pub fn no_main_method_found_error(&mut self) {
-        self.insert_error_message(0, 0, "No main method found.");
+        self.insert_error_message((0, 0), "No main method found.");
     }
 
-    pub fn function_does_not_exist(&mut self, row: u32, col: u32) {
-        self.insert_error_message(row, col, "Function does not exist.");
+    pub fn function_does_not_exist(&mut self, position: (u32, u32)) {
+        self.insert_error_message(position, "Function does not exist.");
     }
 
     pub fn invalid_number_of_arguments(
         &mut self,
-        row: u32,
-        col: u32,
+        position: (u32, u32),
         identifier: &str,
         param_len: usize,
         arg_len: usize,
     ) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!(
                 "Invalid number of arguments for function \"{}\". Expected {}, got {}.",
                 identifier, param_len, arg_len
@@ -101,8 +92,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
         if expected_one_of.len() == 1 {
             self.insert_error_message(
-                token.row(),
-                token.col(),
+                token.position(),
                 format!("Expected {}.", expected_one_of[0]).as_str(),
             );
             return;
@@ -114,7 +104,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             .for_each(|token_kind| w.push_str(format!("{token_kind}, ").as_str()));
 
         w.replace_range(w.len() - 2.., ".");
-        self.insert_error_message(token.row(), token.col(), w.as_str());
+        self.insert_error_message(token.position(), w.as_str());
     }
 
     pub fn expected_different_token_error(
@@ -123,64 +113,58 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         expected_token_kind: TokenKind,
     ) {
         self.insert_error_message(
-            token.row(),
-            token.col(),
+            token.position(),
             format!("Expected {expected_token_kind}.").as_str(),
         );
     }
 
-    pub fn variable_already_exists(&mut self, row: u32, col: u32, var_name: &str) {
+    pub fn variable_already_exists(&mut self, position: (u32, u32), var_name: &str) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!("Variable \"{var_name}\" already exists.").as_str(),
         );
     }
-    pub fn variable_not_found(&mut self, row: u32, col: u32, var_name: &str) {
+    pub fn variable_not_found(&mut self, position: (u32, u32), var_name: &str) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!("Variable \"{var_name}\" was not found.").as_str(),
         );
     }
 
-    pub fn variable_not_initialized(&mut self, row: u32, col: u32, var_name: &str) {
+    pub fn variable_not_initialized(&mut self, position: (u32, u32), var_name: &str) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!("Variable \"{var_name}\" has not been initialized.").as_str(),
         );
     }
 
     pub fn mixed_data_types_error(
         &mut self,
-        row: u32,
-        col: u32,
+        position: (u32, u32),
         lhs: &DataType<'a>,
         rhs: &DataType<'a>,
     ) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!("Mixed two data types - {lhs} and {rhs}.").as_str(),
         );
     }
 
     pub fn invalid_data_type(
         &mut self,
-        row: u32,
-        col: u32,
+        position: (u32, u32),
         expected_data_type: &DataType<'a>,
         got: &DataType<'a>,
     ) {
         self.insert_error_message(
-            row,
-            col,
+            position,
             format!("Invalid data type - expected {expected_data_type} got {got}.").as_str(),
         );
     }
 
-    fn insert_error_message(&mut self, row: u32, col: u32, error: &str) {
+    fn insert_error_message(&mut self, position: (u32, u32), error: &str) {
+        let row = position.0;
+        let col = position.1;
         let error_message;
         if row == 0 && col == 0 {
             error_message = format!("{}: {}", self.file_name, error);

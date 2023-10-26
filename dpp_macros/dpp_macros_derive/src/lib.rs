@@ -16,8 +16,7 @@ fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     match &ast.data {
         Data::Enum(data_enum) => {
-            let mut row_matches = TokenStream2::new();
-            let mut col_matches = TokenStream2::new();
+            let mut pos_functions = TokenStream2::new();
 
             for variant in &data_enum.variants {
                 let variant_name = &variant.ident;
@@ -27,31 +26,20 @@ fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
                     Fields::Named(_) => quote_spanned! {variant.span()=> {position, ..} },
                 };
 
-                let row = quote_spanned! {
-                    variant.span() => #name::#variant_name #fields_in_variant => position.0,
-                };
-                let col = quote_spanned! {
-                    variant.span() => #name::#variant_name #fields_in_variant => position.1,
+                let function = quote_spanned! {
+                    variant.span() => #name::#variant_name #fields_in_variant => *position,
                 };
 
-                row_matches.extend(row);
-                col_matches.extend(col);
+                pos_functions.extend(function);
             }
 
             let gen = quote! {
                 impl<'a> Pos for #name<'a> {
 
                     #[must_use]
-                    fn row(&self) -> u32 {
+                    fn position(&self) -> (u32, u32) {
                         match self {
-                            #row_matches
-                        }
-                    }
-
-                    #[must_use]
-                    fn col(&self) -> u32 {
-                        match self {
-                            #col_matches
+                            #pos_functions
                         }
                     }
                 }
@@ -62,13 +50,8 @@ fn impl_pos_macro(ast: &syn::DeriveInput) -> TokenStream {
             let gen = quote! {
                 impl<'a> Pos for #name<'a> {
                     #[must_use]
-                    fn row(&self) -> u32 {
-                        self.position.0
-                    }
-
-                    #[must_use]
-                    fn col(&self) -> u32 {
-                        self.position.1
+                    fn position(&self) -> (u32, u32) {
+                        self.position
                     }
                 }
             };

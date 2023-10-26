@@ -622,7 +622,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             _ => {
                 self.add_error("expression");
                 // Return some here to let the callee handle this.
-                Some(Expression::Invalid)
+                Some(Expression::Invalid {
+                    position: self.position,
+                })
             }
         }
     }
