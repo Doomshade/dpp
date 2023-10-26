@@ -13,6 +13,14 @@ use crate::parse::parser::{
 use crate::parse::{Emitter, Expression, Function, Variable};
 
 impl<'a, 'b> Emitter<'a, 'b> {
+    /// Emits the translation unit to the writer.
+    ///
+    /// # Arguments
+    ///
+    /// * `writer`: the writer
+    /// * `translation_unit`: the translation unit
+    ///
+    /// returns: Result<(), Error> - error if the writer fails to write
     pub fn emit_all(
         &mut self,
         writer: &mut io::BufWriter<fs::File>,
@@ -84,6 +92,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
         Ok(())
     }
 
+    /// Emits the translation unit.
+    ///
+    /// # Arguments
+    ///
+    /// * `translation_unit`: the translation unit
     fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
         self.emit_int(
             translation_unit
@@ -111,6 +124,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
             .for_each(|func| self.emit_function(func))
     }
 
+    /// Emits the function.
+    ///
+    /// # Arguments
+    ///
+    /// * `function`: the function
     fn emit_function(&mut self, function: &Function<'a>) {
         self.current_function = Some(function.identifier());
         self.emit_function_label(function.identifier());
@@ -137,6 +155,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_debug_info(DebugKeyword::StackA);
     }
 
+    /// Emits the code that loads the arguments into the stack.
+    ///
+    /// # Arguments
+    ///
+    /// * `arguments`: the arguments to load
     fn emit_load_arguments(&mut self, arguments: &Vec<Variable<'a>>) {
         // Load the parameters into the stack from the callee function.
         // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
@@ -157,14 +180,19 @@ impl<'a, 'b> Emitter<'a, 'b> {
             .iter()
             .fold(0, |acc, parameter| acc + parameter.size_in_instructions());
         let mut curr_offset = total_size as i32;
-        for parameter in arguments.iter().rev() {
-            let size = parameter.size_in_instructions();
+        for argument in arguments.iter().rev() {
+            let size = argument.size_in_instructions();
             self.load(0, -curr_offset, size);
             curr_offset += size as i32;
-            self.echo(format!("Loaded argument {}", parameter.identifier()).as_str());
+            self.echo(format!("Loaded argument {}", argument.identifier()).as_str());
         }
     }
 
+    /// Emits the block of statements.
+    ///
+    /// # Arguments
+    ///
+    /// * `block`: the block of statements
     fn emit_block(&mut self, block: &Block<'a>) {
         block
             .statements()
@@ -386,6 +414,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
         };
     }
 
+    /// Emits the expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `expression`: the expression
     fn emit_expression(&mut self, expression: &Expression<'a>) {
         match expression {
             Expression::Number { value, .. } => {
@@ -537,6 +570,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
+    /// Helper function that emits a booba value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value`: the booba value
     fn emit_booba(&mut self, value: bool) {
         self.emit_expression(&Expression::Booba {
             position: (0, 0),
@@ -544,6 +582,13 @@ impl<'a, 'b> Emitter<'a, 'b> {
         });
     }
 
+    /// Emits the binary boolean expression. If the expression on top of stack is false and the
+    /// operator is AND or if it's true and the operator is OR we jump to the short circuit label.
+    ///
+    /// # Arguments
+    ///
+    /// * `binop`: the binary operator -- can either be AND or OR
+    /// * `short_circuit_label`: the short circuit label
     fn emit_binary_boolean_expression(
         &mut self,
         binop: &BinaryOperator,
@@ -555,11 +600,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_booba(true);
                 self.emit_operation(OperationType::Equal);
 
-                // Need to duplicate the value on top of the stack because Jmc consumes
-                // the boolean value and we need to store it.
+                // Need to create a value for JMC instruction for AND.
                 self.emit_booba(true);
                 self.emit_operation(OperationType::Equal);
-                self.echo("Duplicated value for AND");
 
                 // If the value is FALSE stop executing the rest of the expression.
                 self.emit_instruction(Instruction::Jmc {
@@ -571,11 +614,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_booba(true);
                 self.emit_operation(OperationType::Equal);
 
-                // Need to duplicate the value on top of the stack because Jmc consumes
-                // the boolean value and we need to store it.
+                // Need to create a value for JMC instruction for OR.
                 self.emit_booba(true);
                 self.emit_operation(OperationType::NotEqual);
-                self.echo("Duplicated value for OR");
 
                 // If the value is TRUE stop executing the rest of the expression.
                 self.emit_instruction(Instruction::Jmc {
@@ -583,11 +624,20 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 });
             }
             _ => {
-                panic!("Invalid boolean expression");
+                unreachable!();
             }
         }
     }
 
+    /// Emits a function call. This will reserve space on the stack for the return value and
+    /// store the arguments on the stack. Afterwards, the function is called. The called function
+    /// then stores the result value (if any) in the reserved space. Lastly, the arguments are
+    /// popped off the stack.
+    ///
+    /// # Arguments
+    ///
+    /// * `arguments`: the arguments
+    /// * `identifier`: the function identifier
     fn emit_function_call(&mut self, arguments: &Vec<Expression<'a>>, identifier: &str) {
         // Size in instructions.
         let return_type_size;
@@ -625,15 +675,15 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         // Emit arguments AFTER the return type.
         if arguments.len() > 0 {
-            self.echo(format!("Initializing {} arguments", arguments.len()).as_str());
+            self.echo(format!("Storing {} arguments", arguments.len()).as_str());
             for argument in arguments {
                 self.emit_expression(argument);
-                self.echo(format!("Initialized {}", argument).as_str());
+                self.echo(format!("Storing {}", argument).as_str());
             }
-            self.echo(format!("{} argument(s) initialized", arguments.len()).as_str());
+            self.echo(format!("{} argument(s) stored", arguments.len()).as_str());
         }
 
-        // Call the function finally.
+        // Call the function, finally.
         self.echo(format!("Calling {}", identifier).as_str());
         self.emit_call_with_level(1, Address::Label(String::from(identifier)));
 
@@ -646,6 +696,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
+    /// Emits the function call to the main function. It also emits the JMP 0 0 instruction to
+    /// exit the program once the main function is done.
     fn emit_main_call(&mut self) {
         self.echo("Calling main function.");
         let main_function_call = Expression::FunctionCall {
