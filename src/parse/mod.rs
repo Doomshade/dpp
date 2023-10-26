@@ -600,15 +600,6 @@ mod lexer {
         }
 
         #[must_use]
-        pub const fn row(&self) -> u32 {
-            self.position.0
-        }
-        #[must_use]
-        pub const fn col(&self) -> u32 {
-            self.position.1
-        }
-
-        #[must_use]
         pub const fn position(&self) -> (u32, u32) {
             self.position
         }
@@ -697,10 +688,10 @@ mod lexer {
 }
 
 mod parser {
-    use std::fmt;
-
     use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
+    use std::fmt;
+    use std::mem;
 
     #[derive(Clone, Debug, Pos)]
     pub struct TranslationUnit<'a> {
@@ -1064,12 +1055,12 @@ mod parser {
         pub fn size(&self) -> usize {
             match self {
                 DataType::Number(number) => match number {
-                    Number::Pp => std::mem::size_of::<i32>(),
-                    Number::Spp => std::mem::size_of::<i16>(),
-                    Number::Xspp => std::mem::size_of::<i8>(),
+                    Number::Pp => mem::size_of::<i32>(),
+                    Number::Spp => mem::size_of::<i16>(),
+                    Number::Xspp => mem::size_of::<i8>(),
                 },
-                DataType::P => std::mem::size_of::<char>(),
-                DataType::Booba => std::mem::size_of::<bool>(),
+                DataType::P => mem::size_of::<char>(),
+                DataType::Booba => mem::size_of::<bool>(),
                 DataType::Nopp => 0,
                 _ => panic!("Invalid data type {self}"),
             }
@@ -1229,7 +1220,6 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct VariableDescriptor<'a> {
-        position: (u32, u32),
         position_in_scope: usize,
         scope_id: usize,
         data_type: DataType<'a>,
@@ -1240,8 +1230,6 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct FunctionDescriptor<'a> {
-        position: (u32, u32),
-        identifier: &'a str,
         return_type: DataType<'a>,
         parameters: Vec<Variable<'a>>,
         block: Block<'a>,
@@ -1278,7 +1266,6 @@ mod analysis {
                 return (
                     0,
                     self.global_scope
-                        .borrow()
                         .get_variable(identifier)
                         .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
                         .position_in_scope()
@@ -1286,12 +1273,10 @@ mod analysis {
                 );
             }
 
-            use std::borrow::Borrow;
             // If not found, try to find it in the global scope.
             (
                 1,
                 self.global_scope
-                    .borrow()
                     .get_variable(identifier)
                     .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
                     .position_in_scope()
@@ -1669,7 +1654,6 @@ pub mod compiler {
                 // Lex -> parse -> analyze -> emit.
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
-                dbg!(&translation_unit);
                 let symbol_table = Self::analyze(&translation_unit, &error_diag)?;
                 Self::emit(output_file, &translation_unit, symbol_table, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
