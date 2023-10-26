@@ -7,7 +7,7 @@
 //! params -> (param ("," param)*)?
 //! param -> identifier ":" data_type
 //! block -> "{" (statement)* "}"
-//! statement -> if | for | while | do_while | loop | break | continue | switch | bye | print | ";"
+//! stat -> if | for | while | do_while | loop | break | continue | switch | bye | print | ";"
 //! if -> "if" "(" expr ")" statement ("else" statement)?
 //! for -> "for" "(" identifier "=" expr "to" expr ")" statement
 //! while -> "while" "(" expr ")" statement
@@ -68,12 +68,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(translation_unit)
     }
 
-    /// # Summary
-    /// Parses a translation unit. A translation unit is the top-level production in the grammar. It
-    /// consists of a list of functions and variable declarations.
-    ///
-    /// # Returns
-    /// A `TranslationUnit`.
     fn _transl_unit(&mut self) -> TranslationUnit<'a> {
         let mut functions = Vec::<Function<'a>>::new();
         let mut variable_declarations = Vec::<Statement<'a>>::new();
@@ -107,16 +101,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         TranslationUnit::new(functions, variable_declarations)
     }
 
-    /// # Summary
-    /// Parses a function. A function consists of a function keyword, an identifier, a list of
-    /// parameters, a return type, and a block.
-    ///
-    /// # Returns
-    /// A `Function` if successful.
     fn _function(&mut self) -> Option<Function<'a>> {
         let position = self.position;
         self.expect(TokenKind::FUNcKeyword)?;
-
         let identifier = self.expect(TokenKind::Identifier)?;
         let parameters = self._params()?;
         self.expect(TokenKind::Arrow)?;
@@ -170,9 +157,9 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn _param(&mut self) -> Option<Variable<'a>> {
         let position = self.position;
-        let identifier = self.expect(TokenKind::Identifier)?;
-        self.expect(TokenKind::Colon)?;
         let data_type = self._data_type()?;
+        self.expect(TokenKind::Arrow)?;
+        let identifier = self.expect(TokenKind::Identifier)?;
         Some(Variable::new(position, identifier, data_type, None, true))
     }
 
@@ -198,7 +185,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::IfKeyword => self._if(),
             TokenKind::ForKeyword => self._for(),
             TokenKind::WhileKeyword => self._while(),
-            TokenKind::DoKeyword => self._do(),
+            TokenKind::DoKeyword => self._do_while(),
             TokenKind::LoopKeyword => self._loop(),
             TokenKind::BreakKeyword => self._break(),
             TokenKind::ContinueKeyword => self._continue(),
@@ -304,7 +291,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         });
     }
 
-    fn _do(&mut self) -> Option<Statement<'a>> {
+    fn _do_while(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
         self.expect(TokenKind::DoKeyword)?;
         let block = self._block()?;

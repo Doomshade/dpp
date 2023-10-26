@@ -1,13 +1,13 @@
 pp -> x = 0;
 
-FUNc abcde(a: booba, b: pp) -> nopp {
+FUNc abcde(booba -> a, pp -> b) -> nopp {
 }
 
-FUNc a(a: pp) -> pp {
+FUNc a(pp -> a) -> pp {
     bye 0;
 }
 
-FUNc asd(firstarg: pp, aa: pp) -> pp {
+FUNc asd(pp -> firstarg, pp -> aa) -> pp {
     pp -> expr = (1 + 2) * 3 + 4 * 5;
     booba -> decl = yem;
     booba -> c = !yem;
@@ -40,7 +40,7 @@ FUNc main() -> pp {
     bye 0;
 }
 
-FUNc hellyea(fuk: pp, dis: pp) -> pp {
+FUNc hellyea(pp -> fuk, pp -> dis) -> pp {
     pp -> yup = (1 + 3) * 3;
     pp -> nop;
     yup = 123;

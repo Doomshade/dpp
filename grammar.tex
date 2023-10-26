@@ -24,14 +24,14 @@
 
         <params> ::= `(' [ <param> \{ `,' <param> \} ] `)'
 
-        <param> ::= <ident> `:' <data-type>
+        <param> ::= <data-type> `->' <ident>
 
         <block> ::= `{' \{ <stat> \} `}'
 
         <stat> ::= <if>
         \alt <for>
         \alt <while>
-        \alt <do>
+        \alt <do-while>
         \alt <loop>
         \alt <break>
         \alt <continue>
@@ -51,7 +51,7 @@
 
         <while> ::= `while' `(' <expr> `)' <stat>
 
-        <do> ::= `do' <block> `while' `(' <expr> `)' `;'
+        <do-while> ::= `do' <block> `while' `(' <expr> `)' `;'
 
         <loop> ::= `loop' <block>
 
