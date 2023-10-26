@@ -16,6 +16,13 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         }
     }
 
+    pub fn unknown_operator(&mut self, position: (u32, u32), operator: &str) {
+        self.insert_error_message(
+            position,
+            format!("Unknown operator \"{operator}\"").as_str(),
+        );
+    }
+
     pub fn missing_return_statement(&mut self, position: (u32, u32)) {
         self.insert_error_message(position, "Missing return statement.");
     }

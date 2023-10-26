@@ -25,6 +25,7 @@ pub struct ErrorDiagnosis<'a, 'b> {
 pub struct Lexer<'a, 'b> {
     /// The raw translation unit input.
     raw_input: &'a str,
+    pointer: usize,
     /// The input as a vector of characters because we want to index into it.
     chars: Vec<char>,
     /// The cursor to the chars vector.
@@ -88,6 +89,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             raw_input: input,
             chars,
             cursor: 0,
+            pointer: 0,
             row: 1,
             col: 1,
             error_diag,
@@ -113,11 +115,9 @@ impl<'a, 'b> Lexer<'a, 'b> {
     #[must_use]
     fn advance(&mut self) -> usize {
         let advanced_bytes = self.peek().len_utf8();
-        if advanced_bytes > 1 {
-            println!("YO");
-        }
         self.col += 1;
         self.cursor += 1;
+        self.pointer += advanced_bytes;
         advanced_bytes
     }
 }
@@ -1826,10 +1826,55 @@ pub mod compiler {
     }
 
     #[cfg(test)]
-    mod tests {
+    mod lexer_tests {
+        use crate::parse::lexer::TokenKind;
+        use crate::parse::{ErrorDiagnosis, Lexer};
+        use std::cell;
+        use std::rc;
+        use TokenKind as TK;
+
+        fn test_generic_lex(
+            input: &str,
+            result_should_be_ok: bool,
+            token_len: usize,
+            expected_output: Vec<TokenKind>,
+        ) {
+            let error_diag = rc::Rc::new(cell::RefCell::new(ErrorDiagnosis::new("", input)));
+            let lexer = Lexer::new(input, error_diag.clone());
+            let result = lexer.lex();
+
+            if !result_should_be_ok {
+                assert!(result.is_err(), "Syntax error should be present.");
+            } else {
+                assert!(result.is_ok(), "No syntax error should be present.");
+                let tokens = result.unwrap();
+                assert_eq!(tokens.len(), token_len);
+
+                let output = tokens
+                    .iter()
+                    .map(|token| token.kind())
+                    .collect::<Vec<TokenKind>>();
+                assert_eq!(output, expected_output);
+            }
+        }
+
         #[test]
         fn test() {
-            assert_eq!(1, 1);
+            test_generic_lex(
+                "pp -> x = 0;",
+                true,
+                7,
+                vec![
+                    TK::PpKeyword,
+                    TK::Arrow,
+                    TK::Identifier,
+                    TK::Equal,
+                    TK::NumberLiteral,
+                    TK::Semicolon,
+                    TK::Eof,
+                ],
+            );
+            test_generic_lex("dsa ó", false, 0, vec![]);
         }
     }
 }

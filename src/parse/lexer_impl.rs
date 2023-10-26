@@ -83,7 +83,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn p(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut end = start;
 
         end += self.advance(); // Consume opening quote.
@@ -111,7 +111,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn unknown(&mut self) -> Token<'a> {
-        let end = self.advance();
+        let end = self.pointer + self.advance();
 
         self.new_token(TokenKind::Unknown, &self.raw_input[self.cursor - 1..end])
     }
@@ -122,9 +122,8 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn comment(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut end = start;
-
         end += self.advance(); // Consume the '#' comment tag.
 
         while self.peek() != '\n' {
@@ -142,7 +141,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn operator(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut end = start;
 
         match self.peek() {
@@ -202,7 +201,12 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "&&" => TokenKind::AmpersandAmpersand,
             "|" => TokenKind::Pipe,
             "||" => TokenKind::PipePipe,
-            _ => panic!("Unknown operator: {op}"),
+            _ => {
+                self.error_diag
+                    .borrow_mut()
+                    .unknown_operator((self.row, self.col), op);
+                TokenKind::Unknown
+            }
         };
 
         self.new_token(kind, op)
@@ -215,7 +219,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn punctuation(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut end = start;
         let kind = match self.peek() {
             '(' => TokenKind::OpenParen,
@@ -241,7 +245,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn whitespace(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut _end = start;
         while self.peek().is_whitespace() {
             if self.peek() == '\n' {
@@ -261,7 +265,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn yarn(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut end = start;
         end += self.advance(); // Consume the opening quote.
 
@@ -305,7 +309,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn number(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut end = start;
 
         while self.peek().is_ascii_digit() {
@@ -335,7 +339,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
     /// # Returns
     /// The lexed token.
     fn identifier(&mut self) -> Token<'a> {
-        let start = self.cursor;
+        let start = self.pointer;
         let mut end = start;
         end += self.advance();
 
