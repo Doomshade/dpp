@@ -1,14 +1,37 @@
-//! For each declaration in grammar we declare an enum and a function that parses that declaration.
-//!
-//! Each enum always consists of a default variant, usually prefixed by "Invalid" that allows us to
-//! continue parsing even though an error occurred. That way we are able to insert a placeholder
-//! in the AST and continue parsing. This is useful for error recovery.
-//!
-//! Each enum also contains a variant for each possible production in the grammar,
-//! usually defaulting to one variant with the same name (e.g. `Function::Function`). This adds a
-//! little bit of boilerplate, but it allows us to easily add new productions to the grammar.
-//!
-//! Each enum also derives Debug that lets us print the tree structure of the AST.
+//! This module contains the implementation of the parser. The parser is implemented using a
+//! recursive descent parser. The grammar is defined in `src/parse/grammar.txt`. The parser is
+//! implemented using the following rules:
+//! ```
+//! translation_unit -> (function | var_decl)*
+//! function -> "func" identifier "(" params ")" "->" data_type block
+//! params -> (param ("," param)*)?
+//! param -> identifier ":" data_type
+//! block -> "{" (statement)* "}"
+//! statement -> if | for | while | do_while | loop | break | continue | switch | bye | print | ";"
+//! if -> "if" "(" expr ")" statement ("else" statement)?
+//! for -> "for" "(" identifier "=" expr "to" expr ")" statement
+//! while -> "while" "(" expr ")" statement
+//! do_while -> "do" block "while" "(" expr ")" ";"
+//! loop -> "loop" block
+//! break -> "break" ";"
+//! continue -> "continue" ";"
+//! switch -> "switch" "(" expr ")" "{" (case ("," case)*)? "}"
+//! case -> "case" expr block
+//! bye -> "bye" expr? ";"
+//! print -> ("pp" | "pprint") "(" expr ")" ";"
+//! expr -> equ
+//! equ -> comp (("!=" | "==") comp)*
+//! comp -> term ((">" | ">=" | "<" | "<=" | "||" | "&&") term)*
+//! term -> factor (("+" | "-") factor)*
+//! factor -> unary (("/" | "*") unary)*
+//! unary -> ("!" | "-") unary | primary
+//! primary -> identifier | "yem" | "nom" | number | "p" | yarn | "(" expr ")"
+//! identifier -> identifier
+//! number -> number
+//! yarn -> yarn
+//! ```
+//! For each declaration in grammar we declare either an enum or a struct and a function that
+//! parses the grammar construct.
 
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::TokenKind;
@@ -18,23 +41,49 @@ use crate::parse::parser::{
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
 impl<'a, 'b> Parser<'a, 'b> {
+    /// # Summary
+    /// Parses the input and returns a `TranslationUnit` if successful.
+    ///
+    /// # Errors
+    /// Returns a `SyntaxError` if the input is invalid.
+    ///
+    /// # Examples
+    /// ```
+    /// use dpp::parse::Parser;
+    /// use dpp::parse::lexer::Lexer;
+    ///
+    /// let input = "func main() -> pp { bye; }";
+    /// let mut lexer = Lexer::new(input);
+    /// let tokens = lexer.lex().unwrap();
+    /// let mut parser = Parser::new("main.dpp", input, tokens);
+    /// let translation_unit = parser.parse().unwrap();
+    /// ```
+    ///
+    /// # Returns
+    /// A `TranslationUnit` if successful.
     pub fn parse(mut self) -> Result<TranslationUnit<'a>, SyntaxError> {
-        let translation_unit = self.transl_unit();
+        let translation_unit = self._transl_unit();
         self.error_diag.borrow().check_errors()?;
 
         Ok(translation_unit)
     }
 
-    fn transl_unit(&mut self) -> TranslationUnit<'a> {
+    /// # Summary
+    /// Parses a translation unit. A translation unit is the top-level production in the grammar. It
+    /// consists of a list of functions and variable declarations.
+    ///
+    /// # Returns
+    /// A `TranslationUnit`.
+    fn _transl_unit(&mut self) -> TranslationUnit<'a> {
         let mut functions = Vec::<Function<'a>>::new();
         let mut variable_declarations = Vec::<Statement<'a>>::new();
         loop {
             if self.matches_token_kind(TokenKind::FUNcKeyword) {
-                if let Some(function) = self.function() {
+                if let Some(function) = self._function() {
                     functions.push(function);
                 }
             } else if self.matches_data_type() {
-                if let Some(var_decl) = self.var_decl() {
+                if let Some(var_decl) = self._var_decl() {
                     variable_declarations.push(var_decl);
                 }
             } else if self.curr_token_index == self.tokens.len() {
@@ -58,15 +107,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         TranslationUnit::new(functions, variable_declarations)
     }
 
-    fn function(&mut self) -> Option<Function<'a>> {
+    /// # Summary
+    /// Parses a function. A function consists of a function keyword, an identifier, a list of
+    /// parameters, a return type, and a block.
+    ///
+    /// # Returns
+    /// A `Function` if successful.
+    fn _function(&mut self) -> Option<Function<'a>> {
         let position = self.position;
         self.expect(TokenKind::FUNcKeyword)?;
 
         let identifier = self.expect(TokenKind::Identifier)?;
-        let parameters = self.params()?;
+        let parameters = self._params()?;
         self.expect(TokenKind::Arrow)?;
-        let return_type = self.data_type()?;
-        let block = self.block()?;
+        let return_type = self._data_type()?;
+        let block = self._block()?;
 
         Some(Function::new(
             position,
@@ -77,7 +132,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         ))
     }
 
-    fn params(&mut self) -> Option<Vec<Variable<'a>>> {
+    fn _params(&mut self) -> Option<Vec<Variable<'a>>> {
         // TODO: Create a params variant.
         self.expect(TokenKind::OpenParen)?;
         let mut parameters = Vec::<Variable<'a>>::new();
@@ -91,7 +146,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             return Some(parameters);
         }
 
-        let parameter = self.param()?;
+        let parameter = self._param()?;
         parameters.push(parameter);
 
         let mut invalid_params = false;
@@ -102,7 +157,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 invalid_params = invalid_params || self.expect(TokenKind::Comma).is_none();
                 if !invalid_params {
-                    let parameter = self.param();
+                    let parameter = self._param();
                     invalid_params = invalid_params || parameter.is_none();
                     parameters.push(parameter?);
                 }
@@ -113,21 +168,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(parameters)
     }
 
-    fn param(&mut self) -> Option<Variable<'a>> {
+    fn _param(&mut self) -> Option<Variable<'a>> {
         let position = self.position;
         let identifier = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::Colon)?;
-        let data_type = self.data_type()?;
+        let data_type = self._data_type()?;
         Some(Variable::new(position, identifier, data_type, None, true))
     }
 
-    fn block(&mut self) -> Option<Block<'a>> {
+    fn _block(&mut self) -> Option<Block<'a>> {
         let position = self.position;
         self.expect(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement<'a>>::new();
 
         while !self.matches_token_kind(TokenKind::CloseBrace) {
-            if let Some(statement) = self.stat() {
+            if let Some(statement) = self._stat() {
                 statements.push(statement);
             }
         }
@@ -136,251 +191,275 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(Block::new(position, statements))
     }
 
-    fn stat(&mut self) -> Option<Statement<'a>> {
+    fn _stat(&mut self) -> Option<Statement<'a>> {
         let token = self.token()?;
-        let token_kind = token.kind();
-        let position = self.position;
 
-        return match token_kind {
-            TokenKind::IfKeyword => {
-                self.expect(TokenKind::IfKeyword)?;
-                self.expect(TokenKind::OpenParen)?;
-                let expression = self.expr()?;
-                self.expect(TokenKind::CloseParen)?;
-
-                let statement = self.stat()?;
-                if self.matches_token_kind(TokenKind::ElseKeyword) {
-                    self.expect(TokenKind::ElseKeyword)?;
-                    let else_statement = self.stat()?;
-                    Some(Statement::IfElse {
-                        position,
-                        expression,
-                        statement: Box::new(statement),
-                        else_statement: Box::new(else_statement),
-                    })
-                } else {
-                    Some(Statement::If {
-                        position,
-                        expression,
-                        statement: Box::new(statement),
-                    })
-                }
-            }
-            TokenKind::ForKeyword => {
-                self.expect(TokenKind::ForKeyword)?;
-                self.expect(TokenKind::OpenParen)?;
-                let index_ident = self.expect(TokenKind::Identifier)?;
-                let ident_expression = if self.matches_token_kind(TokenKind::Equal) {
-                    self.expect(TokenKind::Equal)?;
-                    Some(self.expr()?)
-                } else {
-                    None
-                };
-                self.expect(TokenKind::ToKeyword)?;
-                let length_expression = self.expr()?;
-                self.expect(TokenKind::CloseParen)?;
-                let statement = self.stat()?;
-
-                return Some(Statement::For {
-                    position,
-                    index_ident,
-                    ident_expression,
-                    length_expression,
-                    statement: Box::new(statement),
-                });
-            }
-            TokenKind::WhileKeyword => {
-                self.expect(TokenKind::WhileKeyword)?;
-                self.expect(TokenKind::OpenParen)?;
-                let expression = self.expr()?;
-                self.expect(TokenKind::CloseParen)?;
-                let statement = self.stat()?;
-
-                return Some(Statement::While {
-                    position,
-                    expression,
-                    statement: Box::new(statement),
-                });
-            }
-            TokenKind::DoKeyword => {
-                self.expect(TokenKind::DoKeyword)?;
-                let block = self.block()?;
-                self.expect(TokenKind::WhileKeyword)?;
-                self.expect(TokenKind::OpenParen)?;
-                let expression = self.expr()?;
-                self.expect(TokenKind::CloseParen)?;
-                self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::DoWhile {
-                    position,
-                    block,
-                    expression,
-                });
-            }
-            TokenKind::LoopKeyword => {
-                self.expect(TokenKind::LoopKeyword)?;
-                let block = self.block()?;
-                return Some(Statement::Loop {
-                    position,
-                    block: Box::new(block),
-                });
-            }
-            TokenKind::BreakKeyword => {
-                self.expect(TokenKind::BreakKeyword)?;
-                self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::Break { position });
-            }
-            TokenKind::ContinueKeyword => {
-                self.expect(TokenKind::ContinueKeyword)?;
-                self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::Continue { position });
-            }
-            TokenKind::SwitchKeyword => {
-                self.expect(TokenKind::SwitchKeyword)?;
-                self.expect(TokenKind::OpenParen)?;
-                let expression = self.expr()?;
-                self.expect(TokenKind::CloseParen)?;
-                self.expect(TokenKind::OpenBrace)?;
-                let mut cases = Vec::<Case<'a>>::new();
-                if self.matches_token_kind(TokenKind::CloseBrace) {
-                    self.expect(TokenKind::CloseBrace)?;
-                    return Some(Statement::Switch {
-                        position,
-                        expression,
-                        cases,
-                    });
-                }
-
-                cases.push(self.case()?);
-                while !self.matches_token_kind(TokenKind::CloseBrace) {
-                    self.expect(TokenKind::Comma);
-                    cases.push(self.case()?);
-                }
-
-                self.expect(TokenKind::CloseBrace)?;
-                return Some(Statement::Switch {
-                    position,
-                    expression,
-                    cases,
-                });
-            }
-            TokenKind::ByeKeyword => {
-                self.expect(TokenKind::ByeKeyword)?;
-                if let Some(expression) = self.expr() {
-                    let ret = Statement::Bye {
-                        position,
-                        expression: Some(expression),
-                    };
-                    self.expect(TokenKind::Semicolon)?;
-                    return Some(ret);
-                }
-
-                self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::Bye {
-                    position,
-                    expression: None,
-                });
-            }
-            TokenKind::PprintlnKeyword | TokenKind::PprintKeyword => {
-                self.expect_one_from(&[TokenKind::PprintKeyword, TokenKind::PprintlnKeyword])?;
-                self.expect(TokenKind::OpenParen)?;
-                let expression = self.expr()?;
-                self.expect(TokenKind::CloseParen)?;
-                self.expect(TokenKind::Semicolon)?;
-
-                return Some(Statement::Print {
-                    position,
-                    print_function: match token_kind {
-                        TokenKind::PprintKeyword => Self::print,
-                        TokenKind::PprintlnKeyword => Self::println,
-                        _ => unreachable!(),
-                    },
-                    expression,
-                });
-            }
-            TokenKind::Semicolon => {
-                self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::Empty { position });
-            }
+        match token.kind() {
+            TokenKind::IfKeyword => self._if(),
+            TokenKind::ForKeyword => self._for(),
+            TokenKind::WhileKeyword => self._while(),
+            TokenKind::DoKeyword => self._do(),
+            TokenKind::LoopKeyword => self._loop(),
+            TokenKind::BreakKeyword => self._break(),
+            TokenKind::ContinueKeyword => self._continue(),
+            TokenKind::SwitchKeyword => self._switch(),
+            TokenKind::ByeKeyword => self._bye(),
+            TokenKind::PprintKeyword => self._pprint(),
+            TokenKind::PprintlnKeyword => self._pprintln(),
+            TokenKind::Semicolon => self._empty(),
             TokenKind::YemKeyword
             | TokenKind::NomKeyword
             | TokenKind::NumberLiteral
             | TokenKind::YarnLiteral
-            | TokenKind::OpenParen => {
-                let expression = self.expr()?;
-                self.expect(TokenKind::Semicolon)?;
-                return Some(Statement::Expression {
-                    position,
-                    expression,
-                });
-            }
+            | TokenKind::OpenParen => self._expr_stat(),
             TokenKind::Identifier => {
                 // Identifier can also be an expression. Need to look ahead,
                 // if present, then it's assignment. If not, it's expression.
-                return if self.token_offset(1)?.kind() == TokenKind::Equal {
-                    let identifier = self.expect(TokenKind::Identifier)?;
-                    self.expect(TokenKind::Equal)?;
-                    let expression = self.expr()?;
-                    self.expect(TokenKind::Semicolon)?;
-                    Some(Statement::Assignment {
-                        position,
-                        identifier,
-                        expression,
-                    })
+                if self.token_offset(1)?.kind() == TokenKind::Equal {
+                    self._assign()
                 } else {
-                    let expression = self.expr()?;
-                    self.expect(TokenKind::Semicolon)?;
-                    Some(Statement::Expression {
-                        position,
-                        expression,
-                    })
-                };
+                    self._expr_stat()
+                }
             }
-            TokenKind::OpenBrace => {
-                let block = self.block()?;
-                return Some(Statement::Block {
-                    position,
-                    block: Box::new(block),
-                });
-            }
-            TokenKind::XxlppKeyword
-            | TokenKind::PpKeyword
-            | TokenKind::SppKeyword
-            | TokenKind::XsppKeyword
+            TokenKind::OpenBrace => self._block_stat(),
+            TokenKind::PpKeyword
             | TokenKind::PKeyword
             | TokenKind::RatioKeyword
-            | TokenKind::NoppKeyword
             | TokenKind::BoobaKeyword
-            | TokenKind::YarnKeyword => {
-                let variable_declaration = self.var_decl()?;
-                return Some(variable_declaration);
-            }
+            | TokenKind::YarnKeyword => self._var_decl(),
             _ => {
                 self.error_diag.borrow_mut().unexpected_token_error(token);
                 self.add_error("statement");
                 self.error = true;
                 self.go_into_panic_mode();
-                return self.stat();
+                self._stat()
             }
-        };
+        }
     }
 
-    fn case(&mut self) -> Option<Case<'a>> {
+    fn _if(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::IfKeyword)?;
+        self.expect(TokenKind::OpenParen)?;
+        let expression = self._expr()?;
+        self.expect(TokenKind::CloseParen)?;
+
+        let statement = self._stat()?;
+        if self.matches_token_kind(TokenKind::ElseKeyword) {
+            self.expect(TokenKind::ElseKeyword)?;
+            let else_statement = self._stat()?;
+            Some(Statement::IfElse {
+                position,
+                expression,
+                statement: Box::new(statement),
+                else_statement: Box::new(else_statement),
+            })
+        } else {
+            Some(Statement::If {
+                position,
+                expression,
+                statement: Box::new(statement),
+            })
+        }
+    }
+
+    fn _for(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::ForKeyword)?;
+        self.expect(TokenKind::OpenParen)?;
+        let index_ident = self.expect(TokenKind::Identifier)?;
+        let ident_expression = if self.matches_token_kind(TokenKind::Equal) {
+            self.expect(TokenKind::Equal)?;
+            Some(self._expr()?)
+        } else {
+            None
+        };
+        self.expect(TokenKind::ToKeyword)?;
+        let length_expression = self._expr()?;
+        self.expect(TokenKind::CloseParen)?;
+        let statement = self._stat()?;
+
+        Some(Statement::For {
+            position,
+            index_ident,
+            ident_expression,
+            length_expression,
+            statement: Box::new(statement),
+        })
+    }
+
+    fn _while(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+
+        self.expect(TokenKind::WhileKeyword)?;
+        self.expect(TokenKind::OpenParen)?;
+        let expression = self._expr()?;
+        self.expect(TokenKind::CloseParen)?;
+        let statement = self._stat()?;
+
+        return Some(Statement::While {
+            position,
+            expression,
+            statement: Box::new(statement),
+        });
+    }
+
+    fn _do(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::DoKeyword)?;
+        let block = self._block()?;
+        self.expect(TokenKind::WhileKeyword)?;
+        self.expect(TokenKind::OpenParen)?;
+        let expression = self._expr()?;
+        self.expect(TokenKind::CloseParen)?;
+        self.expect(TokenKind::Semicolon)?;
+        Some(Statement::DoWhile {
+            position,
+            block,
+            expression,
+        })
+    }
+
+    fn _loop(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::LoopKeyword)?;
+        let block = self._block()?;
+        Some(Statement::Loop {
+            position,
+            block: Box::new(block),
+        })
+    }
+
+    fn _break(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::BreakKeyword)?;
+        self.expect(TokenKind::Semicolon)?;
+        Some(Statement::Break { position })
+    }
+
+    fn _continue(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::ContinueKeyword)?;
+        self.expect(TokenKind::Semicolon)?;
+        Some(Statement::Continue { position })
+    }
+
+    fn _switch(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::SwitchKeyword)?;
+        self.expect(TokenKind::OpenParen)?;
+        let expression = self._expr()?;
+        self.expect(TokenKind::CloseParen)?;
+        self.expect(TokenKind::OpenBrace)?;
+        let mut cases = Vec::<Case<'a>>::new();
+        if self.matches_token_kind(TokenKind::CloseBrace) {
+            self.expect(TokenKind::CloseBrace)?;
+            return Some(Statement::Switch {
+                position,
+                expression,
+                cases,
+            });
+        }
+
+        cases.push(self._case()?);
+        while !self.matches_token_kind(TokenKind::CloseBrace) {
+            self.expect(TokenKind::Comma);
+            cases.push(self._case()?);
+        }
+
+        self.expect(TokenKind::CloseBrace)?;
+        Some(Statement::Switch {
+            position,
+            expression,
+            cases,
+        })
+    }
+
+    fn _case(&mut self) -> Option<Case<'a>> {
         let position = self.position;
         self.expect(TokenKind::CaseKeyword)?;
-        let expression = self.expr()?;
-        let block = self.block()?;
+        let expression = self._expr()?;
+        let block = self._block()?;
         Some(Case::new(position, expression, Box::new(block)))
     }
 
-    fn var_decl(&mut self) -> Option<Statement<'a>> {
+    fn _bye(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
-        let data_type = self.data_type()?;
+        self.expect(TokenKind::ByeKeyword)?;
+        if let Some(expression) = self._expr() {
+            let ret = Statement::Bye {
+                position,
+                expression: Some(expression),
+            };
+            self.expect(TokenKind::Semicolon)?;
+            return Some(ret);
+        }
+
+        self.expect(TokenKind::Semicolon)?;
+        Some(Statement::Bye {
+            position,
+            expression: None,
+        })
+    }
+
+    fn _pprint(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::PprintKeyword)?;
+        self.expect(TokenKind::OpenParen)?;
+        let expression = self._expr()?;
+        self.expect(TokenKind::CloseParen)?;
+        self.expect(TokenKind::Semicolon)?;
+
+        Some(Statement::Print {
+            position,
+            print_function: Self::print,
+            expression,
+        })
+    }
+
+    fn _pprintln(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::PprintlnKeyword)?;
+        self.expect(TokenKind::OpenParen)?;
+        let expression = self._expr()?;
+        self.expect(TokenKind::CloseParen)?;
+        self.expect(TokenKind::Semicolon)?;
+
+        Some(Statement::Print {
+            position,
+            print_function: Self::println,
+            expression,
+        })
+    }
+
+    fn _empty(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        self.expect(TokenKind::Semicolon)?;
+        Some(Statement::Empty { position })
+    }
+
+    fn _assign(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        let identifier = self.expect(TokenKind::Identifier)?;
+        self.expect(TokenKind::Equal)?;
+        let expression = self._expr()?;
+        self.expect(TokenKind::Semicolon)?;
+        Some(Statement::Assignment {
+            position,
+            identifier,
+            expression,
+        })
+    }
+
+    fn _var_decl(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        let data_type = self._data_type()?;
         self.expect(TokenKind::Arrow)?;
 
         let identifier = self.expect(TokenKind::Identifier)?;
         let statement = if self.matches_token_kind(TokenKind::Equal) {
             self.expect(TokenKind::Equal);
-            let expression = self.expr()?;
+            let expression = self._expr()?;
             Statement::VariableDeclaration {
                 position,
                 variable: Variable::new(
@@ -402,7 +481,26 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(statement)
     }
 
-    fn data_type(&mut self) -> Option<DataType<'a>> {
+    fn _block_stat(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        let block = self._block()?;
+        Some(Statement::Block {
+            position,
+            block: Box::new(block),
+        })
+    }
+
+    fn _expr_stat(&mut self) -> Option<Statement<'a>> {
+        let position = self.position;
+        let expression = self._expr()?;
+        self.expect(TokenKind::Semicolon)?;
+        Some(Statement::Expression {
+            position,
+            expression,
+        })
+    }
+
+    fn _data_type(&mut self) -> Option<DataType<'a>> {
         let token = self.expect_one_from(&[
             TokenKind::XxlppKeyword,
             TokenKind::PpKeyword,
@@ -426,12 +524,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn expr(&mut self) -> Option<Expression<'a>> {
-        self.equ()
+    fn _expr(&mut self) -> Option<Expression<'a>> {
+        self._equ()
     }
 
-    fn equ(&mut self) -> Option<Expression<'a>> {
-        let mut expr = self.comp()?;
+    fn _equ(&mut self) -> Option<Expression<'a>> {
+        let mut expr = self._comp()?;
 
         while self.matches_token_kind(TokenKind::BangEqual)
             || self.matches_token_kind(TokenKind::EqualEqual)
@@ -443,7 +541,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             };
             self.consume_token();
 
-            let rhs = self.comp()?;
+            let rhs = self._comp()?;
             expr = Expression::Binary {
                 position: self.position,
                 lhs: Box::new(expr),
@@ -455,8 +553,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(expr)
     }
 
-    fn comp(&mut self) -> Option<Expression<'a>> {
-        let mut expr = self.term()?;
+    fn _comp(&mut self) -> Option<Expression<'a>> {
+        let mut expr = self._term()?;
 
         while self.matches_token_kind(TokenKind::Greater)
             || self.matches_token_kind(TokenKind::GreaterEqual)
@@ -475,7 +573,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             self.consume_token();
-            let rhs = self.term()?;
+            let rhs = self._term()?;
 
             expr = Expression::Binary {
                 position: self.position,
@@ -488,8 +586,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(expr)
     }
 
-    fn term(&mut self) -> Option<Expression<'a>> {
-        let mut expr = self.factor()?;
+    fn _term(&mut self) -> Option<Expression<'a>> {
+        let mut expr = self._factor()?;
 
         while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
             let op = match self.token()?.kind() {
@@ -498,7 +596,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             self.consume_token();
-            let rhs = self.factor()?;
+            let rhs = self._factor()?;
 
             expr = Expression::Binary {
                 position: self.position,
@@ -511,8 +609,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(expr)
     }
 
-    fn factor(&mut self) -> Option<Expression<'a>> {
-        let mut expr = self.unary()?;
+    fn _factor(&mut self) -> Option<Expression<'a>> {
+        let mut expr = self._unary()?;
 
         while self.matches_token_kind(TokenKind::ForwardSlash)
             || self.matches_token_kind(TokenKind::Star)
@@ -523,7 +621,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             self.consume_token();
-            let rhs = self.unary()?;
+            let rhs = self._unary()?;
             expr = Expression::Binary {
                 position: self.position,
                 lhs: Box::new(expr),
@@ -534,7 +632,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(expr)
     }
 
-    fn unary(&mut self) -> Option<Expression<'a>> {
+    fn _unary(&mut self) -> Option<Expression<'a>> {
         if self.matches_token_kind(TokenKind::Bang) || self.matches_token_kind(TokenKind::Dash) {
             let op = match self.token()?.kind() {
                 TokenKind::Bang => UnaryOperator::Not,
@@ -542,25 +640,25 @@ impl<'a, 'b> Parser<'a, 'b> {
                 _ => unreachable!(),
             };
             self.consume_token();
-            let operand = self.unary()?;
+            let operand = self._unary()?;
             Some(Expression::Unary {
                 position: self.position,
                 op,
                 operand: Box::new(operand),
             })
         } else {
-            self.primary()
+            self._primary()
         }
     }
 
-    fn primary(&mut self) -> Option<Expression<'a>> {
+    fn _primary(&mut self) -> Option<Expression<'a>> {
         match self.token()?.kind() {
             TokenKind::Identifier => {
                 let position = self.position;
                 let identifier = self.expect(TokenKind::Identifier)?;
                 match self.token()?.kind() {
                     TokenKind::OpenParen => {
-                        let arguments = self.args()?;
+                        let arguments = self._args()?;
                         Some(Expression::FunctionCall {
                             position: self.position,
                             identifier,
@@ -621,7 +719,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             TokenKind::OpenParen => {
                 self.expect(TokenKind::OpenParen)?;
-                let expression = self.expr()?;
+                let expression = self._expr()?;
                 self.expect(TokenKind::CloseParen)?;
                 Some(expression)
             }
@@ -635,7 +733,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn args(&mut self) -> Option<Vec<Expression<'a>>> {
+    fn _args(&mut self) -> Option<Vec<Expression<'a>>> {
         self.expect(TokenKind::OpenParen)?;
         let mut args = Vec::<Expression<'a>>::new();
 
@@ -644,17 +742,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             return Some(args);
         }
 
-        let arg = self.expr()?;
+        let arg = self._expr()?;
         args.push(arg);
         while !self.matches_token_kind(TokenKind::CloseParen) {
             self.expect(TokenKind::Comma)?;
-            args.push(self.expr()?);
+            args.push(self._expr()?);
         }
         self.expect(TokenKind::CloseParen)?;
         Some(args)
-    }
-
-    fn _struct_(&mut self) -> DataType<'a> {
-        todo!()
     }
 }

@@ -28,26 +28,56 @@
 
         <block> ::= `{' \{ <stat> \} `}'
 
-        <stat> ::= `if' `(' <expr> `)' <stat> [ `else' <stat> ]
-        \alt `for' `(' <ident> [ `=' <expr> ] `to' <expr> `)' <stat>
-        \alt `while' `(' <expr> `)' <stat>
-        \alt `do' <block> `while' `(' <expr> `)' `;'
-        \alt `loop' <block>
-        \alt `break' `;'
-        \alt `continue' `;'
-        \alt `switch' `(' <expr> `)' `{' [ <case> \{ `,' <case> \} ] `}'
-        \alt `bye' <expr> `;'
-        \alt `pprint' `(' <expr> `)' `;'
-        \alt `pprintln' `(' <expr> `)' `;'
-        \alt `;'
-        \alt <ident> `=' <expr> `;'
+        <stat> ::= <if>
+        \alt <for>
+        \alt <while>
+        \alt <do>
+        \alt <loop>
+        \alt <break>
+        \alt <continue>
+        \alt <switch>
+        \alt <bye>
+        \alt <pprint>
+        \alt <pprintln>
+        \alt <empty>
+        \alt <assign>
         \alt <var-decl>
-        \alt <block>
-        \alt <expr> `;'
+        \alt <block-stat>
+        \alt <expr-stat>
+
+        <if> ::= `if' `(' <expr> `)' <stat> [ `else' <stat> ]
+
+        <for> ::= `for' `(' <ident> [ `=' <expr> ] `to' <expr> `)' <stat>
+
+        <while> ::= `while' `(' <expr> `)' <stat>
+
+        <do> ::= `do' <block> `while' `(' <expr> `)' `;'
+
+        <loop> ::= `loop' <block>
+
+        <break> ::= `break' `;'
+
+        <continue> ::= `continue' `;'
+
+        <switch> ::= `switch' `(' <expr> `)' `{' [ <case> \{ `,' <case> \} ] `}'
 
         <case> ::= `case' <expr> `:' <block>
 
+        <bye> ::= `bye' <expr> `;'
+
+        <pprint> ::= `pprint' `(' <expr> `)' `;'
+
+        <pprintln> ::= `pprintln' `(' <expr> `)' `;'
+
+        <empty> ::= `;'
+
+        <assign> ::= <ident> `=' <expr> `;'
+
         <var-decl> ::= <data-type> `->' <ident> [ `=' <expr> ] `;'
+
+        <block-stat> ::= <block>
+
+        <expr-stat> ::= <expr> `;'
 
         <data-type> ::= `pp' // int
         \alt `p' // char
