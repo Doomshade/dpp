@@ -1736,7 +1736,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    pub const DEBUG: bool = true;
+    pub const DEBUG: bool = false;
 
     impl DppCompiler {
         pub fn compile_translation_unit(
@@ -1757,7 +1757,6 @@ pub mod compiler {
                 // Lex -> parse -> analyze -> emit.
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
-                dbg!(&translation_unit);
                 let symbol_table = Self::analyze(&translation_unit, &error_diag)?;
                 Self::emit(output_file, &translation_unit, symbol_table, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
