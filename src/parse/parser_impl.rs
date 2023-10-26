@@ -320,6 +320,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     let identifier = self.expect(TokenKind::Identifier)?;
                     self.expect(TokenKind::Equal)?;
                     let expression = self.expr()?;
+                    self.expect(TokenKind::Semicolon)?;
                     Some(Statement::Assignment {
                         position,
                         identifier,
