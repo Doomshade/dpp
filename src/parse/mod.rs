@@ -1263,13 +1263,12 @@ mod analysis {
         function_scopes: Vec<FunctionScope<'a>>,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Default)]
     pub struct Scope<'a> {
         /// Variable symbol table.
         variables: collections::HashMap<&'a str, rc::Rc<VariableDescriptor<'a>>>,
         /// Function symbol table.
         functions: collections::HashMap<&'a str, rc::Rc<FunctionDescriptor<'a>>>,
-        id: usize,
     }
 
     #[derive(Clone, Debug)]
@@ -1280,17 +1279,19 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct FunctionScope<'a> {
+        /// This is a vector of scopes that are NEVER removed.
         generated_scopes: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
+        // This is a stack of scopes that is popped once the scope is ended.
         scope_stack: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
+        /// The identifier of this function scope (i.e. the function identifier).
         function_identifier: &'a str,
-        scope_counter: usize,
-        current_position: usize,
+        /// The stack position.
+        stack_position: usize,
     }
 
     #[derive(Clone, Debug)]
     pub struct VariableDescriptor<'a> {
         position_in_scope: usize,
-        scope_id: usize,
         data_type: DataType<'a>,
         size: usize,
         value: Option<Expression<'a>>,
@@ -1313,17 +1314,16 @@ mod analysis {
 
         /// Gets the variable from the generated scopes.
         /// Must only be used in emitter - this functions panics if the variable does not exist.
-        pub fn get_variable_level_and_offset(
+        pub fn variable(
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
-        ) -> (u32, usize) {
+        ) -> (u32, rc::Rc<VariableDescriptor<'a>>) {
             if let Some(function_ident) = function_ident {
                 if let Some(function_scope) = self.function_scope(function_ident) {
-                    if let Some(variable) =
-                        function_scope.find_variable_in_generated_scopes(identifier)
+                    if let Some(variable) = function_scope.variable_in_generated_scopes(identifier)
                     {
-                        return (0, variable.position_in_scope());
+                        return (0, variable);
                     }
                 }
             } else {
@@ -1331,8 +1331,7 @@ mod analysis {
                     0,
                     self.global_scope
                         .get_variable_descriptor(identifier)
-                        .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
-                        .position_in_scope(),
+                        .unwrap_or_else(|| panic!("Unknown variable {identifier}")),
                 );
             }
 
@@ -1341,8 +1340,7 @@ mod analysis {
                 1,
                 self.global_scope
                     .get_variable_descriptor(identifier)
-                    .unwrap_or_else(|| panic!("Unknown variable {identifier}"))
-                    .position_in_scope(),
+                    .unwrap_or_else(|| panic!("Unknown variable {identifier}")),
             )
         }
 
@@ -1368,7 +1366,7 @@ mod analysis {
                 .push(FunctionScope::new(function_identifier))
         }
 
-        pub fn find_function(&self, identifier: &str) -> Option<&rc::Rc<FunctionDescriptor<'a>>> {
+        pub fn function(&self, identifier: &str) -> Option<&rc::Rc<FunctionDescriptor<'a>>> {
             self.global_scope.get_function_descriptor(identifier)
         }
 
@@ -1380,33 +1378,30 @@ mod analysis {
             self.current_function_scope_mut().pop_scope();
         }
 
-        pub fn find_variable_in_scope_stack(
+        pub fn variable_in_scope_stack(
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
         ) -> Option<rc::Rc<VariableDescriptor<'a>>> {
-            self.find_local_variable_in_scope_stack(identifier, function_ident)
-                .or_else(|| self.find_global_variable(identifier))
+            self.local_variable_in_scope_stack(identifier, function_ident)
+                .or_else(|| self.global_variable(identifier))
         }
 
         pub fn push_function(&mut self, function: Function<'a>) {
             self.push_function_scope(function.identifier());
         }
 
-        pub fn find_global_variable(
-            &self,
-            identifier: &str,
-        ) -> Option<rc::Rc<VariableDescriptor<'a>>> {
+        pub fn global_variable(&self, identifier: &str) -> Option<rc::Rc<VariableDescriptor<'a>>> {
             self.global_scope.get_variable_descriptor(identifier)
         }
 
-        pub fn find_local_variable_in_scope_stack(
+        pub fn local_variable_in_scope_stack(
             &self,
             identifier: &str,
             function_ident: Option<&'a str>,
         ) -> Option<rc::Rc<VariableDescriptor<'a>>> {
             self.function_scope(function_ident?)?
-                .find_variable_in_scope_stack(identifier)
+                .variable_in_scope_stack(identifier)
         }
 
         // TODO: This could be done in O(1) but w/e.
@@ -1424,13 +1419,6 @@ mod analysis {
     }
 
     impl<'a> Scope<'a> {
-        pub fn new(id: usize) -> Self {
-            Scope {
-                variables: collections::HashMap::new(),
-                functions: collections::HashMap::new(),
-                id,
-            }
-        }
         fn push_variable_descriptor(
             &mut self,
             identifier: &'a str,
@@ -1478,13 +1466,13 @@ mod analysis {
             // main and then it fucking has to read the first thing
             // on the stack.
             GlobalScope {
-                scope: Scope::new(0),
+                scope: Scope::default(),
                 current_position: 1,
             }
         }
         pub fn push_variable(&mut self, variable: &Variable<'a>) {
             let variable_descriptor =
-                VariableDescriptor::new(variable, self.scope.id, self.current_position, false);
+                VariableDescriptor::new(variable, self.current_position, false);
             self.current_position += variable_descriptor.size_in_instructions();
             self.scope
                 .push_variable_descriptor(variable.identifier(), variable_descriptor);
@@ -1523,36 +1511,33 @@ mod analysis {
                 generated_scopes: Vec::new(),
                 scope_stack: Vec::new(),
                 function_identifier,
-                scope_counter: 1,
-                current_position: Self::ACTIVATION_RECORD_SIZE,
+                stack_position: Self::ACTIVATION_RECORD_SIZE,
             }
         }
 
-        pub fn find_variable_in_generated_scopes(
+        pub fn variable_in_generated_scopes(
             &self,
             identifier: &str,
         ) -> Option<rc::Rc<VariableDescriptor<'a>>> {
-            self.find_variable(identifier, &self.generated_scopes)
+            self.variable(identifier, &self.generated_scopes)
         }
 
-        pub fn find_variable_in_scope_stack(
+        pub fn variable_in_scope_stack(
             &self,
             identifier: &str,
         ) -> Option<rc::Rc<VariableDescriptor<'a>>> {
-            self.find_variable(identifier, &self.scope_stack)
+            self.variable(identifier, &self.scope_stack)
         }
 
-        fn find_variable(
+        fn variable(
             &self,
             identifier: &str,
             scopes: &Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
         ) -> Option<rc::Rc<VariableDescriptor<'a>>> {
-            // Loop through all scopes to find the variable. If we find a variable
-            // with the right identifier make sure it's in the right scope.
+            // Loop through all scopes to find the variable.
             for scope_rc in scopes.iter().rev() {
                 let scope = scope_rc.borrow();
                 if let Some(variable) = scope.get_variable_descriptor(identifier) {
-                    if variable.scope_id() == 0 {}
                     return Some(variable.clone());
                 }
             }
@@ -1560,21 +1545,14 @@ mod analysis {
             None
         }
 
-        pub fn variable_count(&self) -> usize {
-            self.generated_scopes
-                .iter()
-                .fold(0, |accum, scope| accum + scope.borrow().variables.len())
-        }
-
         pub fn function_identifier(&self) -> &'a str {
             self.function_identifier
         }
 
         pub fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
-            let scope_id = self.current_scope_mut().expect("A scope").borrow_mut().id;
             let variable_descriptor =
-                VariableDescriptor::new(variable, self.current_position, scope_id, is_parameter);
-            self.current_position += variable_descriptor.size_in_instructions();
+                VariableDescriptor::new(variable, self.stack_position, is_parameter);
+            self.stack_position += variable_descriptor.size_in_instructions();
             self.current_scope_mut()
                 .expect("A scope")
                 .borrow_mut()
@@ -1582,8 +1560,7 @@ mod analysis {
         }
 
         pub fn push_scope(&mut self) {
-            let new_scope = Scope::new(self.scope_counter);
-            self.scope_counter += 1;
+            let new_scope = Scope::default();
             let scope = rc::Rc::new(cell::RefCell::new(new_scope));
             self.scope_stack.push(scope.clone());
             self.generated_scopes.push(scope);
@@ -1595,17 +1572,14 @@ mod analysis {
         pub fn pop_scope(&mut self) {
             self.scope_stack.pop();
         }
+        pub fn stack_position(&self) -> usize {
+            self.stack_position
+        }
     }
 
     impl<'a> VariableDescriptor<'a> {
-        pub fn new(
-            variable: &Variable<'a>,
-            scope_id: usize,
-            position_in_scope: usize,
-            is_parameter: bool,
-        ) -> Self {
+        pub fn new(variable: &Variable<'a>, position_in_scope: usize, is_parameter: bool) -> Self {
             VariableDescriptor {
-                scope_id,
                 position_in_scope,
                 is_parameter,
                 size: variable.size(),
@@ -1624,9 +1598,6 @@ mod analysis {
 
         pub fn position_in_scope(&self) -> usize {
             self.position_in_scope
-        }
-        pub fn scope_id(&self) -> usize {
-            self.scope_id
         }
         pub fn data_type(&self) -> &DataType<'a> {
             &self.data_type

@@ -24,7 +24,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     ) -> Result<SymbolTable<'a>, SyntaxError> {
         self.analyze_translation_unit(translation_unit);
 
-        if !self.symbol_table().find_function("main").is_some() {
+        if !self.symbol_table().function("main").is_some() {
             self.error_diag.borrow_mut().no_main_method_found_error();
         }
         self.error_diag.borrow().check_errors()?;
@@ -107,7 +107,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::VariableDeclaration { variable, .. } => {
                 if self
                     .symbol_table()
-                    .find_global_variable(variable.identifier())
+                    .global_variable(variable.identifier())
                     .is_some()
                 {
                     self.error_diag
@@ -139,10 +139,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::VariableDeclaration { variable, .. } => {
                 if self
                     .symbol_table()
-                    .find_local_variable_in_scope_stack(
-                        variable.identifier(),
-                        self.current_function,
-                    )
+                    .local_variable_in_scope_stack(variable.identifier(), self.current_function)
                     .is_some()
                 {
                     self.error_diag
@@ -243,7 +240,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 if let Some(variable) = self
                     .symbol_table()
-                    .find_variable_in_scope_stack(identifier, self.current_function)
+                    .variable_in_scope_stack(identifier, self.current_function)
                 {
                     self.check_data_type(
                         variable.data_type(),
@@ -296,7 +293,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 if self
                     .symbol_table()
-                    .find_local_variable_in_scope_stack(index_ident, self.current_function)
+                    .local_variable_in_scope_stack(index_ident, self.current_function)
                     .is_some()
                 {
                     self.error_diag
@@ -426,7 +423,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 return if let Some(variable) = self
                     .symbol_table()
-                    .find_variable_in_scope_stack(identifier, self.current_function)
+                    .variable_in_scope_stack(identifier, self.current_function)
                 {
                     if variable.is_initialized() {
                         Some(variable.data_type().clone())
@@ -448,7 +445,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 arguments,
                 position,
             } => {
-                return if let Some(function) = self.symbol_table().find_function(identifier) {
+                return if let Some(function) = self.symbol_table().function(identifier) {
                     if function.parameters().len() != arguments.len() {
                         // Check the argument count.
                         self.error_diag.borrow_mut().invalid_number_of_arguments(

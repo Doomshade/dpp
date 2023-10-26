@@ -4,7 +4,6 @@ use std::io::Write;
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::FunctionScope;
 use crate::parse::compiler;
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{
@@ -139,9 +138,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         let sym_table = self.symbol_table();
         let function_scope = sym_table.function_scope(function.identifier()).unwrap();
         // Shift the stack pointer by activation record + declared variable count.
-        self.emit_int(
-            (FunctionScope::ACTIVATION_RECORD_SIZE + function_scope.variable_count()) as i32,
-        );
+        self.emit_int((function_scope.stack_position()) as i32);
 
         // Load arguments.
         let args = function.parameters();
@@ -231,7 +228,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     let return_type_size;
                     {
                         let symbol_table = self.symbol_table();
-                        let function = symbol_table.find_function(identifier).expect("A function");
+                        let function = symbol_table.function(identifier).expect("A function");
                         return_type_size = function.return_type().size_in_instructions();
                     }
                     if return_type_size > 0 {
@@ -252,26 +249,24 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 if let Some(expression) = variable.value() {
                     self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
                     self.emit_expression(expression);
-                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(
-                        variable.identifier(),
-                        self.current_function,
-                    );
-                    self.store(level, var_loc as i32, 1);
+                    let (level, variable_descriptor) = self
+                        .symbol_table()
+                        .variable(variable.identifier(), self.current_function);
+                    self.store(level, variable_descriptor.position_in_scope() as i32, 1);
 
                     self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
                 }
             }
             Statement::Bye { expression, .. } => {
-                let parameters_size;
-                {
-                    let symbol_table = self.symbol_table();
-                    let current_function = symbol_table
-                        .function_scope(self.current_function.unwrap())
-                        .unwrap();
-                    let function_identifier = current_function.function_identifier();
-                    let function = symbol_table.find_function(function_identifier).unwrap();
-                    parameters_size = function.parameters_size();
-                }
+                let current_function = self
+                    .symbol_table()
+                    .function_scope(self.current_function.unwrap())
+                    .unwrap();
+                let function_identifier = current_function.function_identifier();
+                let function_descriptor =
+                    self.symbol_table().function(function_identifier).unwrap();
+                let parameters_size = function_descriptor.parameters_size();
+
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
                     self.echo(format!("Returning {}", expression).as_str());
@@ -312,9 +307,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
             } => {
                 let cmp_label = self.create_label("for_cmp");
                 let end = self.create_label("for_end");
-                let (level, var_loc) = self
+                let (level, variable_descriptor) = self
                     .symbol_table()
-                    .get_variable_level_and_offset(index_ident, self.current_function);
+                    .variable(index_ident, self.current_function);
 
                 // Create a new variable for the for loop and store its value.
                 if let Some(expression) = ident_expression {
@@ -322,11 +317,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 } else {
                     self.emit_literal(0);
                 }
-                self.store(level, var_loc as i32, 1);
+                let offset = variable_descriptor.position_in_scope() as i32;
+                self.store(level, offset, 1);
 
                 // Compare the variable with the length.
                 self.emit_label(cmp_label.as_str());
-                self.load(level, var_loc as i32, 1);
+                self.load(level, offset, 1);
                 self.emit_expression(length_expression);
                 self.emit_operation(OperationType::LessThan);
                 self.emit_instruction(Instruction::Jmc {
@@ -336,10 +332,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_statement(statement, Some(cmp_label.as_str()), Some(end.as_str()));
 
                 // Increment i.
-                self.load(level, var_loc as i32, 1);
+                self.load(level, offset, 1);
                 self.emit_literal(1);
                 self.emit_operation(OperationType::Add);
-                self.store(level, var_loc as i32, 1);
+                self.store(level, offset, 1);
                 self.emit_jump(Address::Label(cmp_label.clone()));
                 self.emit_label(end.as_str());
             }
@@ -399,11 +395,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 expression,
                 ..
             } => {
-                let (level, var_loc) = self
+                let (level, variable_descriptor) = self
                     .symbol_table()
-                    .get_variable_level_and_offset(identifier, self.current_function);
+                    .variable(identifier, self.current_function);
                 self.emit_expression(expression);
-                self.store(level, var_loc as i32, 1);
+                self.store(level, variable_descriptor.position_in_scope() as i32, 1);
             }
             Statement::Continue { .. } => {
                 self.echo("Jumping to the start of the loop (continue)");
@@ -546,10 +542,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 }
             }
             Expression::Identifier { identifier, .. } => {
-                let (level, var_loc) = self
+                let (level, variable_descriptor) = self
                     .symbol_table()
-                    .get_variable_level_and_offset(identifier, self.current_function);
-                self.load(level, var_loc as i32, 1);
+                    .variable(identifier, self.current_function);
+                self.load(level, variable_descriptor.position_in_scope() as i32, 1);
                 self.echo(format!("Loaded {}", identifier).as_str());
                 self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
             }
@@ -660,7 +656,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         } else {
             let symbol_table = self.symbol_table();
             let function = symbol_table
-                .find_function(identifier)
+                .function(identifier)
                 .expect("Function to exist");
             return_type_size = function.return_type().size_in_instructions();
             arguments_size = function.parameters_size();
