@@ -13,6 +13,7 @@ use crate::parse::parser::{
 use crate::parse::{Emitter, Expression, Function, Variable};
 
 impl<'a, 'b> Emitter<'a, 'b> {
+    /// # Summary
     /// Emits the translation unit to the writer.
     ///
     /// # Arguments
@@ -92,6 +93,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         Ok(())
     }
 
+    /// # Summary
     /// Emits the translation unit.
     ///
     /// # Arguments
@@ -124,6 +126,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             .for_each(|func| self.emit_function(func))
     }
 
+    /// # Summary
     /// Emits the function.
     ///
     /// # Arguments
@@ -155,6 +158,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_debug_info(DebugKeyword::StackA);
     }
 
+    /// # Summary
     /// Emits the code that loads the arguments into the stack.
     ///
     /// # Arguments
@@ -188,6 +192,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
+    /// # Summary
     /// Emits the block of statements.
     ///
     /// # Arguments
@@ -200,6 +205,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             .for_each(|statement| self.emit_statement(statement, None, None));
     }
 
+    /// # Summary
     /// Emits the statement. The label arguments are used for Continue and Break statements,
     /// respectively. The initial call to this will very likely have None for both arguments. For
     /// example the For statement will call this with start and end labels -- the comparison
@@ -414,6 +420,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         };
     }
 
+    /// # Summary
     /// Emits the expression.
     ///
     /// # Arguments
@@ -570,6 +577,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
+    /// # Summary
     /// Helper function that emits a booba value.
     ///
     /// # Arguments
@@ -582,6 +590,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         });
     }
 
+    /// # Summary
     /// Emits the binary boolean expression. If the expression on top of stack is false and the
     /// operator is AND or if it's true and the operator is OR we jump to the short circuit label.
     ///
@@ -629,6 +638,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
+    /// # Summary
     /// Emits a function call. This will reserve space on the stack for the return value and
     /// store the arguments on the stack. Afterwards, the function is called. The called function
     /// then stores the result value (if any) in the reserved space. Lastly, the arguments are
@@ -696,6 +706,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
+    /// # Summary
     /// Emits the function call to the main function. It also emits the JMP 0 0 instruction to
     /// exit the program once the main function is done.
     fn emit_main_call(&mut self) {

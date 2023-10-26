@@ -8,6 +8,20 @@ use crate::parse::parser::{
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
+    /// # Summary
+    ///
+    ///
+    /// # Arguments
+    ///
+    /// * `translation_unit`:
+    ///
+    /// returns: Result<SymbolTable, SyntaxError>
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///
+    /// ```
     pub fn analyze(
         mut self,
         translation_unit: &TranslationUnit<'a>,
