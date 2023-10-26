@@ -1,7 +1,7 @@
 use std::{cell, collections, rc};
 
 use crate::parse::analysis::SymbolTable;
-use crate::parse::emitter::Instruction;
+use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
@@ -419,6 +419,115 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     fn symbol_table(&self) -> &rc::Rc<SymbolTable<'a>> {
         &self.symbol_table
+    }
+
+    fn emit_function_label(&mut self, label: &str) {
+        self.emit_label(label);
+    }
+
+    fn emit_finishing_label(&mut self, label: &str) {
+        self.emit_label(label);
+
+        // Need to emit an empty instruction because of a situation like
+        // @while_end_0
+        // @if_start_1 LOD ...
+        // The PL0 interpret cannot interpret two labels properly..
+        self.emit_int(0);
+    }
+
+    fn emit_label(&mut self, label: &str) {
+        self.labels
+            .insert(label.to_string(), self.code.len() as u32);
+        self.emit_instruction(Instruction::Label(String::from(label)));
+    }
+
+    fn emit_int(&mut self, size: i32) {
+        self.emit_instruction(Instruction::Int { size })
+    }
+
+    fn emit_instruction(&mut self, instruction: Instruction) {
+        self.code.push(instruction);
+    }
+
+    fn emit_operation(&mut self, operation: OperationType) {
+        self.emit_instruction(Instruction::Operation { operation });
+    }
+
+    fn load(&mut self, level: u32, offset: i32, count: usize) {
+        for i in 0..count {
+            self.emit_instruction(Instruction::Load {
+                level,
+                offset: offset + i as i32,
+            });
+        }
+    }
+
+    fn store(&mut self, level: u32, offset: i32, count: usize) {
+        for i in 0..count {
+            self.emit_instruction(Instruction::Store {
+                level,
+                offset: offset + i as i32,
+            });
+        }
+    }
+
+    fn create_label(&mut self, label: &str) -> String {
+        let control_label;
+        if compiler::DEBUG {
+            control_label = format!("0{label}_{}", self.control_statement_count);
+        } else {
+            control_label = format!("{}", self.control_statement_count);
+        }
+        self.control_statement_count += 1;
+        control_label
+    }
+
+    fn main_function_descriptor(&self) -> (usize, usize) {
+        (1, 0)
+    }
+
+    fn echo(&mut self, message: &str) {
+        self.emit_debug_info(DebugKeyword::Echo {
+            message: String::from(message),
+        });
+    }
+
+    fn emit_jump(&mut self, address: Address) {
+        self.emit_instruction(Instruction::Jump { address });
+    }
+
+    fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
+        self.emit_instruction(Instruction::Dbg { debug_keyword });
+    }
+
+    fn push_scope(&mut self) {
+        let current_function_ident = self.current_function.unwrap();
+        self.function_scope_depth.insert(
+            current_function_ident,
+            self.function_scope_depth
+                .get(current_function_ident)
+                .unwrap_or(&0)
+                + 1,
+        );
+    }
+
+    fn pop_scope(&mut self) {
+        let current_function_ident = self.current_function.unwrap();
+        self.function_scope_depth.insert(
+            current_function_ident,
+            self.function_scope_depth
+                .get(current_function_ident)
+                .unwrap()
+                - 1,
+        );
+    }
+
+    fn emit_call_with_level(&mut self, level: u32, address: Address) {
+        self.emit_instruction(Instruction::Call { level, address });
+    }
+
+    pub fn emit_literal(&mut self, value: i32) {
+        self.emit_instruction(Instruction::Literal { value })
     }
 }
 

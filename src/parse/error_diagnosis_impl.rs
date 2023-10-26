@@ -31,6 +31,10 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(position, "Invalid break placement.");
     }
 
+    pub fn invalid_continue_placement(&mut self, position: (u32, u32)) {
+        self.insert_error_message(position, "Invalid continue placement.");
+    }
+
     pub fn unexpected_token_error(&mut self, token: &Token<'a>) {
         self.insert_error_message(token.position(), format!("Unexpected {token}.").as_str());
     }

@@ -102,7 +102,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         translation_unit
             .global_statements()
             .iter()
-            .for_each(|stmt| self.emit_statement(stmt));
+            .for_each(|stmt| self.emit_statement(stmt, None, None));
         self.emit_debug_info(DebugKeyword::Stack);
         self.emit_main_call();
         translation_unit
@@ -137,25 +137,253 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_debug_info(DebugKeyword::StackA);
     }
 
+    fn emit_load_arguments(&mut self, arguments: &Vec<Variable<'a>>) {
+        // Load the parameters into the stack from the callee function.
+        // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
+        // To load them we have to get the total size of parameters and subtract it
+        // each time we load a parameter.
+        // for example:
+        // ```FUNc foo(argc: pp, argv:pp) {
+        // ...
+        // }
+        // foo(1, 2);```
+        // The parameters are loaded as follows:
+        // The total size is 1 (pp) + 1 (pp) = 2.
+        // The LOD function only loads 32 bits, so for anything bigger
+        // than that we need to LOD again.
+        // NOTE: We have to load with an offset because we pass in some things on stack
+        // like the depth.
+        let total_size = arguments
+            .iter()
+            .fold(0, |acc, parameter| acc + parameter.size_in_instructions());
+        let mut curr_offset = total_size as i32;
+        for parameter in arguments.iter().rev() {
+            let size = parameter.size_in_instructions();
+            self.load(0, -curr_offset, size);
+            curr_offset += size as i32;
+            self.echo(format!("Loaded argument {}", parameter.identifier()).as_str());
+        }
+    }
+
     fn emit_block(&mut self, block: &Block<'a>) {
         block
             .statements()
             .iter()
-            .for_each(|statement| self.emit_statement(statement));
+            .for_each(|statement| self.emit_statement(statement, None, None));
     }
 
-    fn emit_jump(&mut self, address: Address) {
-        self.emit_instruction(Instruction::Jump { address });
-    }
+    /// Emits the statement. The label arguments are used for Continue and Break statements,
+    /// respectively. The initial call to this will very likely have None for both arguments. For
+    /// example the For statement will call this with start and end labels -- the comparison
+    /// label and the end of the for loop label.
+    ///
+    /// # Arguments
+    ///
+    /// * `statement`: the statement to emit
+    /// * `start_label`: the start label of the statement
+    /// * `end_label`: the end label of the statement
+    ///
+    fn emit_statement(
+        &mut self,
+        statement: &Statement<'a>,
+        start_label: Option<&str>,
+        end_label: Option<&str>,
+    ) {
+        match statement {
+            Statement::Expression { expression, .. } => {
+                self.emit_expression(expression);
+                if let Expression::FunctionCall { identifier, .. } = expression {
+                    // Pop the return  value off the stack because it's not assigned to anything.
+                    let return_type_size;
+                    {
+                        let symbol_table = self.symbol_table();
+                        let function = symbol_table.find_function(identifier).expect("A function");
+                        return_type_size = function.return_type().size_in_instructions();
+                    }
+                    if return_type_size > 0 {
+                        self.emit_int(-(return_type_size as i32));
+                        self.echo(
+                            format!(
+                                "Dropped returned value of {} ({} bytes)",
+                                identifier,
+                                return_type_size * 4
+                            )
+                            .as_str(),
+                        );
+                        self.emit_debug_info(DebugKeyword::StackA);
+                    }
+                }
+            }
+            Statement::VariableDeclaration { variable, .. } => {
+                if let Some(expression) = variable.value() {
+                    self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
+                    self.emit_expression(expression);
+                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(
+                        variable.identifier(),
+                        self.current_function,
+                    );
+                    self.store(level, var_loc as i32, 1);
 
-    fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
-        self.emit_instruction(Instruction::Dbg { debug_keyword });
-    }
+                    self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
+                }
+            }
+            Statement::Bye { expression, .. } => {
+                let parameters_size;
+                {
+                    let symbol_table = self.symbol_table();
+                    let current_function = symbol_table
+                        .function_scope(self.current_function.unwrap())
+                        .unwrap();
+                    let function_identifier = current_function.function_identifier();
+                    let function = symbol_table.find_function(function_identifier).unwrap();
+                    parameters_size = function.parameters_size();
+                }
+                if let Some(expression) = expression {
+                    self.emit_expression(expression);
+                    self.echo(format!("Returning {}", expression).as_str());
+                    // TODO: The return value offset should consider the size of the return value.
+                    self.store(0, -1 - parameters_size as i32, 1);
+                }
+                self.emit_instruction(Instruction::Return);
+                // Don't emit RET. The function `emit_function` will handle this
+                // because in case of main function we want to JMP 0 0 instead of RET 0 0.
+            }
+            Statement::While {
+                expression,
+                statement,
+                ..
+            } => {
+                self.push_scope();
+                let start = self.create_label("while_s");
+                let end = self.create_label("while_e");
 
-    fn echo(&mut self, message: &str) {
-        self.emit_debug_info(DebugKeyword::Echo {
-            message: String::from(message),
-        });
+                self.emit_label(start.as_str());
+                self.emit_expression(expression);
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(end.clone()),
+                });
+                self.emit_statement(statement, Some(start.as_str()), Some(end.as_str()));
+                self.pop_scope();
+                self.emit_instruction(Instruction::Jump {
+                    address: Address::Label(start),
+                });
+                self.emit_finishing_label(end.as_str());
+            }
+            Statement::For {
+                index_ident,
+                ident_expression,
+                length_expression,
+                statement,
+                ..
+            } => {
+                let cmp_label = self.create_label("for_cmp");
+                let end = self.create_label("for_end");
+                let (level, var_loc) = self
+                    .symbol_table()
+                    .get_variable_level_and_offset(index_ident, self.current_function);
+
+                // Create a new variable for the for loop and store its value.
+                if let Some(expression) = ident_expression {
+                    self.emit_expression(expression);
+                } else {
+                    self.emit_literal(0);
+                }
+                self.store(level, var_loc as i32, 1);
+
+                // Compare the variable with the length.
+                self.emit_label(cmp_label.as_str());
+                self.load(level, var_loc as i32, 1);
+                self.emit_expression(length_expression);
+                self.emit_operation(OperationType::LessThan);
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(end.clone()),
+                });
+
+                self.emit_statement(statement, Some(cmp_label.as_str()), Some(end.as_str()));
+
+                // Increment i.
+                self.load(level, var_loc as i32, 1);
+                self.emit_literal(1);
+                self.emit_operation(OperationType::Add);
+                self.store(level, var_loc as i32, 1);
+                self.emit_jump(Address::Label(cmp_label.clone()));
+                self.emit_label(end.as_str());
+            }
+
+            Statement::Empty { .. } => {
+                // Emit nothing I guess :)
+            }
+            Statement::Block { block, .. } => {
+                self.push_scope();
+                block
+                    .statements()
+                    .iter()
+                    .for_each(|statement| self.emit_statement(statement, start_label, end_label));
+                self.pop_scope();
+            }
+            Statement::If {
+                expression,
+                statement,
+                ..
+            } => {
+                self.push_scope();
+                let end = self.create_label("if_e");
+
+                self.emit_expression(expression);
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(end.clone()),
+                });
+                self.emit_statement(statement, start_label, end_label);
+                self.pop_scope();
+                self.emit_finishing_label(end.as_str());
+            }
+            Statement::IfElse {
+                expression,
+                statement,
+                else_statement,
+                ..
+            } => {
+                self.push_scope();
+                let end_if = self.create_label("if_e");
+                let else_block = self.create_label("else");
+
+                self.emit_expression(expression);
+                self.emit_instruction(Instruction::Jmc {
+                    address: Address::Label(else_block.clone()),
+                });
+                self.emit_statement(statement, start_label, end_label);
+                self.pop_scope();
+                self.emit_instruction(Instruction::Jump {
+                    address: Address::Label(end_if.clone()),
+                });
+                self.emit_finishing_label(else_block.as_str());
+                self.emit_statement(else_statement, start_label, end_label);
+                self.emit_finishing_label(end_if.as_str());
+            }
+            Statement::Assignment {
+                identifier,
+                expression,
+                ..
+            } => {
+                let (level, var_loc) = self
+                    .symbol_table()
+                    .get_variable_level_and_offset(identifier, self.current_function);
+                self.emit_expression(expression);
+                self.store(level, var_loc as i32, 1);
+            }
+            Statement::Continue { .. } => {
+                self.echo("Jumping to the start of the loop (continue)");
+                self.emit_jump(Address::Label(start_label.unwrap().to_string()));
+            }
+            Statement::Break { .. } => {
+                self.echo("Breaking out of loop");
+                self.emit_jump(Address::Label(end_label.unwrap().to_string()));
+            }
+            _ => self.error_diag.borrow_mut().not_implemented(
+                statement.position(),
+                format!("statement {:?}", statement).as_str(),
+            ),
+        };
     }
 
     fn emit_expression(&mut self, expression: &Expression<'a>) {
@@ -316,13 +544,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
         });
     }
 
-    fn emit_value_on_top_of_stack_equals(&mut self) {
-        // Compare the value to true.
-        self.emit_booba(true);
-        self.echo("Emitted true value to compare the value with.");
-        self.emit_operation(OperationType::Equal);
-    }
-
     fn emit_binary_boolean_expression(
         &mut self,
         binop: &BinaryOperator,
@@ -330,7 +551,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ) {
         match binop {
             BinaryOperator::And => {
-                self.emit_value_on_top_of_stack_equals();
+                // Compare the value to true.
+                self.emit_booba(true);
+                self.emit_operation(OperationType::Equal);
 
                 // Need to duplicate the value on top of the stack because Jmc consumes
                 // the boolean value and we need to store it.
@@ -344,7 +567,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 });
             }
             BinaryOperator::Or => {
-                self.emit_value_on_top_of_stack_equals();
+                // Compare the value to true.
+                self.emit_booba(true);
+                self.emit_operation(OperationType::Equal);
 
                 // Need to duplicate the value on top of the stack because Jmc consumes
                 // the boolean value and we need to store it.
@@ -361,10 +586,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 panic!("Invalid boolean expression");
             }
         }
-    }
-
-    fn main_function_descriptor(&self) -> (usize, usize) {
-        (1, 0)
     }
 
     fn emit_function_call(&mut self, arguments: &Vec<Expression<'a>>, identifier: &str) {
@@ -436,16 +657,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         // The last instruction will be the JMP to 0 - indicating exit.
         self.echo("Program returned with return value:");
-        self.emit_debug_info(DebugKeyword::StackN { amount: 4 });
+        self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
         self.emit_jump(Address::Absolute(0));
-    }
-
-    fn emit_call_with_level(&mut self, level: u32, address: Address) {
-        self.emit_instruction(Instruction::Call { level, address });
-    }
-
-    pub fn emit_literal(&mut self, value: i32) {
-        self.emit_instruction(Instruction::Literal { value })
     }
 
     fn pack_yarn(yarn: &str) -> Vec<i32> {
@@ -468,307 +681,5 @@ impl<'a, 'b> Emitter<'a, 'b> {
             vec.push(packed_chars);
         }
         vec
-    }
-
-    fn emit_load_arguments(&mut self, arguments: &Vec<Variable<'a>>) {
-        // Load the parameters into the stack from the callee function.
-        // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
-        // To load them we have to get the total size of parameters and subtract it
-        // each time we load a parameter.
-        // for example:
-        // ```FUNc foo(argc: pp, argv:pp) {
-        // ...
-        // }
-        // foo(1, 2);```
-        // The parameters are loaded as follows:
-        // The total size is 1 (pp) + 1 (pp) = 2.
-        // The LOD function only loads 32 bits, so for anything bigger
-        // than that we need to LOD again.
-        // NOTE: We have to load with an offset because we pass in some things on stack
-        // like the depth.
-        let total_size = arguments
-            .iter()
-            .fold(0, |acc, parameter| acc + parameter.size_in_instructions());
-        let mut curr_offset = total_size as i32;
-        for parameter in arguments.iter().rev() {
-            let size = parameter.size_in_instructions();
-            self.load(0, -curr_offset, size);
-            curr_offset += size as i32;
-            self.echo(format!("Loaded argument {}", parameter.identifier()).as_str());
-        }
-    }
-
-    fn load(&mut self, level: u32, offset: i32, count: usize) {
-        for i in 0..count {
-            self.emit_instruction(Instruction::Load {
-                level,
-                offset: offset + i as i32,
-            });
-        }
-    }
-
-    fn store(&mut self, level: u32, offset: i32, count: usize) {
-        for i in 0..count {
-            self.emit_instruction(Instruction::Store {
-                level,
-                offset: offset + i as i32,
-            });
-        }
-    }
-
-    fn create_label(&mut self, label: &str) -> String {
-        let control_label;
-        if compiler::DEBUG {
-            control_label = format!("0{label}_{}", self.control_statement_count);
-        } else {
-            control_label = format!("{}", self.control_statement_count);
-        }
-        self.control_statement_count += 1;
-        control_label
-    }
-
-    fn emit_function_label(&mut self, label: &str) {
-        self.emit_label(label);
-    }
-
-    fn emit_finishing_label(&mut self, label: &str) {
-        self.emit_label(label);
-
-        // Need to emit an empty instruction because of a situation like
-        // @while_end_0
-        // @if_start_1 LOD ...
-        // The PL0 interpret cannot interpret two labels properly..
-        self.emit_int(0);
-    }
-
-    fn emit_label(&mut self, label: &str) {
-        self.labels
-            .insert(label.to_string(), self.code.len() as u32);
-        self.emit_instruction(Instruction::Label(String::from(label)));
-    }
-
-    fn emit_int(&mut self, size: i32) {
-        self.emit_instruction(Instruction::Int { size })
-    }
-
-    fn emit_instruction(&mut self, instruction: Instruction) {
-        self.code.push(instruction);
-    }
-
-    fn emit_operation(&mut self, operation: OperationType) {
-        self.emit_instruction(Instruction::Operation { operation });
-    }
-
-    fn emit_statement(&mut self, statement: &Statement<'a>) {
-        match statement {
-            Statement::Expression { expression, .. } => {
-                self.emit_expression(expression);
-                if let Expression::FunctionCall { identifier, .. } = expression {
-                    // Pop the return  value off the stack because it's not assigned to anything.
-                    let return_type_size;
-                    {
-                        let symbol_table = self.symbol_table();
-                        let function = symbol_table.find_function(identifier).expect("A function");
-                        return_type_size = function.return_type().size_in_instructions();
-                    }
-                    if return_type_size > 0 {
-                        self.emit_int(-(return_type_size as i32));
-                        self.echo(
-                            format!(
-                                "Dropped returned value of {} ({} bytes)",
-                                identifier,
-                                return_type_size * 4
-                            )
-                            .as_str(),
-                        );
-                        self.emit_debug_info(DebugKeyword::StackA);
-                    }
-                }
-            }
-            Statement::VariableDeclaration { variable, .. } => {
-                if let Some(expression) = variable.value() {
-                    self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
-                    self.emit_expression(expression);
-                    let (level, var_loc) = self.symbol_table().get_variable_level_and_offset(
-                        variable.identifier(),
-                        self.current_function,
-                    );
-                    self.store(level, var_loc as i32, 1);
-
-                    self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
-                }
-            }
-            Statement::Bye { expression, .. } => {
-                let parameters_size;
-                {
-                    let symbol_table = self.symbol_table();
-                    let current_function = symbol_table
-                        .function_scope(self.current_function.unwrap())
-                        .unwrap();
-                    let function_identifier = current_function.function_identifier();
-                    let function = symbol_table.find_function(function_identifier).unwrap();
-                    parameters_size = function.parameters_size();
-                }
-                if let Some(expression) = expression {
-                    self.emit_expression(expression);
-                    self.echo(format!("Returning {}", expression).as_str());
-                    // TODO: The return value offset should consider the size of the return value.
-                    self.store(0, -1 - parameters_size as i32, 1);
-                }
-                self.emit_instruction(Instruction::Return);
-                // Don't emit RET. The function `emit_function` will handle this
-                // because in case of main function we want to JMP 0 0 instead of RET 0 0.
-            }
-            Statement::While {
-                expression,
-                statement,
-                ..
-            } => {
-                self.push_scope();
-                let start = self.create_label("while_s");
-                let end = self.create_label("while_e");
-
-                self.emit_label(start.as_str());
-                self.emit_expression(expression);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(end.clone()),
-                });
-                self.emit_statement(statement);
-                self.pop_scope();
-                self.emit_instruction(Instruction::Jump {
-                    address: Address::Label(start),
-                });
-                self.emit_finishing_label(end.as_str());
-            }
-            Statement::For {
-                index_ident,
-                ident_expression,
-                length_expression,
-                statement,
-                ..
-            } => {
-                let cmp_label = self.create_label("for_cmp");
-                let end = self.create_label("for_end");
-                let (level, var_loc) = self
-                    .symbol_table()
-                    .get_variable_level_and_offset(index_ident, self.current_function);
-
-                // Create a new variable for the for loop and store its value.
-                if let Some(expression) = ident_expression {
-                    self.emit_expression(expression);
-                } else {
-                    self.emit_literal(0);
-                }
-                self.store(level, var_loc as i32, 1);
-
-                // Compare the variable with the length.
-                self.emit_label(cmp_label.as_str());
-                self.load(level, var_loc as i32, 1);
-                self.emit_expression(length_expression);
-                self.emit_operation(OperationType::LessThan);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(end.clone()),
-                });
-
-                self.emit_statement(statement);
-
-                // Increment i.
-                self.load(level, var_loc as i32, 1);
-                self.emit_literal(1);
-                self.emit_operation(OperationType::Add);
-                self.store(level, var_loc as i32, 1);
-                self.emit_jump(Address::Label(cmp_label.clone()));
-                self.emit_label(end.as_str());
-            }
-
-            Statement::Empty { .. } => {
-                // Emit nothing I guess :)
-            }
-            Statement::Block { block, .. } => {
-                self.push_scope();
-                block
-                    .statements()
-                    .iter()
-                    .for_each(|statement| self.emit_statement(statement));
-                self.pop_scope();
-            }
-            Statement::If {
-                expression,
-                statement,
-                ..
-            } => {
-                self.push_scope();
-                let end = self.create_label("if_e");
-
-                self.emit_expression(expression);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(end.clone()),
-                });
-                self.emit_statement(statement);
-                self.pop_scope();
-                self.emit_finishing_label(end.as_str());
-            }
-            Statement::IfElse {
-                expression,
-                statement,
-                else_statement,
-                ..
-            } => {
-                self.push_scope();
-                let end_if = self.create_label("if_e");
-                let else_block = self.create_label("else");
-
-                self.emit_expression(expression);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(else_block.clone()),
-                });
-                self.emit_statement(statement);
-                self.pop_scope();
-                self.emit_instruction(Instruction::Jump {
-                    address: Address::Label(end_if.clone()),
-                });
-                self.emit_finishing_label(else_block.as_str());
-                self.emit_statement(else_statement);
-                self.emit_finishing_label(end_if.as_str());
-            }
-            Statement::Assignment {
-                identifier,
-                expression,
-                ..
-            } => {
-                let (level, var_loc) = self
-                    .symbol_table()
-                    .get_variable_level_and_offset(identifier, self.current_function);
-                self.emit_expression(expression);
-                self.store(level, var_loc as i32, 1);
-            }
-            Statement::Break { .. } => {}
-            _ => self.error_diag.borrow_mut().not_implemented(
-                statement.position(),
-                format!("statement {:?}", statement).as_str(),
-            ),
-        };
-    }
-
-    fn push_scope(&mut self) {
-        let current_function_ident = self.current_function.unwrap();
-        self.function_scope_depth.insert(
-            current_function_ident,
-            self.function_scope_depth
-                .get(current_function_ident)
-                .unwrap_or(&0)
-                + 1,
-        );
-    }
-
-    fn pop_scope(&mut self) {
-        let current_function_ident = self.current_function.unwrap();
-        self.function_scope_depth.insert(
-            current_function_ident,
-            self.function_scope_depth
-                .get(current_function_ident)
-                .unwrap()
-                - 1,
-        );
     }
 }

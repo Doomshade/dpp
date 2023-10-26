@@ -156,6 +156,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .for_each(|statement| self.analyze_statement(statement));
                 self.loop_stack -= 1;
             }
+            Statement::Continue { position } => {
+                if self.loop_stack == 0 {
+                    self.error_diag
+                        .borrow_mut()
+                        .invalid_continue_placement(*position);
+                }
+            }
             Statement::Break { position } => {
                 if self.loop_stack == 0 {
                     self.error_diag
