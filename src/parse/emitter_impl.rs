@@ -13,6 +13,23 @@ use crate::parse::{Emitter, Expression, Function, Variable};
 
 impl<'a, 'b> Emitter<'a, 'b> {
     /// # Summary
+    /// Generates instructions for the PL/0 interpreter.
+    ///
+    /// # Arguments
+    /// * `translation_unit`: the translation unit
+    ///
+    /// # Returns
+    /// * `Vec<Instruction>` - the instructions
+    pub fn into_pl0_instructions(
+        mut self,
+        translation_unit: &TranslationUnit<'a>,
+    ) -> Vec<Instruction> {
+        self.emit_translation_unit(translation_unit);
+
+        self.code
+    }
+
+    /// # Summary
     /// Emits the translation unit to the writer.
     ///
     /// # Arguments
@@ -21,8 +38,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// * `translation_unit`: the translation unit
     ///
     /// returns: Result<(), Error> - error if the writer fails to write
-    pub fn emit_all(
-        &mut self,
+    pub fn emit_to_writer(
+        mut self,
         writer: &mut io::BufWriter<fs::File>,
         translation_unit: &TranslationUnit<'a>,
     ) -> io::Result<()> {

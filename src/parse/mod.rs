@@ -1839,7 +1839,7 @@ pub mod compiler {
             symbol_table: SymbolTable<'a>,
             error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
         ) -> io::Result<()> {
-            Emitter::new(rc::Rc::new(symbol_table), rc::Rc::clone(&error_diag)).emit_all(
+            Emitter::new(rc::Rc::new(symbol_table), rc::Rc::clone(&error_diag)).emit_to_writer(
                 &mut io::BufWriter::new(fs::File::create(output_file)?),
                 &translation_unit,
             )
