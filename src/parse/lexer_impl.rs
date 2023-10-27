@@ -204,7 +204,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             _ => {
                 self.error_diag
                     .borrow_mut()
-                    .unknown_operator((self.row, self.col), op);
+                    .unknown_operator(self.position(), op);
                 TokenKind::Unknown
             }
         };
@@ -283,7 +283,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
                     _ => {
                         self.error_diag
                             .borrow_mut()
-                            .invalid_escaped_character((self.row, self.col), self.peek());
+                            .invalid_escaped_character(self.position(), self.peek());
                         self.peek()
                     }
                 };
@@ -318,9 +318,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
         if self.peek() == '.' {
             if !self.peek().is_ascii_digit() {
-                self.error_diag
-                    .borrow_mut()
-                    .invalid_number((self.row, self.col));
+                self.error_diag.borrow_mut().invalid_number(self.position());
             }
             while self.peek().is_ascii_digit() {
                 end += self.advance();
@@ -354,7 +352,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
         if ident_value.chars().any(|c| !c.is_ascii()) {
             self.error_diag
                 .borrow_mut()
-                .identifiers_cannot_have_nonascii((self.row, self.col), ident_value);
+                .identifiers_cannot_have_nonascii(self.position(), ident_value);
         }
 
         let kind = match ident_value {

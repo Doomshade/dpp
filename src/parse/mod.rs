@@ -96,6 +96,10 @@ impl<'a, 'b> Lexer<'a, 'b> {
         }
     }
 
+    fn position(&self) -> (u32, u32) {
+        (self.row, self.col)
+    }
+
     fn new_token(&self, kind: TokenKind, value: &'a str) -> Token<'a> {
         Token::new(kind, (self.row, self.col), value)
     }
