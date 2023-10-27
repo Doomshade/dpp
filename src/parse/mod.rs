@@ -1,11 +1,12 @@
 use std::{cell, collections, rc};
 
+use dpp_macros::Pos;
+
 use crate::parse::analysis::SymbolTable;
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
-use dpp_macros::Pos;
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -436,7 +437,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
         // @while_end_0
         // @if_start_1 LOD ...
         // The PL0 interpret cannot interpret two labels properly..
-        self.emit_int(0);
+        if compiler::DEBUG {
+            self.emit_int(0);
+        }
     }
 
     fn emit_label(&mut self, label: &str) {
@@ -1278,7 +1281,7 @@ mod analysis {
     #[derive(Clone, Debug)]
     pub struct GlobalScope<'a> {
         scope: Scope<'a>,
-        current_position: usize,
+        stack_position: usize,
     }
 
     #[derive(Clone, Debug)]
@@ -1420,9 +1423,14 @@ mod analysis {
                 .last_mut()
                 .expect("Inside function scope")
         }
+        pub fn global_scope(&self) -> &GlobalScope<'a> {
+            &self.global_scope
+        }
     }
 
     impl<'a> Scope<'a> {
+        pub const ACTIVATION_RECORD_SIZE: usize = 3;
+
         fn push_variable_descriptor(
             &mut self,
             identifier: &'a str,
@@ -1471,13 +1479,13 @@ mod analysis {
             // on the stack.
             GlobalScope {
                 scope: Scope::default(),
-                current_position: 1,
+                stack_position: Scope::ACTIVATION_RECORD_SIZE,
             }
         }
+
         pub fn push_variable(&mut self, variable: &Variable<'a>) {
-            let variable_descriptor =
-                VariableDescriptor::new(variable, self.current_position, false);
-            self.current_position += variable_descriptor.size_in_instructions();
+            let variable_descriptor = VariableDescriptor::new(variable, self.stack_position, false);
+            self.stack_position += variable_descriptor.size_in_instructions();
             self.scope
                 .push_variable_descriptor(variable.identifier(), variable_descriptor);
         }
@@ -1505,17 +1513,18 @@ mod analysis {
         pub fn has_function(&self, identifier: &str) -> bool {
             self.scope.has_function(identifier)
         }
+        pub fn stack_position(&self) -> usize {
+            self.stack_position
+        }
     }
 
     impl<'a> FunctionScope<'a> {
-        const ACTIVATION_RECORD_SIZE: usize = 3;
-
         pub fn new(function_identifier: &'a str) -> Self {
             FunctionScope {
                 generated_scopes: Vec::new(),
                 scope_stack: Vec::new(),
                 function_identifier,
-                stack_position: Self::ACTIVATION_RECORD_SIZE,
+                stack_position: Scope::ACTIVATION_RECORD_SIZE,
             }
         }
 
@@ -1761,7 +1770,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    pub const DEBUG: bool = false;
+    pub const DEBUG: bool = true;
 
     impl DppCompiler {
         pub fn compile_translation_unit(
@@ -1852,11 +1861,13 @@ pub mod compiler {
 
     #[cfg(test)]
     mod lexer_tests {
-        use crate::parse::lexer::TokenKind;
-        use crate::parse::{ErrorDiagnosis, Lexer};
         use std::cell;
         use std::rc;
+
         use TokenKind as TK;
+
+        use crate::parse::lexer::TokenKind;
+        use crate::parse::{ErrorDiagnosis, Lexer};
 
         fn test_generic_lex(
             input: &str,
@@ -1902,4 +1913,7 @@ pub mod compiler {
             test_generic_lex("dsa ó", false, 0, vec![]);
         }
     }
+
+    #[cfg(test)]
+    mod generic_tests {}
 }

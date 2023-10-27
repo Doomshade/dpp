@@ -646,7 +646,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     TokenKind::OpenParen => {
                         let arguments = self._args()?;
                         Some(Expression::FunctionCall {
-                            position: self.position,
+                            position,
                             identifier,
                             arguments,
                         })

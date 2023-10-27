@@ -4,6 +4,7 @@ use std::io::Write;
 
 use dpp_macros::Pos;
 
+use crate::parse::analysis::Scope;
 use crate::parse::compiler;
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{
@@ -44,9 +45,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
         translation_unit: &TranslationUnit<'a>,
     ) -> io::Result<()> {
         self.emit_translation_unit(translation_unit);
-
-        // First emit the base
-        writer.write_all(b"LIT 0 1\n")?;
         for instruction in &self.code {
             match instruction {
                 Instruction::Load { level, offset } => {
@@ -116,20 +114,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ///
     /// * `translation_unit`: the translation unit
     fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
-        self.emit_int(
-            translation_unit
-                .global_statements()
-                .iter()
-                .fold(0, |mut acc, stat| {
-                    match stat {
-                        Statement::VariableDeclaration { variable, .. } => {
-                            acc += variable.size_in_instructions();
-                        }
-                        _ => panic!("Invalid global statement"),
-                    }
-                    return acc;
-                }) as i32,
-        );
+        self.emit_int(self.symbol_table().global_scope().stack_position() as i32);
         translation_unit
             .global_statements()
             .iter()
@@ -160,9 +145,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         // Load arguments.
         let args = function.parameters();
         if !args.is_empty() {
-            self.echo(format!("Loading {} arguments", args.len()).as_str());
             self.emit_load_arguments(&args);
-            self.echo(format!("{} arguments loaded", args.len()).as_str());
         }
         self.emit_block(function.block());
         if function.return_type() == &DataType::Nopp {
@@ -192,18 +175,24 @@ impl<'a, 'b> Emitter<'a, 'b> {
         // The total size is 1 (pp) + 1 (pp) = 2.
         // The LOD function only loads 32 bits, so for anything bigger
         // than that we need to LOD again.
-        // NOTE: We have to load with an offset because we pass in some things on stack
-        // like the depth.
         let total_size = arguments
             .iter()
             .fold(0, |acc, parameter| acc + parameter.size_in_instructions());
         let mut curr_offset = total_size as i32;
-        for argument in arguments.iter().rev() {
+        self.echo(format!("Loading {} argument(s)", arguments.len()).as_str());
+        for argument in arguments.iter() {
+            let variable_descriptor = self
+                .symbol_table()
+                .variable(argument.identifier(), self.current_function)
+                .1;
             let size = argument.size_in_instructions();
             self.load(0, -curr_offset, size);
-            curr_offset += size as i32;
+            curr_offset -= size as i32;
+            self.store(0, variable_descriptor.position_in_scope() as i32, 1);
             self.echo(format!("Loaded argument {}", argument.identifier()).as_str());
         }
+        self.echo(format!("{} argument(s) loaded", arguments.len()).as_str());
+        self.emit_debug_info(DebugKeyword::StackA);
     }
 
     /// # Summary
@@ -663,16 +652,19 @@ impl<'a, 'b> Emitter<'a, 'b> {
         // Size in instructions.
         let return_type_size;
         let arguments_size;
+        let level;
         if identifier == "main" {
             // Doing this only because the IntelliJ Idea plugin considers this an error :(
             let (r, a) = self.main_function_descriptor();
             return_type_size = r;
             arguments_size = a;
+            level = 0;
         } else {
             let symbol_table = self.symbol_table();
             let function = symbol_table.function(identifier).unwrap();
             return_type_size = function.return_type().size_in_instructions();
             arguments_size = function.parameters_size();
+            level = 1;
         }
 
         // If the function has a return type we need to allocate
@@ -704,7 +696,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         // Call the function, finally.
         self.echo(format!("Calling {}", identifier).as_str());
-        self.emit_call_with_level(1, Address::Label(String::from(identifier)));
+        self.emit_call_with_level(level, Address::Label(String::from(identifier)));
 
         // Pop the arguments off the stack.
         if arguments_size > 0 {
@@ -730,7 +722,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         // The last instruction will be the JMP to 0 - indicating exit.
         self.echo("Program returned with return value:");
         self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
-        self.emit_jump(Address::Absolute(0));
+        self.emit_instruction(Instruction::Return);
+        // self.emit_jump(Address::Absolute(0));
     }
 
     fn pack_yarn(yarn: &str) -> Vec<i32> {

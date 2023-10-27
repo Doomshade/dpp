@@ -1,3 +1,0 @@
-FUNc test(): nopp {
-    gfsays("I am a method with void return type!");
-}

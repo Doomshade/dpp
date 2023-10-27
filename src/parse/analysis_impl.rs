@@ -210,7 +210,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::Block { block, .. } => {
                 self.analyze_block(block);
             }
-            Statement::Bye { .. } => {}
+            Statement::Bye { expression, .. } => {
+                if let Some(expression) = expression {
+                    self.analyze_expr(expression);
+                }
+            }
             Statement::If {
                 expression,
                 statement,
