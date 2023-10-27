@@ -247,10 +247,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .variable_in_scope_stack(identifier, self.current_function)
                 {
                     self.check_data_type(
-                        variable.data_type(),
+                        variable.borrow().data_type(),
                         self.analyze_expr(expression),
                         *position,
                     );
+                    variable.borrow_mut().set_initialized();
                 } else {
                     self.error_diag
                         .borrow_mut()
@@ -429,13 +430,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .symbol_table()
                     .variable_in_scope_stack(identifier, self.current_function)
                 {
-                    if variable.is_initialized() {
-                        Some(variable.data_type().clone())
+                    if variable.borrow().is_initialized() {
+                        Some(variable.borrow().data_type().clone())
                     } else {
                         self.error_diag
                             .borrow_mut()
                             .variable_not_initialized(*position, identifier);
-                        Some(variable.data_type().clone())
+                        Some(variable.borrow().data_type().clone())
                     }
                 } else {
                     self.error_diag
@@ -450,19 +451,25 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 return if let Some(function) = self.symbol_table().function(identifier) {
-                    if function.parameters().len() != arguments.len() {
+                    if function.borrow().parameters().len() != arguments.len() {
                         // Check the argument count.
                         self.error_diag.borrow_mut().invalid_number_of_arguments(
                             *position,
                             identifier,
-                            function.parameters().len(),
+                            function.borrow().parameters().len(),
                             arguments.len(),
                         );
                     } else {
                         // Check the argument data type.
                         if let Some(mismatched_arg) = arguments
                             .iter()
-                            .zip(function.parameters().iter().map(|var| var.data_type()))
+                            .zip(
+                                function
+                                    .borrow()
+                                    .parameters()
+                                    .iter()
+                                    .map(|var| var.data_type()),
+                            )
                             .find(|(a, b)| {
                                 if let Some(expr) = self.analyze_expr(a) {
                                     expr != **b
@@ -479,7 +486,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             )
                         }
                     }
-                    Some(function.return_type().clone())
+                    Some(function.borrow().return_type().clone())
                 } else {
                     self.error_diag
                         .borrow_mut()

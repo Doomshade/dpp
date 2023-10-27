@@ -4,7 +4,6 @@ use std::io::Write;
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::Scope;
 use crate::parse::compiler;
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{
@@ -188,7 +187,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
             let size = argument.size_in_instructions();
             self.load(0, -curr_offset, size);
             curr_offset -= size as i32;
-            self.store(0, variable_descriptor.position_in_scope() as i32, 1);
+            self.store(
+                0,
+                variable_descriptor.borrow().position_in_scope() as i32,
+                1,
+            );
             self.echo(format!("Loaded argument {}", argument.identifier()).as_str());
         }
         self.echo(format!("{} argument(s) loaded", arguments.len()).as_str());
@@ -235,7 +238,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     {
                         let symbol_table = self.symbol_table();
                         let function = symbol_table.function(identifier).unwrap();
-                        return_type_size = function.return_type().size_in_instructions();
+                        return_type_size = function.borrow().return_type().size_in_instructions();
                     }
                     if return_type_size > 0 {
                         self.emit_int(-(return_type_size as i32));
@@ -258,7 +261,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     let (level, variable_descriptor) = self
                         .symbol_table()
                         .variable(variable.identifier(), self.current_function);
-                    self.store(level, variable_descriptor.position_in_scope() as i32, 1);
+                    self.store(
+                        level,
+                        variable_descriptor.borrow().position_in_scope() as i32,
+                        1,
+                    );
 
                     self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
                 }
@@ -271,8 +278,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 let function_identifier = current_function.function_identifier();
                 let function_descriptor =
                     self.symbol_table().function(function_identifier).unwrap();
-                let parameters_size = function_descriptor.parameters_size();
-                let return_type_size = function_descriptor.return_type().size_in_instructions();
+                let parameters_size = function_descriptor.borrow().parameters_size();
+                let return_type_size = function_descriptor
+                    .borrow()
+                    .return_type()
+                    .size_in_instructions();
 
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
@@ -321,7 +331,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 } else {
                     self.emit_literal(0);
                 }
-                let offset = variable_descriptor.position_in_scope() as i32;
+                let offset = variable_descriptor.borrow().position_in_scope() as i32;
                 self.store(level, offset, 1);
 
                 // Compare the variable with the length.
@@ -403,7 +413,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     .symbol_table()
                     .variable(identifier, self.current_function);
                 self.emit_expression(expression);
-                self.store(level, variable_descriptor.position_in_scope() as i32, 1);
+                self.store(
+                    level,
+                    variable_descriptor.borrow().position_in_scope() as i32,
+                    1,
+                );
             }
             Statement::Continue { .. } => {
                 self.echo("Jumping to the start of the loop (continue)");
@@ -549,7 +563,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 let (level, variable_descriptor) = self
                     .symbol_table()
                     .variable(identifier, self.current_function);
-                self.load(level, variable_descriptor.position_in_scope() as i32, 1);
+                self.load(
+                    level,
+                    variable_descriptor.borrow().position_in_scope() as i32,
+                    1,
+                );
                 self.echo(format!("Loaded {}", identifier).as_str());
                 self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
             }
@@ -662,8 +680,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         } else {
             let symbol_table = self.symbol_table();
             let function = symbol_table.function(identifier).unwrap();
-            return_type_size = function.return_type().size_in_instructions();
-            arguments_size = function.parameters_size();
+            return_type_size = function.borrow().return_type().size_in_instructions();
+            arguments_size = function.borrow().parameters_size();
             level = 1;
         }
 

@@ -87,6 +87,7 @@
     rust_2018_idioms
 )]
 
+use crate::parse::compiler;
 use std::env;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -110,7 +111,16 @@ impl Error for ArgsError {}
 
 const STACK_SIZE: usize = 16 * 1024 * 1024;
 
+/// This will always be false as we are using labels.
+const A_ABSOLUTE_ADDRESSING: bool = false;
+
 fn run() {
+    // TODO: Make these configurable.
+    const L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES: bool = true;
+    const I_INTERPRET_CODE: bool = false || compiler::DEBUG;
+    const T_DEBUG_RUN_INSTRUCTIONS: bool = true || compiler::DEBUG;
+    const S_DEBUG_STORE_INSTRUCTIONS: bool = false || compiler::DEBUG;
+    const D_PRINT_DEBUG_INFO: bool = false || compiler::DEBUG;
     const OUTPUT: &'static str = "out/dpp/test.pl0";
     const PL0_INTERPRET_PATH: &'static str = "resources/pl0_interpret/bin/refint_pl0_ext.exe";
     let args: Vec<String> = env::args().collect();
@@ -121,7 +131,17 @@ fn run() {
     }
 
     let file_path = &args[1];
-    match DppCompiler::compile_translation_unit(file_path, OUTPUT, PL0_INTERPRET_PATH) {
+    match DppCompiler::compile_translation_unit(
+        A_ABSOLUTE_ADDRESSING,
+        L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES,
+        I_INTERPRET_CODE,
+        T_DEBUG_RUN_INSTRUCTIONS,
+        S_DEBUG_STORE_INSTRUCTIONS,
+        D_PRINT_DEBUG_INFO,
+        file_path,
+        OUTPUT,
+        PL0_INTERPRET_PATH,
+    ) {
         Ok(_) => println!("{file_path} compiled successfully into {OUTPUT}"),
         Err(err) => eprintln!("{:?}", err),
     }

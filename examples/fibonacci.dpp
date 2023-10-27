@@ -1,4 +1,12 @@
+pp -> a = 0;
+
 FUNc main() -> pp {
+    pp -> a = 0;
+    pp -> b = 0;
+    pp -> c = 0;
+    pp -> d = 0;
+    pp -> e = 0;
+    pp -> f = 0;
     bye fibonacci(10) + fibonacci_rec(10);
 }
 
@@ -10,13 +18,25 @@ FUNc fibonacci_rec(pp -> num) -> pp {
 }
 
 FUNc fibonacci(pp -> num) -> pp {
-    pp -> a = 0;
-    pp -> b = 1;
-    pp -> c = 1;
-    for(i = 1 to num) {
-        c = a + b;
-        a = b;
-        b = c;
-    }
+    b = 1000;
+    pp -> c;
+    {
+        pp -> a = 0;
+        pp -> b = 1;
+        c = 1;
+        for(i = 1 to num) {
+            c = add(a,b);
+            a = b;
+            b = c;
+        }}
     bye c;
 }
+
+FUNc add(pp -> a, pp -> b) -> pp {
+    bye trust_add(a, b);
+}
+
+FUNc trust_add(pp -> a, pp -> b) -> pp {
+    bye a + b;
+}
+pp -> b = 0;
