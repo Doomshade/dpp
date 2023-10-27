@@ -18,11 +18,12 @@ FUNc fibonacci_rec(pp -> num) -> pp {
 }
 
 FUNc fibonacci(pp -> num) -> pp {
-    b = 1000;
-    pp -> c;
-    {
-        pp -> a = 0;
-        pp -> b = 1;
+    # TODO: This should throw an error, but it instead assigns to the local variable b
+    b = 1000;        #                                                               |
+    pp -> c;         #                                                               |
+    {                #                                                               |
+        pp -> a = 0; #                                                               |
+        pp -> b = 1; # HERE <---------------------------------------------------------
         c = 1;
         for(i = 1 to num) {
             c = add(a,b);
