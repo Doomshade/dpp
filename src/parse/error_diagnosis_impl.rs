@@ -16,6 +16,17 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         }
     }
 
+    pub fn identifiers_cannot_have_nonascii(&mut self, position: (u32, u32), identifier: &str) {
+        self.insert_error_message(
+            position,
+            format!(
+                "Identifiers cannot have non-ascii characters: \"{identifier}\"",
+                identifier = identifier
+            )
+            .as_str(),
+        );
+    }
+
     pub fn unknown_operator(&mut self, position: (u32, u32), operator: &str) {
         self.insert_error_message(
             position,

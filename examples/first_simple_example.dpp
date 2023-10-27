@@ -49,6 +49,7 @@ FUNc hellyea(pp -> fuk, pp -> dis) -> pp {
 
     if (yem) {
         pp -> abc = 123;
+        pp -> for_asd = abc;
     } else if (nom) {
         pp -> def = 1234;
     } else if (nom) {

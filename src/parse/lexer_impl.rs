@@ -341,16 +341,22 @@ impl<'a, 'b> Lexer<'a, 'b> {
     fn identifier(&mut self) -> Token<'a> {
         let start = self.pointer;
         let mut end = start;
+
+        // We know the current character is _ a-z A-Z so no need to check here.
         end += self.advance();
 
-        while self.peek().is_ascii_digit()
-            || self.peek().is_alphabetic()
-            || self.peek() == '_' && !self.peek().is_whitespace()
-        {
+        while self.peek().is_alphanumeric() || self.peek() == '_' && !self.peek().is_whitespace() {
             end += self.advance();
         }
 
         let ident_value = &self.raw_input[start..end];
+        // Check if the identifier contains nonascii.
+        if ident_value.chars().any(|c| !c.is_ascii()) {
+            self.error_diag
+                .borrow_mut()
+                .identifiers_cannot_have_nonascii((self.row, self.col), ident_value);
+        }
+
         let kind = match ident_value {
             "xxlpp" => TokenKind::XxlppKeyword,
             "pp" => TokenKind::PpKeyword,
