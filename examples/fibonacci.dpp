@@ -29,7 +29,8 @@ FUNc fibonacci(pp -> num) -> pp {
             c = add(a,b);
             a = b;
             b = c;
-        }}
+        }
+    }
     bye c;
 }
 

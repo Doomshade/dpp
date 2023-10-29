@@ -1260,7 +1260,9 @@ mod parser {
 mod analysis {
     use std::{cell, collections, rc};
 
-    use crate::parse::parser::{DataType, Expression, Function, Variable};
+    use crate::parse::parser::{
+        BinaryOperator, DataType, Expression, Function, UnaryOperator, Variable,
+    };
 
     #[derive(Debug)]
     pub struct SymbolTable<'a> {
@@ -1310,6 +1312,104 @@ mod analysis {
     pub struct FunctionDescriptor<'a> {
         return_type: DataType<'a>,
         parameters: Vec<Variable<'a>>,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct BoundTranslationUnit {
+        functions: Vec<BoundFunction>,
+        global_variable_stack_size: usize,
+        global_variables: Vec<BoundVariableAssignment>,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct BoundFunction {
+        identifier: usize,
+        parameter_stack_size: usize,
+        statements: Vec<BoundStatement>,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct BoundVariableAssignment {
+        position: BoundVariablePosition,
+        value: BoundExpression,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum BoundExpression {
+        Number(i32),
+        P(char),
+        Booba(bool),
+        Yarn(String),
+        Unary {
+            op: UnaryOperator,
+            operand: Box<BoundExpression>,
+        },
+        Binary {
+            lhs: Box<BoundExpression>,
+            op: BinaryOperator,
+            rhs: Box<BoundExpression>,
+        },
+        Variable(BoundVariablePosition),
+        FunctionCall {
+            identifier: usize,
+            arguments: Vec<BoundExpression>,
+        },
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct BoundVariablePosition {
+        level: usize,
+        offset: i32,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum BoundStatement {
+        If {
+            expression: BoundExpression,
+            statements: Vec<BoundStatement>,
+        },
+        IfElse {
+            expression: BoundExpression,
+            statements: Vec<BoundStatement>,
+            else_statements: Vec<BoundStatement>,
+        },
+        Bye {
+            expression: Option<BoundExpression>,
+        },
+        Print {
+            print_function: fn(&str),
+            expression: BoundExpression,
+        },
+        Expression(BoundExpression),
+        For {
+            ident_expression: Option<BoundExpression>,
+            length_expression: BoundExpression,
+            statements: Vec<BoundStatement>,
+        },
+        While {
+            expression: BoundExpression,
+            statements: Vec<BoundStatement>,
+        },
+        DoWhile {
+            expression: BoundExpression,
+            statements: Vec<BoundStatement>,
+        },
+        Loop {
+            statements: Vec<BoundStatement>,
+        },
+        Break,
+        Continue,
+        Switch {
+            expression: BoundExpression,
+            cases: Vec<BoundCase>,
+        },
+        VariableAssignment(BoundVariableAssignment),
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct BoundCase {
+        expression: BoundExpression,
+        statements: Vec<BoundStatement>,
     }
 
     impl<'a> SymbolTable<'a> {
@@ -1660,6 +1760,75 @@ mod analysis {
             self.parameters().iter().fold(0, |acc, parameter| {
                 acc + parameter.data_type().size_in_instructions()
             })
+        }
+    }
+
+    impl BoundTranslationUnit {
+        pub fn new(
+            functions: Vec<BoundFunction>,
+            global_variable_stack_size: usize,
+            global_variables: Vec<BoundVariableAssignment>,
+        ) -> Self {
+            BoundTranslationUnit {
+                functions,
+                global_variable_stack_size,
+                global_variables,
+            }
+        }
+
+        pub fn functions(&self) -> &Vec<BoundFunction> {
+            &self.functions
+        }
+        pub fn global_variable_stack_size(&self) -> usize {
+            self.global_variable_stack_size
+        }
+        pub fn global_variables(&self) -> &Vec<BoundVariableAssignment> {
+            &self.global_variables
+        }
+    }
+
+    impl BoundFunction {
+        pub fn new(
+            identifier: usize,
+            parameter_stack_size: usize,
+            statements: Vec<BoundStatement>,
+        ) -> Self {
+            BoundFunction {
+                identifier,
+                parameter_stack_size,
+                statements,
+            }
+        }
+
+        pub fn identifier(&self) -> usize {
+            self.identifier
+        }
+        pub fn parameter_stack_size(&self) -> usize {
+            self.parameter_stack_size
+        }
+        pub fn statements(&self) -> &Vec<BoundStatement> {
+            &self.statements
+        }
+    }
+
+    impl BoundVariableAssignment {
+        pub fn new(position: BoundVariablePosition, value: BoundExpression) -> Self {
+            BoundVariableAssignment { position, value }
+        }
+    }
+
+    impl BoundVariablePosition {
+        pub fn new(level: usize, offset: i32) -> Self {
+            BoundVariablePosition { level, offset }
+        }
+    }
+
+    impl BoundCase {
+        pub fn new(expression: BoundExpression, statements: Vec<BoundStatement>) -> Self {
+            BoundCase {
+                expression,
+                statements,
+            }
         }
     }
 }
