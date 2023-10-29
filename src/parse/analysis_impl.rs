@@ -1,6 +1,9 @@
 use dpp_macros::Pos;
 
-use crate::parse::analysis::SymbolTable;
+use crate::parse::analysis::{
+    BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit, BoundVariableAssignment,
+    BoundVariablePosition,
+};
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
     Block, DataType, NumberType, Statement, TranslationUnit, UnaryOperator, Variable,
@@ -21,14 +24,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     pub fn analyze(
         mut self,
         translation_unit: &TranslationUnit<'a>,
-    ) -> Result<SymbolTable<'a>, SyntaxError> {
-        self.analyze_translation_unit(translation_unit);
+    ) -> Result<BoundTranslationUnit, SyntaxError> {
+        let bound_transl_unit = self.analyze_translation_unit(translation_unit);
 
         if !self.symbol_table().function("main").is_some() {
             self.error_diag.borrow_mut().no_main_method_found_error();
         }
         self.error_diag.borrow().check_errors()?;
-        Ok(self.symbol_table)
+        Ok(bound_transl_unit)
     }
 
     /// # Summary
@@ -38,7 +41,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// # Arguments
     ///
     /// * `translation_unit`: the translation unit to analyze
-    fn analyze_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
+    fn analyze_translation_unit(
+        &mut self,
+        translation_unit: &TranslationUnit<'a>,
+    ) -> BoundTranslationUnit {
         // Register the global functions.
         translation_unit.functions().iter().for_each(|function| {
             if self
@@ -53,18 +59,25 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         });
 
         // Analyze global statements.
-        translation_unit
+        let global_variables = translation_unit
             .global_statements()
             .iter()
-            .for_each(|statement| {
-                self.analyze_global_statement(statement);
-            });
-
+            .map(|statement| self.analyze_global_statement(statement))
+            .filter(|global_stat| global_stat.is_some())
+            .map(|statement| statement.unwrap())
+            .collect::<Vec<BoundVariableAssignment>>();
         // Analyze the parsed functions.
-        translation_unit
+        let functions = translation_unit
             .functions()
             .iter()
-            .for_each(|function| self.analyze_function(function));
+            .map(|function| self.analyze_function(function))
+            .collect::<Vec<BoundFunction>>();
+
+        BoundTranslationUnit::new(
+            functions,
+            self.symbol_table().global_scope().stack_position(),
+            global_variables,
+        )
     }
 
     /// # Summary
@@ -75,9 +88,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// # Arguments
     ///
     /// * `function`: the function to analyze
-    fn analyze_function(&mut self, function: &Function<'a>) {
+    fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
         self.begin_function(&function);
-        self.analyze_block(function.block());
+        let bound_statements = self.analyze_block(function.block());
         if function.return_type() != &DataType::Nopp {
             // If it's anything other than Nopp, then we require the function to have
             // a return statement at the very end.
@@ -91,6 +104,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
         }
         self.end_function();
+        let sym_table = self.symbol_table();
+        let function_scope = sym_table.function_scope(function.identifier()).unwrap();
+        // Shift the stack pointer by activation record + declared variable count.
+
+        BoundFunction::new(
+            self.current_function_index,
+            function_scope.stack_position(),
+            bound_statements,
+        )
     }
 
     /// # Summary
@@ -102,7 +124,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// # Arguments
     ///
     /// * `statement`: the global statement to analyze
-    fn analyze_global_statement(&mut self, statement: &Statement<'a>) {
+    fn analyze_global_statement(
+        &mut self,
+        statement: &Statement<'a>,
+    ) -> Option<BoundVariableAssignment> {
         match &statement {
             Statement::VariableDeclaration { variable, .. } => {
                 if self
@@ -115,17 +140,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .variable_already_exists(variable.position(), variable.identifier());
                 }
 
+                self.symbol_table_mut().push_global_variable(variable);
                 if let Some(expression) = variable.value() {
                     self.check_data_type(
                         variable.data_type(),
-                        self.analyze_expr(expression),
+                        self.calc_data_type(expression),
                         variable.position(),
                     );
+                    Some(BoundVariableAssignment::new(
+                        BoundVariablePosition::new(0, 0),
+                        self.analyze_expr(expression),
+                    ));
                 }
-                self.symbol_table_mut().push_global_variable(variable);
+                None
             }
-            _ => {}
-        };
+            _ => None,
+        }
     }
 
     /// # Summary
@@ -134,7 +164,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// # Arguments
     ///
     /// * `statement`: the (local) statement to analyze
-    fn analyze_statement(&mut self, statement: &Statement<'a>) {
+    fn analyze_statement(&mut self, statement: &Statement<'a>) -> BoundStatement {
         match &statement {
             Statement::VariableDeclaration { variable, .. } => {
                 if self
@@ -147,51 +177,65 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .variable_already_exists(variable.position(), variable.identifier());
                 }
 
+                self.symbol_table_mut().push_local_variable(variable, false);
                 if let Some(expression) = variable.value() {
                     self.check_data_type(
                         variable.data_type(),
-                        self.analyze_expr(expression),
+                        self.calc_data_type(expression),
                         variable.position(),
                     );
+                    // TODO: Use symbol table.
+                    BoundStatement::VariableAssignment(BoundVariableAssignment::new(
+                        BoundVariablePosition::new(0, 0),
+                        self.analyze_expr(expression),
+                    ));
                 }
-                self.symbol_table_mut().push_local_variable(variable, false);
-                // dbg!(&expression);
+                BoundStatement::Empty
             }
             Statement::Expression { expression, .. } => {
-                self.analyze_expr(expression);
+                self.calc_data_type(expression);
+                let bound_expression = self.analyze_expr(expression);
+                BoundStatement::Expression(bound_expression)
             }
             Statement::While {
                 expression,
                 statement,
                 ..
             } => {
-                let data_type = self.analyze_expr(expression);
+                let data_type = self.calc_data_type(expression);
                 self.check_data_type(&DataType::Booba, data_type, expression.position());
+                let expression = self.analyze_expr(expression);
                 self.loop_stack += 1;
-                self.analyze_statement(statement);
+                let bound_statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
+                BoundStatement::While {
+                    expression,
+                    statement: Box::new(bound_statement),
+                }
             }
-            Statement::Loop { block, .. } => {
+            Statement::Loop { statement, .. } => {
                 self.loop_stack += 1;
-                block
-                    .statements()
-                    .iter()
-                    .for_each(|statement| self.analyze_statement(statement));
+                let statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
+                BoundStatement::Loop {
+                    statement: Box::new(statement),
+                }
             }
             Statement::DoWhile {
                 expression,
-                block,
+                statement,
                 position,
             } => {
-                let data_type = self.analyze_expr(expression);
+                let data_type = self.calc_data_type(expression);
                 self.check_data_type(&DataType::Booba, data_type, *position);
+                let expression = self.analyze_expr(expression);
                 self.loop_stack += 1;
-                block
-                    .statements()
-                    .iter()
-                    .for_each(|statement| self.analyze_statement(statement));
+                let statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
+                BoundStatement::DoWhile {
+                    expression,
+                    statement: Box::new(statement),
+                }
             }
             Statement::Continue { position } => {
                 if self.loop_stack == 0 {
@@ -199,6 +243,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .borrow_mut()
                         .invalid_continue_placement(*position);
                 }
+                BoundStatement::Continue
             }
             Statement::Break { position } => {
                 if self.loop_stack == 0 {
@@ -206,24 +251,38 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .borrow_mut()
                         .invalid_break_placement(*position);
                 }
+                BoundStatement::Break
             }
             Statement::Block { block, .. } => {
-                self.analyze_block(block);
+                let statements = self.analyze_block(block);
+                BoundStatement::Statements(statements)
             }
             Statement::Bye { expression, .. } => {
                 if let Some(expression) = expression {
-                    self.analyze_expr(expression);
+                    self.calc_data_type(expression);
+                    let expression = self.analyze_expr(expression);
+
+                    return BoundStatement::Bye {
+                        expression: Some(expression),
+                    };
                 }
+                BoundStatement::Bye { expression: None }
             }
             Statement::If {
                 expression,
                 statement,
                 position,
             } => {
-                let data_type = self.analyze_expr(expression);
+                let data_type = self.calc_data_type(expression);
 
                 self.check_data_type(&DataType::Booba, data_type, *position);
-                self.analyze_statement(statement);
+                let expression = self.analyze_expr(expression);
+                let statement = self.analyze_statement(statement);
+
+                BoundStatement::If {
+                    expression,
+                    statement: Box::new(statement),
+                }
             }
             Statement::IfElse {
                 expression,
@@ -231,11 +290,17 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
                 else_statement,
             } => {
-                let data_type = self.analyze_expr(expression);
+                let data_type = self.calc_data_type(expression);
 
                 self.check_data_type(&DataType::Booba, data_type, *position);
-                self.analyze_statement(statement);
-                self.analyze_statement(else_statement);
+                let expression = self.analyze_expr(expression);
+                let statement = self.analyze_statement(statement);
+                let else_statement = self.analyze_statement(else_statement);
+                BoundStatement::IfElse {
+                    expression,
+                    statement: Box::new(statement),
+                    else_statement: Box::new(else_statement),
+                }
             }
             Statement::Assignment {
                 identifier,
@@ -248,29 +313,34 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 {
                     self.check_data_type(
                         variable.borrow().data_type(),
-                        self.analyze_expr(expression),
+                        self.calc_data_type(expression),
                         *position,
                     );
+                    let expression = self.analyze_expr(expression);
                     variable.borrow_mut().set_initialized();
+                    // TODO: Use symbol table.
+                    BoundStatement::VariableAssignment(BoundVariableAssignment::new(
+                        BoundVariablePosition::new(0, 0),
+                        expression,
+                    ))
                 } else {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
+                    BoundStatement::Empty
                 }
             }
-            Statement::Empty { .. } => {
-                // Nothing :)
-            }
+            Statement::Empty { .. } => BoundStatement::Empty,
             Statement::Switch {
                 expression, cases, ..
             } => {
-                if let Some(switch_data_type) = self.analyze_expr(expression) {
+                if let Some(switch_data_type) = self.calc_data_type(expression) {
                     if let Some(mismatched_data_type) = cases
                         .iter()
                         .map(|case| {
                             (
                                 case.block().position(),
-                                self.analyze_expr(case.expression()),
+                                self.calc_data_type(case.expression()),
                             )
                         })
                         .find(|(_, data_type)| {
@@ -287,7 +357,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             mismatched_data_type.0,
                         );
                     }
+
+                    let expression = self.analyze_expr(expression);
+
+                    // BoundStatement::Switch {expression, cases: self.analyze_cases}
+                    return BoundStatement::Empty;
                 }
+                BoundStatement::Empty
             }
             Statement::For {
                 index_ident,
@@ -305,18 +381,27 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .borrow_mut()
                         .variable_already_exists(*position, index_ident);
                 }
+
+                let bound_ident_expression;
                 if let Some(ident_expression) = ident_expression {
                     self.check_data_type(
                         &DataType::Number(NumberType::Pp),
-                        self.analyze_expr(ident_expression),
+                        self.calc_data_type(ident_expression),
                         ident_expression.position(),
                     );
+
+                    bound_ident_expression = Some(self.analyze_expr(ident_expression));
+                } else {
+                    bound_ident_expression = None;
                 }
+
                 self.check_data_type(
                     &DataType::Number(NumberType::Pp),
-                    self.analyze_expr(length_expression),
+                    self.calc_data_type(length_expression),
                     length_expression.position(),
                 );
+
+                let bound_length_expression = self.analyze_expr(length_expression);
 
                 self.symbol_table_mut().push_scope();
                 let variable = Variable::new(
@@ -328,16 +413,23 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut()
                     .push_local_variable(&variable, false);
                 self.loop_stack += 1;
-                self.analyze_statement(statement);
+                let bound_statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
                 self.symbol_table_mut().pop_scope();
+
+                BoundStatement::For {
+                    ident_expression: bound_ident_expression,
+                    length_expression: bound_length_expression,
+                    statement: Box::new(bound_statement),
+                }
             }
             _ => {
                 self.error_diag
                     .borrow_mut()
                     .not_implemented(statement.position(), format!("{:?}", statement).as_str());
+                BoundStatement::Empty
             }
-        };
+        }
     }
 
     /// # Summary
@@ -347,13 +439,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// # Arguments
     ///
     /// * `block`: the block to analyze
-    fn analyze_block(&mut self, block: &Block<'a>) {
+    fn analyze_block(&mut self, block: &Block<'a>) -> Vec<BoundStatement> {
         self.symbol_table.push_scope();
-        block
+        let bound_statements = block
             .statements()
             .iter()
-            .for_each(|statement| self.analyze_statement(statement));
+            .map(|statement| self.analyze_statement(statement))
+            .collect::<Vec<BoundStatement>>();
         self.symbol_table.pop_scope();
+        bound_statements
     }
 
     /// # Summary
@@ -367,7 +461,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `expression`: the expression to analyze
     /// # Returns
     /// Option<DataType> - the data type of the expression if it is valid, None otherwise
-    fn analyze_expr(&self, expr: &Expression<'a>) -> Option<DataType<'a>> {
+    fn calc_data_type(&self, expr: &Expression<'a>) -> Option<DataType<'a>> {
         return match expr {
             Expression::Number { number_type, .. } => Some(DataType::Number(number_type.clone())),
             Expression::P { .. } => Some(DataType::P),
@@ -378,7 +472,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 op,
                 position,
             } => {
-                let data_type = self.analyze_expr(operand)?;
+                let data_type = self.calc_data_type(operand)?;
                 return match op {
                     UnaryOperator::Not => match data_type {
                         DataType::Booba => Some(data_type),
@@ -410,8 +504,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 op,
                 position,
             } => {
-                let lhs_data_type = self.analyze_expr(lhs)?;
-                let rhs_data_type = self.analyze_expr(rhs)?;
+                let lhs_data_type = self.calc_data_type(lhs)?;
+                let rhs_data_type = self.calc_data_type(rhs)?;
 
                 self.check_if_mixed_data_types(&lhs_data_type, &rhs_data_type, *position);
                 // TODO: Check whether the binary operator is available for the given data type.
@@ -471,14 +565,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                                     .map(|var| var.data_type()),
                             )
                             .find(|(a, b)| {
-                                if let Some(expr) = self.analyze_expr(a) {
+                                if let Some(expr) = self.calc_data_type(a) {
                                     expr != **b
                                 } else {
                                     false
                                 }
                             })
                         {
-                            let got = self.analyze_expr(mismatched_arg.0)?;
+                            let got = self.calc_data_type(mismatched_arg.0)?;
                             self.error_diag.borrow_mut().invalid_data_type(
                                 mismatched_arg.0.position(),
                                 mismatched_arg.1,
@@ -496,5 +590,44 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
             _ => None,
         };
+    }
+
+    fn analyze_expr(&self, expression: &Expression) -> BoundExpression {
+        match expression {
+            Expression::Number {
+                number_type, value, ..
+            } => BoundExpression::Number {
+                number_type: number_type.clone(),
+                value: *value,
+            },
+            Expression::P { value, .. } => BoundExpression::P(*value),
+            Expression::Booba { value, .. } => BoundExpression::Booba(*value),
+            Expression::Yarn { value, .. } => BoundExpression::Yarn(String::from(*value)),
+            Expression::Unary { op, operand, .. } => BoundExpression::Unary {
+                op: op.clone(),
+                operand: Box::new(self.analyze_expr(operand)),
+            },
+            Expression::Binary { lhs, op, rhs, .. } => BoundExpression::Binary {
+                lhs: Box::new(self.analyze_expr(lhs)),
+                op: op.clone(),
+                rhs: Box::new(self.analyze_expr(rhs)),
+            },
+            Expression::Identifier { identifier, .. } => {
+                // TODO: Use symbol table for lookup.
+                BoundExpression::Variable(BoundVariablePosition::new(0, 0))
+            }
+            Expression::FunctionCall {
+                identifier,
+                arguments,
+                ..
+            } => BoundExpression::FunctionCall {
+                identifier: 0,
+                arguments: arguments
+                    .iter()
+                    .map(|arg| self.analyze_expr(arg))
+                    .collect::<Vec<BoundExpression>>(),
+            },
+            Expression::Invalid { .. } => unreachable!(),
+        }
     }
 }

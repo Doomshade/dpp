@@ -52,6 +52,7 @@ pub struct SemanticAnalyzer<'a, 'b> {
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     current_function: Option<&'a str>,
     loop_stack: usize,
+    current_function_index: usize,
 }
 
 #[derive(Debug)]
@@ -344,6 +345,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             error_diag,
             current_function: None,
             loop_stack: 0,
+            current_function_index: 0,
         }
     }
 
@@ -872,12 +874,12 @@ mod parser {
         },
         DoWhile {
             position: (u32, u32),
-            block: Block<'a>,
+            statement: Box<Statement<'a>>,
             expression: Expression<'a>,
         },
         Loop {
             position: (u32, u32),
-            block: Box<Block<'a>>,
+            statement: Box<Statement<'a>>,
         },
         Break {
             position: (u32, u32),
@@ -1261,7 +1263,7 @@ mod analysis {
     use std::{cell, collections, rc};
 
     use crate::parse::parser::{
-        BinaryOperator, DataType, Expression, Function, UnaryOperator, Variable,
+        BinaryOperator, DataType, Expression, Function, NumberType, UnaryOperator, Variable,
     };
 
     #[derive(Debug)]
@@ -1323,7 +1325,7 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct BoundFunction {
-        identifier: usize,
+        index: usize,
         parameter_stack_size: usize,
         statements: Vec<BoundStatement>,
     }
@@ -1336,7 +1338,10 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub enum BoundExpression {
-        Number(i32),
+        Number {
+            number_type: NumberType,
+            value: i32,
+        },
         P(char),
         Booba(bool),
         Yarn(String),
@@ -1366,12 +1371,12 @@ mod analysis {
     pub enum BoundStatement {
         If {
             expression: BoundExpression,
-            statements: Vec<BoundStatement>,
+            statement: Box<BoundStatement>,
         },
         IfElse {
             expression: BoundExpression,
-            statements: Vec<BoundStatement>,
-            else_statements: Vec<BoundStatement>,
+            statement: Box<BoundStatement>,
+            else_statement: Box<BoundStatement>,
         },
         Bye {
             expression: Option<BoundExpression>,
@@ -1384,18 +1389,18 @@ mod analysis {
         For {
             ident_expression: Option<BoundExpression>,
             length_expression: BoundExpression,
-            statements: Vec<BoundStatement>,
+            statement: Box<BoundStatement>,
         },
         While {
             expression: BoundExpression,
-            statements: Vec<BoundStatement>,
+            statement: Box<BoundStatement>,
         },
         DoWhile {
             expression: BoundExpression,
-            statements: Vec<BoundStatement>,
+            statement: Box<BoundStatement>,
         },
         Loop {
-            statements: Vec<BoundStatement>,
+            statement: Box<BoundStatement>,
         },
         Break,
         Continue,
@@ -1404,6 +1409,8 @@ mod analysis {
             cases: Vec<BoundCase>,
         },
         VariableAssignment(BoundVariableAssignment),
+        Statements(Vec<BoundStatement>),
+        Empty,
     }
 
     #[derive(Clone, Debug)]
@@ -1794,14 +1801,14 @@ mod analysis {
             statements: Vec<BoundStatement>,
         ) -> Self {
             BoundFunction {
-                identifier,
+                index: identifier,
                 parameter_stack_size,
                 statements,
             }
         }
 
         pub fn identifier(&self) -> usize {
-            self.identifier
+            self.index
         }
         pub fn parameter_stack_size(&self) -> usize {
             self.parameter_stack_size
@@ -1952,7 +1959,7 @@ pub mod compiler {
     use std::io::Write;
     use std::{cell, error, fs, io, process, rc, time};
 
-    use crate::parse::analysis::SymbolTable;
+    use crate::parse::analysis::{BoundTranslationUnit, SymbolTable};
     use crate::parse::error_diagnosis::SyntaxError;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
@@ -2004,8 +2011,14 @@ pub mod compiler {
                 // Lex -> parse -> analyze -> emit.
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
-                let symbol_table = Self::analyze(&translation_unit, &error_diag)?;
-                Self::emit(output_file, &translation_unit, symbol_table, &error_diag)?;
+                let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
+                // TODO: Bound AST
+                Self::emit(
+                    output_file,
+                    &translation_unit,
+                    SymbolTable::new(),
+                    &error_diag,
+                )?;
                 error_diag.borrow_mut().check_errors()?;
             }
             let duration = start.elapsed();
@@ -2078,7 +2091,7 @@ pub mod compiler {
         fn analyze<'a>(
             translation_unit: &TranslationUnit<'a>,
             error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
-        ) -> Result<SymbolTable<'a>, SyntaxError> {
+        ) -> Result<BoundTranslationUnit, SyntaxError> {
             SemanticAnalyzer::new(rc::Rc::clone(&error_diag)).analyze(&translation_unit)
         }
 

@@ -299,7 +299,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _do_while(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
         self.expect(TokenKind::DoKeyword)?;
-        let block = self._block()?;
+        let statement = self._stat()?;
         self.expect(TokenKind::WhileKeyword)?;
         self.expect(TokenKind::OpenParen)?;
         let expression = self._expr()?;
@@ -307,7 +307,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.expect(TokenKind::Semicolon)?;
         Some(Statement::DoWhile {
             position,
-            block,
+            statement: Box::new(statement),
             expression,
         })
     }
@@ -315,10 +315,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _loop(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
         self.expect(TokenKind::LoopKeyword)?;
-        let block = self._block()?;
+        let block = self._stat()?;
         Some(Statement::Loop {
             position,
-            block: Box::new(block),
+            statement: Box::new(block),
         })
     }
 
