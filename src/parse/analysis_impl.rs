@@ -65,7 +65,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
         // Call the main function here.
         if let Some(main_function) = self.symbol_table().function("main") {
-            let main_function = main_function.borrow();
             if main_function.parameters().len() != 0 {
                 self.error_diag.borrow_mut().invalid_number_of_arguments(
                     (0, 0),
@@ -119,9 +118,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .symbol_table()
                     .function_scope(function.identifier())
                     .unwrap()
-                    .variable_in_scope_stack(v.identifier())
+                    .variable(v.identifier())
                     .unwrap()
-                    .borrow()
                     .size_in_instructions();
                 current_size += size;
                 -(current_size as i32)
@@ -187,12 +185,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 self.symbol_table_mut().push_global_variable(variable);
                 if let Some(expression) = variable.value() {
-                    let (level, var_decl) = self
-                        .symbol_table()
-                        .variable(variable.identifier(), self.current_function);
-                    let offset = var_decl.borrow().position_in_scope();
+                    self.symbol_table_mut()
+                        .set_variable_initialized(variable.identifier());
+                    let (level, var_decl) = self.symbol_table().variable(variable.identifier());
+                    let var_decl = var_decl.unwrap();
+                    let offset = var_decl.stack_position();
                     return Some(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(level as usize, offset as i32),
+                        BoundVariablePosition::new(level, offset as i32),
                         self.analyze_expr(
                             expression,
                             Some(variable.data_type()),
@@ -218,7 +217,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::VariableDeclaration { variable, .. } => {
                 if self
                     .symbol_table()
-                    .local_variable_in_scope_stack(variable.identifier(), self.current_function)
+                    .local_variable(variable.identifier())
                     .is_some()
                 {
                     self.error_diag
@@ -228,14 +227,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 self.symbol_table_mut().push_local_variable(variable, false);
                 if let Some(expression) = variable.value() {
-                    let (level, var_decl) = self
-                        .symbol_table()
-                        .variable(variable.identifier(), self.current_function);
+                    self.symbol_table_mut()
+                        .set_variable_initialized(variable.identifier());
+                    let (level, var_decl) = self.symbol_table().variable(variable.identifier());
+                    let var_decl = var_decl.unwrap();
                     return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(
-                            level as usize,
-                            var_decl.borrow().position_in_scope() as i32,
-                        ),
+                        BoundVariablePosition::new(level, var_decl.stack_position() as i32),
                         self.analyze_expr(
                             expression,
                             Some(variable.data_type()),
@@ -325,7 +322,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         self.symbol_table()
                             .function(self.current_function.unwrap())
                             .unwrap()
-                            .borrow()
                             .return_type(),
                         expression.0.as_ref(),
                         *position,
@@ -338,7 +334,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let function_identifier = current_function.function_identifier();
                     let function_descriptor =
                         self.symbol_table().function(function_identifier).unwrap();
-                    let parameters_size = function_descriptor.borrow().parameters_size();
+                    let parameters_size = function_descriptor.parameters_size();
                     let return_type_size = expression.0.unwrap().size_in_instructions();
 
                     return BoundStatement::Bye {
@@ -385,23 +381,16 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 expression,
                 position,
             } => {
-                if let Some(variable) = self
-                    .symbol_table()
-                    .variable_in_scope_stack(identifier, self.current_function)
-                {
-                    let expression = self.analyze_expr(
-                        expression,
-                        Some(variable.borrow().data_type()),
-                        Some(*position),
-                    );
-                    variable.borrow_mut().set_initialized();
-                    let (level, var_decl) = self
-                        .symbol_table()
-                        .variable(*identifier, self.current_function);
+                let (level, var_decl) = self.symbol_table().variable(identifier);
+                if let Some(variable) = var_decl {
+                    let data_type = variable.data_type();
+                    let expression =
+                        self.analyze_expr(expression, Some(data_type), Some(*position));
 
-                    let offset = var_decl.borrow().position_in_scope();
+                    let offset = variable.stack_position();
+                    self.symbol_table_mut().set_variable_initialized(identifier);
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(level as usize, offset as i32),
+                        BoundVariablePosition::new(level, offset as i32),
                         expression.1,
                     ))
                 } else {
@@ -455,11 +444,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 statement,
                 position,
             } => {
-                if self
-                    .symbol_table()
-                    .local_variable_in_scope_stack(index_ident, self.current_function)
-                    .is_some()
-                {
+                if self.symbol_table().local_variable(index_ident).is_some() {
                     self.error_diag
                         .borrow_mut()
                         .variable_already_exists(*position, index_ident);
@@ -475,6 +460,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 } else {
                     bound_ident_expression = None;
                 }
+
                 let bound_length_expression = self.analyze_expr(
                     length_expression,
                     Some(&DataType::Number(NumberType::Pp)),
@@ -482,22 +468,23 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 );
 
                 self.symbol_table_mut().push_scope();
-                let variable = Variable::new(
+                let index_variable = Variable::new(
                     *position,
                     index_ident,
                     DataType::Number(NumberType::Pp),
                     ident_expression.clone(),
                 );
                 self.symbol_table_mut()
-                    .push_local_variable(&variable, false);
+                    .push_local_variable(&index_variable, false);
+
+                let (level, var_decl) = self.symbol_table().variable(index_variable.identifier());
+                let var_decl = var_decl.unwrap();
+                let offset = var_decl.stack_position();
+
                 self.loop_stack += 1;
                 let bound_statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
                 self.symbol_table_mut().pop_scope();
-                let (level, var_decl) = self
-                    .symbol_table()
-                    .variable(variable.identifier(), self.current_function);
-                let offset = var_decl.borrow().position_in_scope();
 
                 BoundStatement::For {
                     ident_position: BoundVariablePosition::new(level as usize, offset as i32),
@@ -603,24 +590,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 identifier,
                 position,
             } => {
-                return if let Some(variable) = self
-                    .symbol_table()
-                    .variable_in_scope_stack(identifier, self.current_function)
-                {
-                    if variable.borrow().is_initialized() {
-                        Some(variable.borrow().data_type().clone())
+                let (_, var_decl) = self.symbol_table().variable(identifier);
+                return if let Some(variable) = var_decl {
+                    if variable.is_initialized() {
+                        Some(variable.data_type().clone())
                     } else {
                         self.error_diag
                             .borrow_mut()
                             .variable_not_initialized(*position, identifier);
-                        Some(variable.borrow().data_type().clone())
+                        Some(variable.data_type().clone())
                     }
                 } else {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
                     None
-                }
+                };
             }
             Expression::FunctionCall {
                 identifier,
@@ -628,25 +613,19 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 return if let Some(function) = self.symbol_table().function(identifier) {
-                    if function.borrow().parameters().len() != arguments.len() {
+                    if function.parameters().len() != arguments.len() {
                         // Check the argument count.
                         self.error_diag.borrow_mut().invalid_number_of_arguments(
                             *position,
                             identifier,
-                            function.borrow().parameters().len(),
+                            function.parameters().len(),
                             arguments.len(),
                         );
                     } else {
                         // Check the argument data type.
                         if let Some(mismatched_arg) = arguments
                             .iter()
-                            .zip(
-                                function
-                                    .borrow()
-                                    .parameters()
-                                    .iter()
-                                    .map(|var| var.data_type()),
-                            )
+                            .zip(function.parameters().iter().map(|var| var.data_type()))
                             .find(|(a, b)| {
                                 if let Some(expr) = self.calc_data_type(a) {
                                     expr != **b
@@ -663,7 +642,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             )
                         }
                     }
-                    Some(function.borrow().return_type().clone())
+                    Some(function.return_type().clone())
                 } else {
                     self.error_diag
                         .borrow_mut()
@@ -712,10 +691,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 rhs: Box::new(self.expr(rhs)),
             },
             Expression::Identifier { identifier, .. } => {
-                let (level, var_decl) = self
-                    .symbol_table()
-                    .variable(*identifier, self.current_function);
-                let offset = var_decl.borrow().position_in_scope();
+                let (level, var_decl) = self.symbol_table().variable(*identifier);
+                let var_decl = var_decl.unwrap();
+                let offset = var_decl.stack_position();
                 BoundExpression::Variable(BoundVariablePosition::new(level as usize, offset as i32))
             }
             Expression::FunctionCall {

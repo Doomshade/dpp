@@ -418,12 +418,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
-    fn emit_function_label(&mut self, label: &str) {
-        self.emit_label(label);
+    fn emit_function_label(&mut self, label: usize) {
+        self.emit_label(format!("f{}", label.to_string().as_str()).as_str());
     }
 
-    fn emit_finishing_label(&mut self, label: &str) {
-        self.emit_label(label);
+    fn emit_finishing_control_label(&mut self, label: &str) {
+        self.emit_control_label(label);
 
         // Need to emit an empty instruction because of a situation like
         // @while_end_0
@@ -432,6 +432,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
         if compiler::DEBUG {
             self.emit_int(0);
         }
+    }
+
+    fn emit_control_label(&mut self, label: &str) {
+        self.emit_label(format!("c{}", label).as_str());
     }
 
     fn emit_label(&mut self, label: &str) {
@@ -479,10 +483,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
         self.control_statement_count += 1;
         control_label
-    }
-
-    fn main_function_descriptor(&self) -> (usize, usize) {
-        (1, 0)
     }
 
     fn echo(&mut self, message: &str) {
@@ -1229,7 +1229,7 @@ mod parser {
 
 mod analysis {
     use std::fmt::Formatter;
-    use std::{cell, collections, fmt, rc};
+    use std::{collections, fmt};
 
     use crate::parse::parser::{
         BinaryOperator, DataType, Expression, Function, NumberType, UnaryOperator, Variable,
@@ -1246,9 +1246,9 @@ mod analysis {
     #[derive(Clone, Debug, Default)]
     pub struct Scope<'a> {
         /// Variable symbol table.
-        variables: collections::HashMap<&'a str, rc::Rc<cell::RefCell<VariableDescriptor<'a>>>>,
+        variables: collections::HashMap<&'a str, VariableDescriptor<'a>>,
         /// Function symbol table.
-        functions: collections::HashMap<&'a str, rc::Rc<cell::RefCell<FunctionDescriptor<'a>>>>,
+        functions: collections::HashMap<&'a str, FunctionDescriptor<'a>>,
     }
 
     #[derive(Clone, Debug)]
@@ -1259,10 +1259,8 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct FunctionScope<'a> {
-        /// This is a vector of scopes that are NEVER removed.
-        generated_scopes: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
         // This is a stack of scopes that is popped once the scope is ended.
-        scope_stack: Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
+        scopes: Vec<Scope<'a>>,
         /// The identifier of this function scope (i.e. the function identifier).
         function_identifier: &'a str,
         /// The stack position.
@@ -1271,7 +1269,7 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct VariableDescriptor<'a> {
-        position_in_scope: usize,
+        stack_position: usize,
         data_type: DataType<'a>,
         size: usize,
         value: Option<Expression<'a>>,
@@ -1403,40 +1401,15 @@ mod analysis {
             }
         }
 
-        /// Gets the variable from the generated scopes.
-        /// Must only be used in emitter - this functions panics if the variable does not exist.
-        pub fn variable(
-            &self,
-            identifier: &str,
-            function_ident: Option<&'a str>,
-        ) -> (u32, rc::Rc<cell::RefCell<VariableDescriptor<'a>>>) {
-            if let Some(function_ident) = function_ident {
-                if let Some(function_scope) = self.function_scope(function_ident) {
-                    if let Some(variable) = function_scope.variable_in_generated_scopes(identifier)
-                    {
-                        if identifier == "b" {
-                            dbg!(&variable);
-                            dbg!(&function_ident);
-                        }
-                        return (0, variable);
-                    }
-                }
-            } else {
-                return (
-                    0,
-                    self.global_scope
-                        .get_variable_descriptor(identifier)
-                        .unwrap_or_else(|| panic!("Unknown variable {identifier}")),
-                );
+        pub fn set_variable_initialized(&mut self, identifier: &str) {
+            let (_, variable_descriptor) = self.variable_mut(identifier);
+            if let Some(variable_descriptor) = variable_descriptor {
+                variable_descriptor.set_initialized();
             }
+        }
 
-            // If not found, try to find it in the global scope.
-            (
-                1,
-                self.global_scope
-                    .get_variable_descriptor(identifier)
-                    .unwrap_or_else(|| panic!("Unknown variable {identifier}")),
-            )
+        pub fn current_function_scope(&self) -> Option<&FunctionScope<'a>> {
+            self.function_scopes.last()
         }
 
         pub fn push_global_variable(&mut self, variable: &Variable<'a>) {
@@ -1445,6 +1418,7 @@ mod analysis {
 
         pub fn push_local_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
             self.current_function_scope_mut()
+                .expect("A function scope")
                 .push_variable(variable, is_parameter);
         }
 
@@ -1461,48 +1435,85 @@ mod analysis {
                 .push(FunctionScope::new(function_identifier))
         }
 
-        pub fn function(
-            &self,
-            identifier: &str,
-        ) -> Option<&rc::Rc<cell::RefCell<FunctionDescriptor<'a>>>> {
+        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
             self.global_scope.get_function_descriptor(identifier)
         }
 
         pub fn push_scope(&mut self) {
-            self.current_function_scope_mut().push_scope();
+            self.current_function_scope_mut()
+                .expect("To be inside function scope")
+                .push_scope();
         }
 
         pub fn pop_scope(&mut self) {
-            self.current_function_scope_mut().pop_scope();
+            self.current_function_scope_mut()
+                .expect("To be inside function scope")
+                .pop_scope();
         }
 
-        pub fn variable_in_scope_stack(
-            &self,
+        fn variable_mut(
+            &mut self,
             identifier: &str,
-            function_ident: Option<&'a str>,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
-            self.local_variable_in_scope_stack(identifier, function_ident)
-                .or_else(|| self.global_variable(identifier))
+        ) -> (usize, Option<&mut VariableDescriptor<'a>>) {
+            // If we aren't in a function scope we are in the global scope
+            // -> the global variable is in level 0.
+            if self.current_function_scope().is_none() {
+                return (0, self.global_scope.get_variable_descriptor_mut(identifier));
+            }
+
+            // If we are in function scope we need to check if the variable
+            // is a local variable or a global variable.
+            // TODO: This is utterly retarded. We have to lookup the variable TWICE because
+            // the borrow checker is an asshole.
+            if self.local_variable(identifier).is_some() {
+                return (0, self.local_variable_mut(identifier));
+            }
+            (1, self.global_variable_mut(identifier))
+        }
+
+        pub fn variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor<'a>>) {
+            // If we aren't in a function scope we are in the global scope
+            // -> the global variable is in level 0.
+            if self.current_function_scope().is_none() {
+                return (0, self.global_scope.get_variable_descriptor(identifier));
+            }
+
+            // If we are in function scope we need to check if the variable
+            // is a local variable or a global variable.
+
+            // Check for local variable first.
+            if let Some(local_variable) = self.local_variable(identifier) {
+                return (0, Some(local_variable));
+            }
+
+            // Then global variable.
+            (1, self.global_variable(identifier))
         }
 
         pub fn push_function(&mut self, function: Function<'a>) {
             self.push_function_scope(function.identifier());
         }
 
-        pub fn global_variable(
-            &self,
-            identifier: &str,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
+        pub fn global_variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
             self.global_scope.get_variable_descriptor(identifier)
         }
 
-        pub fn local_variable_in_scope_stack(
-            &self,
+        pub fn global_variable_mut(
+            &mut self,
             identifier: &str,
-            function_ident: Option<&'a str>,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
-            self.function_scope(function_ident?)?
-                .variable_in_scope_stack(identifier)
+        ) -> Option<&mut VariableDescriptor<'a>> {
+            self.global_scope.get_variable_descriptor_mut(identifier)
+        }
+
+        pub fn local_variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
+            self.current_function_scope()?.variable(identifier)
+        }
+
+        pub fn local_variable_mut(
+            &mut self,
+            identifier: &str,
+        ) -> Option<&mut VariableDescriptor<'a>> {
+            self.current_function_scope_mut()?.variable_mut(identifier)
         }
 
         // TODO: This could be done in O(1) but w/e.
@@ -1512,10 +1523,8 @@ mod analysis {
                 .find(move |func| func.function_identifier == function_identifier)
         }
 
-        fn current_function_scope_mut(&mut self) -> &mut FunctionScope<'a> {
-            self.function_scopes
-                .last_mut()
-                .expect("Inside function scope")
+        fn current_function_scope_mut(&mut self) -> Option<&mut FunctionScope<'a>> {
+            self.function_scopes.last_mut()
         }
         pub fn global_scope(&self) -> &GlobalScope<'a> {
             &self.global_scope
@@ -1530,20 +1539,28 @@ mod analysis {
             identifier: &'a str,
             variable_descriptor: VariableDescriptor<'a>,
         ) {
-            self.variables.insert(
-                identifier,
-                rc::Rc::new(cell::RefCell::new(variable_descriptor)),
-            );
+            self.variables.insert(identifier, variable_descriptor);
         }
 
-        pub fn get_variable_descriptor(
-            &self,
-            identifier: &str,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
+        pub fn get_variable_descriptor(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
             if let Some(variable) = self.variables.get(identifier) {
-                return Some(variable.clone());
+                return Some(variable);
             }
             None
+        }
+
+        pub fn get_variable_descriptor_mut(
+            &mut self,
+            identifier: &str,
+        ) -> Option<&mut VariableDescriptor<'a>> {
+            if let Some(variable) = self.variables.get_mut(identifier) {
+                return Some(variable);
+            }
+            None
+        }
+
+        pub fn last_variable_descriptor(&self) -> Option<&VariableDescriptor<'a>> {
+            self.variables.values().last()
         }
 
         fn push_function_descriptor(
@@ -1551,16 +1568,10 @@ mod analysis {
             identifier: &'a str,
             function_descriptor: FunctionDescriptor<'a>,
         ) {
-            self.functions.insert(
-                identifier,
-                rc::Rc::new(cell::RefCell::new(function_descriptor)),
-            );
+            self.functions.insert(identifier, function_descriptor);
         }
 
-        pub fn get_function_descriptor(
-            &self,
-            identifier: &str,
-        ) -> Option<&rc::Rc<cell::RefCell<FunctionDescriptor<'a>>>> {
+        pub fn get_function_descriptor(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
             self.functions.get(identifier)
         }
 
@@ -1588,11 +1599,15 @@ mod analysis {
                 .push_variable_descriptor(variable.identifier(), variable_descriptor);
         }
 
-        pub fn get_variable_descriptor(
-            &self,
-            identifier: &str,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
+        pub fn get_variable_descriptor(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
             self.scope.get_variable_descriptor(identifier)
+        }
+
+        pub fn get_variable_descriptor_mut(
+            &mut self,
+            identifier: &str,
+        ) -> Option<&mut VariableDescriptor<'a>> {
+            self.scope.get_variable_descriptor_mut(identifier)
         }
 
         pub fn push_function(&mut self, function: &Function<'a>) {
@@ -1601,10 +1616,7 @@ mod analysis {
                 .push_function_descriptor(function.identifier(), function_descriptor);
         }
 
-        pub fn get_function_descriptor(
-            &self,
-            identifier: &str,
-        ) -> Option<&rc::Rc<cell::RefCell<FunctionDescriptor<'a>>>> {
+        pub fn get_function_descriptor(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
             self.scope.get_function_descriptor(identifier)
         }
 
@@ -1619,40 +1631,27 @@ mod analysis {
     impl<'a> FunctionScope<'a> {
         pub fn new(function_identifier: &'a str) -> Self {
             FunctionScope {
-                generated_scopes: Vec::new(),
-                scope_stack: Vec::new(),
+                scopes: Vec::new(),
                 function_identifier,
                 stack_position: Scope::ACTIVATION_RECORD_SIZE,
             }
         }
 
-        pub fn variable_in_generated_scopes(
-            &self,
-            identifier: &str,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
-            self.variable(identifier, &self.generated_scopes)
-        }
-
-        pub fn variable_in_scope_stack(
-            &self,
-            identifier: &str,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
-            self.variable(identifier, &self.scope_stack)
-        }
-
-        fn variable(
-            &self,
-            identifier: &str,
-            scopes: &Vec<rc::Rc<cell::RefCell<Scope<'a>>>>,
-        ) -> Option<rc::Rc<cell::RefCell<VariableDescriptor<'a>>>> {
-            // Loop through all scopes to find the variable.
-            for scope_rc in scopes.iter().rev() {
-                let scope = scope_rc.borrow();
+        pub fn variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
+            for scope in self.scopes.iter().rev() {
                 if let Some(variable) = scope.get_variable_descriptor(identifier) {
-                    return Some(variable.clone());
+                    return Some(variable);
                 }
             }
+            None
+        }
 
+        pub fn variable_mut(&mut self, identifier: &str) -> Option<&mut VariableDescriptor<'a>> {
+            for scope in self.scopes.iter_mut().rev() {
+                if let Some(variable) = scope.get_variable_descriptor_mut(identifier) {
+                    return Some(variable);
+                }
+            }
             None
         }
 
@@ -1666,22 +1665,23 @@ mod analysis {
             self.stack_position += variable_descriptor.size_in_instructions();
             self.current_scope_mut()
                 .expect("A scope")
-                .borrow_mut()
                 .push_variable_descriptor(variable.identifier(), variable_descriptor);
         }
 
         pub fn push_scope(&mut self) {
-            let new_scope = Scope::default();
-            let scope = rc::Rc::new(cell::RefCell::new(new_scope));
-            self.scope_stack.push(scope.clone());
-            self.generated_scopes.push(scope);
+            self.scopes.push(Scope::default());
         }
-        pub fn current_scope_mut(&mut self) -> Option<&mut rc::Rc<cell::RefCell<Scope<'a>>>> {
-            self.scope_stack.last_mut()
+
+        pub fn current_scope(&self) -> Option<&Scope<'a>> {
+            self.scopes.last()
+        }
+
+        fn current_scope_mut(&mut self) -> Option<&mut Scope<'a>> {
+            self.scopes.last_mut()
         }
 
         pub fn pop_scope(&mut self) {
-            self.scope_stack.pop();
+            self.scopes.pop();
         }
         pub fn stack_position(&self) -> usize {
             self.stack_position
@@ -1689,9 +1689,9 @@ mod analysis {
     }
 
     impl<'a> VariableDescriptor<'a> {
-        pub fn new(variable: &Variable<'a>, position_in_scope: usize, is_parameter: bool) -> Self {
+        pub fn new(variable: &Variable<'a>, stack_position: usize, is_parameter: bool) -> Self {
             VariableDescriptor {
-                position_in_scope,
+                stack_position,
                 is_parameter,
                 size: variable.size(),
                 data_type: variable.data_type().clone(),
@@ -1712,8 +1712,8 @@ mod analysis {
             self.initialized || self.is_parameter || self.value.is_some()
         }
 
-        pub fn position_in_scope(&self) -> usize {
-            self.position_in_scope
+        pub fn stack_position(&self) -> usize {
+            self.stack_position
         }
         pub fn data_type(&self) -> &DataType<'a> {
             &self.data_type
@@ -1967,7 +1967,7 @@ pub mod compiler {
     use std::io::Write;
     use std::{cell, error, fs, io, process, rc, time};
 
-    use crate::parse::analysis::{BoundTranslationUnit, SymbolTable};
+    use crate::parse::analysis::BoundTranslationUnit;
     use crate::parse::error_diagnosis::SyntaxError;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
@@ -1975,7 +1975,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    pub const DEBUG: bool = true;
+    pub const DEBUG: bool = false;
 
     impl DppCompiler {
         fn parse_args(bools: &[bool], params: &[&str]) -> Vec<String> {
@@ -2020,7 +2020,6 @@ pub mod compiler {
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                // TODO: Bound AST
                 dbg!(&bound_translation_unit);
                 Self::emit(output_file, bound_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;

@@ -1,14 +1,5 @@
 pp -> a = 0;
-
-FUNc main() -> pp {
-    pp -> a = 0;
-    pp -> b = 0;
-    pp -> c = 0;
-    pp -> d = 0;
-    pp -> e = 0;
-    pp -> f = 0;
-    bye fibonacci(10) + fibonacci_rec(10);
-}
+pp -> b = 0;
 
 FUNc fibonacci_rec(pp -> num) -> pp {
     if (num < 2) {
@@ -41,4 +32,13 @@ FUNc add(pp -> a, pp -> b) -> pp {
 FUNc trust_add(pp -> a, pp -> b) -> pp {
     bye a + b;
 }
-pp -> b = 0;
+
+FUNc main() -> pp {
+    pp -> a = 0;
+    pp -> b = 0;
+    pp -> c = 0;
+    pp -> d = 0;
+    pp -> e = 0;
+    pp -> f = 0;
+    bye fibonacci(10) + fibonacci_rec(10);
+}
