@@ -1286,13 +1286,15 @@ mod analysis {
     #[derive(Clone, Debug)]
     pub struct BoundTranslationUnit {
         functions: Vec<BoundFunction>,
+        main_function_identifier: usize,
         global_variable_stack_size: usize,
         global_variable_assignments: Vec<BoundVariableAssignment>,
     }
 
     #[derive(Clone, Debug)]
     pub struct BoundFunction {
-        index: usize,
+        identifier: usize,
+        is_main_function: bool,
         stack_frame_size: usize,
         return_size: usize,
         parameters: Vec<BoundVariablePosition>,
@@ -1749,11 +1751,13 @@ mod analysis {
     impl BoundTranslationUnit {
         pub fn new(
             functions: Vec<BoundFunction>,
+            main_function_identifier: usize,
             global_variable_stack_size: usize,
             global_variable_assignments: Vec<BoundVariableAssignment>,
         ) -> Self {
             BoundTranslationUnit {
                 functions,
+                main_function_identifier,
                 global_variable_stack_size,
                 global_variable_assignments,
             }
@@ -1768,19 +1772,24 @@ mod analysis {
         pub fn global_variable_assignments(&self) -> &Vec<BoundVariableAssignment> {
             &self.global_variable_assignments
         }
+        pub fn main_function_identifier(&self) -> usize {
+            self.main_function_identifier
+        }
     }
 
     impl BoundFunction {
         pub fn new(
-            index: usize,
+            identifier: usize,
             stack_frame_size: usize,
+            is_main_function: bool,
             return_size: usize,
             parameters: Vec<BoundVariablePosition>,
             statements: Vec<BoundStatement>,
         ) -> Self {
             BoundFunction {
-                index,
+                identifier,
                 stack_frame_size,
+                is_main_function,
                 return_size,
                 parameters,
                 statements,
@@ -1788,7 +1797,7 @@ mod analysis {
         }
 
         pub fn identifier(&self) -> usize {
-            self.index
+            self.identifier
         }
         pub fn stack_frame_size(&self) -> usize {
             self.stack_frame_size
@@ -1796,14 +1805,14 @@ mod analysis {
         pub fn statements(&self) -> &Vec<BoundStatement> {
             &self.statements
         }
-        pub fn index(&self) -> usize {
-            self.index
-        }
         pub fn parameters(&self) -> &Vec<BoundVariablePosition> {
             &self.parameters
         }
         pub fn return_size(&self) -> usize {
             self.return_size
+        }
+        pub fn is_main_function(&self) -> bool {
+            self.is_main_function
         }
     }
 
@@ -2020,7 +2029,6 @@ pub mod compiler {
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                dbg!(&bound_translation_unit);
                 Self::emit(output_file, bound_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
             }

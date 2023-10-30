@@ -120,7 +120,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             .iter()
             .for_each(|stmt| self.emit_variable_assignment(stmt));
         self.emit_debug_info(DebugKeyword::Stack);
-        self.emit_main_call();
+        self.emit_main_call(translation_unit.main_function_identifier());
         translation_unit
             .functions()
             .iter()
@@ -602,11 +602,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// # Summary
     /// Emits the function call to the main function. It also emits the JMP 0 0 instruction to
     /// exit the program once the main function is done.
-    fn emit_main_call(&mut self) {
+    fn emit_main_call(&mut self, main_function_identifier: usize) {
         self.echo("Calling main function.");
         let main_function_call = BoundExpression::FunctionCall {
             arguments_size: 0,
-            identifier: 0,
+            identifier: main_function_identifier,
             return_type_size: 1,
             level: 0,
             arguments: Vec::new(),

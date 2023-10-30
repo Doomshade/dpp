@@ -63,8 +63,31 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .map(|statement| statement.unwrap())
             .collect::<Vec<BoundVariableAssignment>>();
 
-        // Call the main function here.
-        if let Some(main_function) = self.symbol_table().function("main") {
+        // Analyze the parsed functions.
+        let functions = translation_unit
+            .functions()
+            .iter()
+            .map(|function| self.analyze_function(function))
+            .collect::<Vec<BoundFunction>>();
+
+        // TODO: Check the return type of the main function.
+        // |function| {
+        //                 if function.identifier() == "main" {
+        //                     if function.return_type() != &DataType::Number(NumberType::Pp) {
+        //                         self.error_diag.borrow_mut().invalid_return_type(
+        //                             (0, 0),
+        //                             "main",
+        //                             &DataType::Number(NumberType::Pp),
+        //                             function.return_type(),
+        //                         );
+        //                     }
+        //                 }
+        //             }
+        let main_function_identifier;
+        if let Some(main_function) = functions
+            .iter()
+            .find(|function| function.is_main_function())
+        {
             if main_function.parameters().len() != 0 {
                 self.error_diag.borrow_mut().invalid_number_of_arguments(
                     (0, 0),
@@ -73,27 +96,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     main_function.parameters().len(),
                 );
             }
-            if main_function.return_type() != &DataType::Number(NumberType::Pp) {
-                self.error_diag.borrow_mut().invalid_return_type(
-                    (0, 0),
-                    "main",
-                    &DataType::Number(NumberType::Pp),
-                    main_function.return_type(),
-                );
-            }
+            main_function_identifier = main_function.identifier();
         } else {
+            main_function_identifier = 0;
             self.error_diag.borrow_mut().no_main_method_found_error();
         }
 
-        // Analyze the parsed functions.
-        let functions = translation_unit
-            .functions()
-            .iter()
-            .map(|function| self.analyze_function(function))
-            .collect::<Vec<BoundFunction>>();
-
         BoundTranslationUnit::new(
             functions,
+            main_function_identifier,
             self.symbol_table().global_scope().stack_position(),
             global_variables,
         )
@@ -152,6 +163,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         BoundFunction::new(
             function_index,
             stack_position,
+            function.identifier() == "main",
             function.return_type().size_in_instructions(),
             parameters,
             bound_statements,
