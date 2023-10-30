@@ -321,6 +321,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.echo("Breaking out of loop");
                 self.emit_jump(Address::Label(end_label.unwrap().to_string()));
             }
+            BoundStatement::Statements(statements) => {
+                statements
+                    .iter()
+                    .for_each(|statement| self.emit_statement(statement, start_label, end_label));
+            }
             _ => self
                 .error_diag
                 .borrow_mut()

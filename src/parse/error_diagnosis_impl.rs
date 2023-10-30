@@ -27,6 +27,25 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
+    pub fn invalid_return_type(
+        &mut self,
+        position: (u32, u32),
+        identifier: &str,
+        expected_return_type: &DataType<'a>,
+        got_return_type: &DataType<'a>,
+    ) {
+        self.insert_error_message(
+            position,
+            format!(
+                "Invalid return type for function \"{identifier}\". Expected {expected_return_type}, got {got_return_type}.",
+                identifier = identifier,
+                expected_return_type = expected_return_type,
+                got_return_type = got_return_type
+            )
+            .as_str(),
+        );
+    }
+
     pub fn unknown_operator(&mut self, position: (u32, u32), operator: &str) {
         self.insert_error_message(
             position,

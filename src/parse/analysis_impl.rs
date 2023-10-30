@@ -26,10 +26,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         translation_unit: &TranslationUnit<'a>,
     ) -> Result<BoundTranslationUnit, SyntaxError> {
         let bound_transl_unit = self.analyze_translation_unit(translation_unit);
-
-        if !self.symbol_table().function("main").is_some() {
-            self.error_diag.borrow_mut().no_main_method_found_error();
-        }
         self.error_diag.borrow().check_errors()?;
         Ok(bound_transl_unit)
     }
@@ -66,6 +62,30 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .filter(|global_stat| global_stat.is_some())
             .map(|statement| statement.unwrap())
             .collect::<Vec<BoundVariableAssignment>>();
+
+        // Call the main function here.
+        if let Some(main_function) = self.symbol_table().function("main") {
+            let main_function = main_function.borrow();
+            if main_function.parameters().len() != 0 {
+                self.error_diag.borrow_mut().invalid_number_of_arguments(
+                    (0, 0),
+                    "main",
+                    0,
+                    main_function.parameters().len(),
+                );
+            }
+            if main_function.return_type() != &DataType::Number(NumberType::Pp) {
+                self.error_diag.borrow_mut().invalid_return_type(
+                    (0, 0),
+                    "main",
+                    &DataType::Number(NumberType::Pp),
+                    main_function.return_type(),
+                );
+            }
+        } else {
+            self.error_diag.borrow_mut().no_main_method_found_error();
+        }
+
         // Analyze the parsed functions.
         let functions = translation_unit
             .functions()
@@ -129,9 +149,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
         let stack_position = function_scope.stack_position();
 
+        let function_index = self.current_function_index;
         self.current_function_index += 1;
         BoundFunction::new(
-            self.current_function_index,
+            function_index,
             stack_position,
             function.return_type().size_in_instructions(),
             parameters,
@@ -210,7 +231,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let (level, var_decl) = self
                         .symbol_table()
                         .variable(variable.identifier(), self.current_function);
-                    BoundStatement::VariableAssignment(BoundVariableAssignment::new(
+                    return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         BoundVariablePosition::new(
                             level as usize,
                             var_decl.borrow().position_in_scope() as i32,
