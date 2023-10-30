@@ -90,6 +90,25 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
         self.begin_function(&function);
+        let mut current_size = 0;
+        let parameters = function
+            .parameters()
+            .iter()
+            .map(|v| {
+                let size = self
+                    .symbol_table()
+                    .function_scope(function.identifier())
+                    .unwrap()
+                    .variable_in_scope_stack(v.identifier())
+                    .unwrap()
+                    .borrow()
+                    .size_in_instructions();
+                current_size += size;
+                -(current_size as i32)
+            })
+            .map(|offset| BoundVariablePosition::new(0, offset))
+            .collect::<Vec<BoundVariablePosition>>();
+
         let bound_statements = self.analyze_block(function.block());
         if function.return_type() != &DataType::Nopp {
             // If it's anything other than Nopp, then we require the function to have
@@ -109,10 +128,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         // Shift the stack pointer by activation record + declared variable count.
 
         let stack_position = function_scope.stack_position();
+
         self.current_function_index += 1;
         BoundFunction::new(
             self.current_function_index,
             stack_position,
+            function.return_type().size_in_instructions(),
+            parameters,
             bound_statements,
         )
     }
@@ -154,7 +176,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             expression,
                             Some(variable.data_type()),
                             Some(variable.position()),
-                        ),
+                        )
+                        .1,
                     ));
                 }
                 None
@@ -196,13 +219,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             expression,
                             Some(variable.data_type()),
                             Some(variable.position()),
-                        ),
+                        )
+                        .1,
                     ));
                 }
                 BoundStatement::Empty
             }
             Statement::Expression { expression, .. } => {
-                let bound_expression = self.analyze_expr(expression, None, None);
+                let bound_expression = self.analyze_expr(expression, None, None).1;
                 BoundStatement::Expression(bound_expression)
             }
             Statement::While {
@@ -210,11 +234,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 statement,
                 ..
             } => {
-                let expression = self.analyze_expr(
-                    expression,
-                    Some(&DataType::Booba),
-                    Some(expression.position()),
-                );
+                let expression = self
+                    .analyze_expr(
+                        expression,
+                        Some(&DataType::Booba),
+                        Some(expression.position()),
+                    )
+                    .1;
                 self.loop_stack += 1;
                 let bound_statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
@@ -236,8 +262,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 statement,
                 position,
             } => {
-                let expression =
-                    self.analyze_expr(expression, Some(&DataType::Booba), Some(*position));
+                let expression = self
+                    .analyze_expr(expression, Some(&DataType::Booba), Some(*position))
+                    .1;
                 self.loop_stack += 1;
                 let statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
@@ -266,16 +293,42 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let statements = self.analyze_block(block);
                 BoundStatement::Statements(statements)
             }
-            Statement::Bye { expression, .. } => {
+            Statement::Bye {
+                expression,
+                position,
+            } => {
                 if let Some(expression) = expression {
                     // TODO: Check return type of function.
                     let expression = self.analyze_expr(expression, None, None);
+                    self.check_data_type(
+                        self.symbol_table()
+                            .function(self.current_function.unwrap())
+                            .unwrap()
+                            .borrow()
+                            .return_type(),
+                        expression.0.as_ref(),
+                        *position,
+                    );
+
+                    let current_function = self
+                        .symbol_table()
+                        .function_scope(self.current_function.unwrap())
+                        .unwrap();
+                    let function_identifier = current_function.function_identifier();
+                    let function_descriptor =
+                        self.symbol_table().function(function_identifier).unwrap();
+                    let parameters_size = function_descriptor.borrow().parameters_size();
+                    let return_type_size = expression.0.unwrap().size_in_instructions();
 
                     return BoundStatement::Bye {
-                        expression: Some(expression),
+                        return_offset: -(return_type_size as i32) - parameters_size as i32,
+                        expression: Some(expression.1),
                     };
                 }
-                BoundStatement::Bye { expression: None }
+                BoundStatement::Bye {
+                    return_offset: 0,
+                    expression: None,
+                }
             }
             Statement::If {
                 expression,
@@ -286,7 +339,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.analyze_expr(expression, Some(&DataType::Booba), Some(*position));
                 let statement = self.analyze_statement(statement);
                 BoundStatement::If {
-                    expression,
+                    expression: expression.1,
                     statement: Box::new(statement),
                 }
             }
@@ -301,7 +354,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let statement = self.analyze_statement(statement);
                 let else_statement = self.analyze_statement(else_statement);
                 BoundStatement::IfElse {
-                    expression,
+                    expression: expression.1,
                     statement: Box::new(statement),
                     else_statement: Box::new(else_statement),
                 }
@@ -328,7 +381,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let offset = var_decl.borrow().position_in_scope();
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         BoundVariablePosition::new(level as usize, offset as i32),
-                        expression,
+                        expression.1,
                     ))
                 } else {
                     self.error_diag
@@ -360,7 +413,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     {
                         self.check_data_type(
                             &switch_data_type,
-                            mismatched_data_type.1,
+                            mismatched_data_type.1.as_ref(),
                             mismatched_data_type.0,
                         );
                     }
@@ -420,10 +473,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let bound_statement = self.analyze_statement(statement);
                 self.loop_stack -= 1;
                 self.symbol_table_mut().pop_scope();
+                let (level, var_decl) = self
+                    .symbol_table()
+                    .variable(variable.identifier(), self.current_function);
+                let offset = var_decl.borrow().position_in_scope();
 
                 BoundStatement::For {
-                    ident_expression: bound_ident_expression,
-                    length_expression: bound_length_expression,
+                    ident_position: BoundVariablePosition::new(level as usize, offset as i32),
+                    ident_expression: bound_ident_expression.map(|exp| exp.1),
+                    length_expression: bound_length_expression.1,
                     statement: Box::new(bound_statement),
                 }
             }
@@ -601,15 +659,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         expression: &Expression<'a>,
         expected_data_type: Option<&DataType<'a>>,
         position: Option<(u32, u32)>,
-    ) -> BoundExpression {
+    ) -> (Option<DataType<'a>>, BoundExpression) {
         let data_type = self.calc_data_type(expression);
         if let Some(expected_data_type) = expected_data_type {
             if let Some(position) = position {
-                self.check_data_type(expected_data_type, data_type, position);
+                self.check_data_type(expected_data_type, data_type.as_ref(), position);
             }
         }
 
-        self.expr(expression)
+        (data_type, self.expr(expression))
     }
 
     fn expr(&self, expression: &Expression<'a>) -> BoundExpression {
@@ -643,13 +701,19 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 identifier,
                 arguments,
                 ..
-            } => BoundExpression::FunctionCall {
-                identifier: 0,
-                arguments: arguments
-                    .iter()
-                    .map(|arg| self.expr(arg))
-                    .collect::<Vec<BoundExpression>>(),
-            },
+            } => {
+                // TODO: Use identifier map.
+                BoundExpression::FunctionCall {
+                    level: 1,
+                    identifier: 1,
+                    return_type_size: 0,
+                    arguments_size: 0,
+                    arguments: arguments
+                        .iter()
+                        .map(|arg| self.expr(arg))
+                        .collect::<Vec<BoundExpression>>(),
+                }
+            }
             Expression::Invalid { .. } => unreachable!(),
         }
     }

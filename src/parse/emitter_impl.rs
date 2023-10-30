@@ -1,9 +1,13 @@
+use std::env::var;
 use std::fs;
 use std::io;
 use std::io::Write;
 
 use dpp_macros::Pos;
 
+use crate::parse::analysis::{
+    BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit, BoundVariableAssignment,
+};
 use crate::parse::compiler;
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{
@@ -22,9 +26,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// * `Vec<Instruction>` - the instructions
     pub fn into_pl0_instructions(
         mut self,
-        translation_unit: &TranslationUnit<'a>,
+        translation_unit: BoundTranslationUnit,
     ) -> Vec<Instruction> {
-        self.emit_translation_unit(translation_unit);
+        self.emit_translation_unit(&translation_unit);
 
         self.code
     }
@@ -41,9 +45,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
     pub fn emit_to_writer(
         mut self,
         writer: &mut io::BufWriter<fs::File>,
-        translation_unit: &TranslationUnit<'a>,
+        translation_unit: BoundTranslationUnit,
     ) -> io::Result<()> {
-        self.emit_translation_unit(translation_unit);
+        self.emit_translation_unit(&translation_unit);
         for instruction in &self.code {
             match instruction {
                 Instruction::Load { level, offset } => {
@@ -112,12 +116,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// # Arguments
     ///
     /// * `translation_unit`: the translation unit
-    fn emit_translation_unit(&mut self, translation_unit: &TranslationUnit<'a>) {
-        self.emit_int(self.symbol_table().global_scope().stack_position() as i32);
+    fn emit_translation_unit(&mut self, translation_unit: &BoundTranslationUnit) {
+        self.emit_int(translation_unit.global_variable_stack_size() as i32);
         translation_unit
-            .global_statements()
+            .global_variable_assignments()
             .iter()
-            .for_each(|stmt| self.emit_statement(stmt, None, None));
+            .for_each(|stmt| self.emit_variable_assignment(stmt));
         self.emit_debug_info(DebugKeyword::Stack);
         self.emit_main_call();
         translation_unit
@@ -132,83 +136,35 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// # Arguments
     ///
     /// * `function`: the function
-    fn emit_function(&mut self, function: &Function<'a>) {
-        self.current_function = Some(function.identifier());
-        self.emit_function_label(function.identifier());
+    fn emit_function(&mut self, function: &BoundFunction) {
+        self.emit_function_label(function.identifier().to_string().as_str());
 
-        let sym_table = self.symbol_table();
-        let function_scope = sym_table.function_scope(function.identifier()).unwrap();
         // Shift the stack pointer by activation record + declared variable count.
-        self.emit_int((function_scope.stack_position()) as i32);
+        self.emit_int(function.stack_frame_size() as i32);
 
         // Load arguments.
-        let args = function.parameters();
-        if !args.is_empty() {
-            self.emit_load_arguments(&args);
-        }
-        self.emit_block(function.block());
-        if function.return_type() == &DataType::Nopp {
+        function
+            .parameters()
+            .iter()
+            .for_each(|var| self.load(var.level(), var.offset(), 1));
+        function
+            .statements()
+            .iter()
+            .for_each(|statement| self.emit_statement(statement, None, None));
+
+        // We aren't forcing the return statement if it's nopp, so we'll emit it ourselves.
+        if function.return_size() == 0 {
             self.emit_instruction(Instruction::Return);
         }
 
         self.emit_debug_info(DebugKeyword::StackA);
     }
 
-    /// # Summary
-    /// Emits the code that loads the arguments into the stack.
-    ///
-    /// # Arguments
-    ///
-    /// * `arguments`: the arguments to load
-    fn emit_load_arguments(&mut self, arguments: &Vec<Variable<'a>>) {
-        // Load the parameters into the stack from the callee function.
-        // The parameters are on the stack in FIFO order like so: [n, n + 1, n + 2, ...].
-        // To load them we have to get the total size of parameters and subtract it
-        // each time we load a parameter.
-        // for example:
-        // ```FUNc foo(argc: pp, argv:pp) {
-        // ...
-        // }
-        // foo(1, 2);```
-        // The parameters are loaded as follows:
-        // The total size is 1 (pp) + 1 (pp) = 2.
-        // The LOD function only loads 32 bits, so for anything bigger
-        // than that we need to LOD again.
-        let total_size = arguments
-            .iter()
-            .fold(0, |acc, parameter| acc + parameter.size_in_instructions());
-        let mut curr_offset = total_size as i32;
-        self.echo(format!("Loading {} argument(s)", arguments.len()).as_str());
-        for argument in arguments.iter() {
-            let variable_descriptor = self
-                .symbol_table()
-                .variable(argument.identifier(), self.current_function)
-                .1;
-            let size = argument.size_in_instructions();
-            self.load(0, -curr_offset, size);
-            curr_offset -= size as i32;
-            self.store(
-                0,
-                variable_descriptor.borrow().position_in_scope() as i32,
-                1,
-            );
-            self.echo(format!("Loaded argument {}", argument.identifier()).as_str());
-        }
-        self.echo(format!("{} argument(s) loaded", arguments.len()).as_str());
-        self.emit_debug_info(DebugKeyword::StackA);
-    }
-
-    /// # Summary
-    /// Emits the block of statements.
-    ///
-    /// # Arguments
-    ///
-    /// * `block`: the block of statements
-    fn emit_block(&mut self, block: &Block<'a>) {
-        block
-            .statements()
-            .iter()
-            .for_each(|statement| self.emit_statement(statement, None, None));
+    fn emit_variable_assignment(&mut self, variable: &BoundVariableAssignment) {
+        let expression = variable.value();
+        self.emit_expression(expression);
+        let position = variable.position();
+        self.store(position.level(), position.offset(), 1);
     }
 
     /// # Summary
@@ -225,78 +181,45 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ///
     fn emit_statement(
         &mut self,
-        statement: &Statement<'a>,
+        statement: &BoundStatement,
         start_label: Option<&str>,
         end_label: Option<&str>,
     ) {
         match statement {
-            Statement::Expression { expression, .. } => {
+            BoundStatement::Expression { 0: expression, .. } => {
+                let return_type_sizee;
+                if let BoundExpression::FunctionCall {
+                    return_type_size, ..
+                } = &expression
+                {
+                    return_type_sizee = *return_type_size;
+                } else {
+                    return_type_sizee = 0;
+                }
                 self.emit_expression(expression);
-                if let Expression::FunctionCall { identifier, .. } = expression {
-                    // Pop the return  value off the stack because it's not assigned to anything.
-                    let return_type_size;
-                    {
-                        let symbol_table = self.symbol_table();
-                        let function = symbol_table.function(identifier).unwrap();
-                        return_type_size = function.borrow().return_type().size_in_instructions();
-                    }
-                    if return_type_size > 0 {
-                        self.emit_int(-(return_type_size as i32));
-                        self.echo(
-                            format!(
-                                "Dropped returned value of {} ({} bytes)",
-                                identifier,
-                                return_type_size * 4
-                            )
-                            .as_str(),
-                        );
-                        self.emit_debug_info(DebugKeyword::StackA);
-                    }
+                if return_type_sizee > 0 {
+                    self.emit_int(-(return_type_sizee as i32));
                 }
             }
-            Statement::VariableDeclaration { variable, .. } => {
-                if let Some(expression) = variable.value() {
-                    self.echo(format!("Initializing variable {}", variable.identifier()).as_str());
-                    self.emit_expression(expression);
-                    let (level, variable_descriptor) = self
-                        .symbol_table()
-                        .variable(variable.identifier(), self.current_function);
-                    self.store(
-                        level,
-                        variable_descriptor.borrow().position_in_scope() as i32,
-                        1,
-                    );
-
-                    self.echo(format!("Variable {} initialized", variable.identifier()).as_str());
-                }
+            BoundStatement::VariableAssignment { 0: variable, .. } => {
+                self.emit_variable_assignment(variable);
             }
-            Statement::Bye { expression, .. } => {
-                let current_function = self
-                    .symbol_table()
-                    .function_scope(self.current_function.unwrap())
-                    .unwrap();
-                let function_identifier = current_function.function_identifier();
-                let function_descriptor =
-                    self.symbol_table().function(function_identifier).unwrap();
-                let parameters_size = function_descriptor.borrow().parameters_size();
-                let return_type_size = function_descriptor
-                    .borrow()
-                    .return_type()
-                    .size_in_instructions();
-
+            BoundStatement::Bye {
+                expression,
+                return_offset,
+            } => {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
-                    self.echo(format!("Returning {}", expression).as_str());
-                    self.store(0, -(return_type_size as i32) - parameters_size as i32, 1);
+                    self.echo(format!("Returning {expression:?}").as_str());
+                    self.store(0, *return_offset, 1);
                 }
                 self.emit_instruction(Instruction::Return);
             }
-            Statement::While {
+            BoundStatement::While {
                 expression,
                 statement,
                 ..
             } => {
-                self.push_scope();
                 let start = self.create_label("while_s");
                 let end = self.create_label("while_e");
 
@@ -306,24 +229,19 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     address: Address::Label(end.clone()),
                 });
                 self.emit_statement(statement, Some(start.as_str()), Some(end.as_str()));
-                self.pop_scope();
                 self.emit_instruction(Instruction::Jump {
                     address: Address::Label(start),
                 });
                 self.emit_finishing_label(end.as_str());
             }
-            Statement::For {
-                index_ident,
+            BoundStatement::For {
+                ident_position,
                 ident_expression,
                 length_expression,
                 statement,
-                ..
             } => {
                 let cmp_label = self.create_label("for_cmp");
                 let end = self.create_label("for_end");
-                let (level, variable_descriptor) = self
-                    .symbol_table()
-                    .variable(index_ident, self.current_function);
 
                 // Create a new variable for the for loop and store its value.
                 if let Some(expression) = ident_expression {
@@ -331,12 +249,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 } else {
                     self.emit_literal(0);
                 }
-                let offset = variable_descriptor.borrow().position_in_scope() as i32;
-                self.store(level, offset, 1);
+                self.store(ident_position.level(), ident_position.offset(), 1);
 
                 // Compare the variable with the length.
                 self.emit_label(cmp_label.as_str());
-                self.load(level, offset, 1);
+                self.load(ident_position.level(), ident_position.offset(), 1);
                 self.emit_expression(length_expression);
                 self.emit_operation(OperationType::LessThan);
                 self.emit_instruction(Instruction::Jmc {
@@ -346,31 +263,21 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_statement(statement, Some(cmp_label.as_str()), Some(end.as_str()));
 
                 // Increment i.
-                self.load(level, offset, 1);
+                self.load(ident_position.level(), ident_position.offset(), 1);
                 self.emit_literal(1);
                 self.emit_operation(OperationType::Add);
-                self.store(level, offset, 1);
+                self.store(ident_position.level(), ident_position.offset(), 1);
                 self.emit_jump(Address::Label(cmp_label.clone()));
                 self.emit_label(end.as_str());
             }
 
-            Statement::Empty { .. } => {
+            BoundStatement::Empty { .. } => {
                 // Emit nothing I guess :)
             }
-            Statement::Block { block, .. } => {
-                self.push_scope();
-                block
-                    .statements()
-                    .iter()
-                    .for_each(|statement| self.emit_statement(statement, start_label, end_label));
-                self.pop_scope();
-            }
-            Statement::If {
+            BoundStatement::If {
                 expression,
                 statement,
-                ..
             } => {
-                self.push_scope();
                 let end = self.create_label("if_e");
 
                 self.emit_expression(expression);
@@ -378,16 +285,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     address: Address::Label(end.clone()),
                 });
                 self.emit_statement(statement, start_label, end_label);
-                self.pop_scope();
                 self.emit_finishing_label(end.as_str());
             }
-            Statement::IfElse {
+            BoundStatement::IfElse {
                 expression,
                 statement,
                 else_statement,
                 ..
             } => {
-                self.push_scope();
                 let end_if = self.create_label("if_e");
                 let else_block = self.create_label("else");
 
@@ -396,7 +301,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     address: Address::Label(else_block.clone()),
                 });
                 self.emit_statement(statement, start_label, end_label);
-                self.pop_scope();
                 self.emit_instruction(Instruction::Jump {
                     address: Address::Label(end_if.clone()),
                 });
@@ -404,33 +308,23 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_statement(else_statement, start_label, end_label);
                 self.emit_finishing_label(end_if.as_str());
             }
-            Statement::Assignment {
-                identifier,
-                expression,
-                ..
-            } => {
-                let (level, variable_descriptor) = self
-                    .symbol_table()
-                    .variable(identifier, self.current_function);
-                self.emit_expression(expression);
-                self.store(
-                    level,
-                    variable_descriptor.borrow().position_in_scope() as i32,
-                    1,
-                );
+            BoundStatement::VariableAssignment { 0: variable } => {
+                self.emit_expression(variable.value());
+                let position = variable.position();
+                self.store(position.level(), position.offset(), 1);
             }
-            Statement::Continue { .. } => {
+            BoundStatement::Continue { .. } => {
                 self.echo("Jumping to the start of the loop (continue)");
                 self.emit_jump(Address::Label(start_label.unwrap().to_string()));
             }
-            Statement::Break { .. } => {
+            BoundStatement::Break { .. } => {
                 self.echo("Breaking out of loop");
                 self.emit_jump(Address::Label(end_label.unwrap().to_string()));
             }
-            _ => self.error_diag.borrow_mut().not_implemented(
-                statement.position(),
-                format!("statement {:?}", statement).as_str(),
-            ),
+            _ => self
+                .error_diag
+                .borrow_mut()
+                .not_implemented((0, 0), format!("statement {:?}", statement).as_str()),
         };
     }
 
@@ -440,24 +334,24 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// # Arguments
     ///
     /// * `expression`: the expression
-    fn emit_expression(&mut self, expression: &Expression<'a>) {
+    fn emit_expression(&mut self, expression: &BoundExpression) {
         match expression {
-            Expression::Number { value, .. } => {
+            BoundExpression::Number { value, .. } => {
                 self.emit_literal(*value);
             }
-            Expression::P { value: p, .. } => {
+            BoundExpression::P { 0: p, .. } => {
                 self.emit_literal(*p as i32);
             }
-            Expression::Booba { value, .. } => {
-                self.emit_literal(i32::from(*value));
+            BoundExpression::Booba { 0: booba, .. } => {
+                self.emit_literal(i32::from(*booba));
             }
-            Expression::Yarn { value: yarn, .. } => {
+            BoundExpression::Yarn { 0: yarn, .. } => {
                 self.emit_literal(yarn.len() as i32);
-                Self::pack_yarn(yarn)
-                    .into_iter()
-                    .for_each(|four_packed_chars| self.emit_literal(four_packed_chars));
+                // Self::pack_yarn(yarn)
+                //     .into_iter()
+                //     .for_each(|four_packed_chars| self.emit_literal(four_packed_chars));
             }
-            Expression::Binary { lhs, rhs, op, .. } => {
+            BoundExpression::Binary { lhs, rhs, op, .. } => {
                 // Ok so this is a little complicated, but bear with me:
                 // We need to check what kind of binary operator we have.
                 // If it's a boolean operator we need to treat it VERY differently.
@@ -559,39 +453,37 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     self.emit_label(label.as_str());
                 }
             }
-            Expression::Identifier { identifier, .. } => {
-                let (level, variable_descriptor) = self
-                    .symbol_table()
-                    .variable(identifier, self.current_function);
-                self.load(
-                    level,
-                    variable_descriptor.borrow().position_in_scope() as i32,
-                    1,
-                );
-                self.echo(format!("Loaded {}", identifier).as_str());
+            BoundExpression::Variable { 0: position, .. } => {
+                self.load(position.level(), position.offset(), 1);
+                self.echo(format!("Loaded variable at {}", position).as_str());
                 self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
             }
-            Expression::FunctionCall {
+            BoundExpression::FunctionCall {
+                level,
                 arguments,
+                arguments_size,
                 identifier,
-                ..
+                return_type_size,
             } => {
-                self.emit_function_call(arguments, identifier);
+                self.emit_function_call(
+                    *level,
+                    arguments,
+                    *arguments_size,
+                    *identifier,
+                    *return_type_size,
+                );
             }
-            Expression::Unary { op, operand, .. } => {
+            BoundExpression::Unary { op, operand, .. } => {
                 self.emit_expression(operand);
                 match op {
                     UnaryOperator::Not => {
-                        self.emit_expression(&Expression::Booba {
-                            position: (0, 0),
-                            value: true,
-                        });
+                        self.emit_booba(true);
                         self.emit_operation(OperationType::NotEqual);
                     }
                     UnaryOperator::Negate => self.emit_operation(OperationType::Negate),
                 }
             }
-            _ => todo!("Not implemented {expression}"),
+            _ => todo!("Not implemented {expression:?}"),
         }
     }
 
@@ -602,10 +494,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ///
     /// * `value`: the booba value
     fn emit_booba(&mut self, value: bool) {
-        self.emit_expression(&Expression::Booba {
-            position: (0, 0),
-            value,
-        });
+        self.emit_expression(&BoundExpression::Booba(value));
     }
 
     /// # Summary
@@ -666,25 +555,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ///
     /// * `arguments`: the arguments
     /// * `identifier`: the function identifier
-    fn emit_function_call(&mut self, arguments: &Vec<Expression<'a>>, identifier: &str) {
-        // Size in instructions.
-        let return_type_size;
-        let arguments_size;
-        let level;
-        if identifier == "main" {
-            // Doing this only because the IntelliJ Idea plugin considers this an error :(
-            let (r, a) = self.main_function_descriptor();
-            return_type_size = r;
-            arguments_size = a;
-            level = 0;
-        } else {
-            let symbol_table = self.symbol_table();
-            let function = symbol_table.function(identifier).unwrap();
-            return_type_size = function.borrow().return_type().size_in_instructions();
-            arguments_size = function.borrow().parameters_size();
-            level = 1;
-        }
-
+    fn emit_function_call(
+        &mut self,
+        level: usize,
+        arguments: &Vec<BoundExpression>,
+        arguments_size: usize,
+        identifier: usize,
+        return_type_size: usize,
+    ) {
         // If the function has a return type we need to allocate
         // extra space on the stack for the thing it returns.
         if return_type_size > 0 {
@@ -707,14 +585,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
             self.echo(format!("Storing {} arguments", arguments.len()).as_str());
             for argument in arguments {
                 self.emit_expression(argument);
-                self.echo(format!("Storing {}", argument).as_str());
+                self.echo(format!("Storing {:?}", argument).as_str());
             }
             self.echo(format!("{} argument(s) stored", arguments.len()).as_str());
         }
 
         // Call the function, finally.
         self.echo(format!("Calling {}", identifier).as_str());
-        self.emit_call_with_level(level, Address::Label(String::from(identifier)));
+        self.emit_call_with_level(level, Address::Label(identifier.to_string()));
 
         // Pop the arguments off the stack.
         if arguments_size > 0 {
@@ -730,10 +608,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// exit the program once the main function is done.
     fn emit_main_call(&mut self) {
         self.echo("Calling main function.");
-        let main_function_call = Expression::FunctionCall {
-            identifier: "main",
+        let main_function_call = BoundExpression::FunctionCall {
+            arguments_size: 0,
+            identifier: 0,
+            return_type_size: 1,
+            level: 0,
             arguments: Vec::new(),
-            position: (0, 0),
         };
         self.emit_expression(&main_function_call);
 

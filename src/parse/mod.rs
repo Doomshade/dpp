@@ -60,8 +60,6 @@ pub struct Emitter<'a, 'b> {
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     /// The instructions to be emitted.
     code: Vec<Instruction>,
-    /// Stack of function scopes. Each scope is pushed and popped when entering and exiting a function.
-    symbol_table: rc::Rc<SymbolTable<'a>>,
     /// The labels of the program.
     labels: collections::HashMap<String, u32>,
     current_function: Option<&'a str>,
@@ -373,16 +371,16 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn check_data_type(
         &self,
         expected_data_type: &DataType<'a>,
-        got: Option<DataType<'a>>,
+        got: Option<&DataType<'a>>,
         position: (u32, u32),
     ) {
         match got {
             Some(data_type) => {
-                if *expected_data_type != data_type {
+                if expected_data_type != data_type {
                     self.error_diag.borrow_mut().invalid_data_type(
                         position,
                         expected_data_type,
-                        &data_type,
+                        data_type,
                     )
                 }
             }
@@ -409,23 +407,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 }
 
 impl<'a, 'b> Emitter<'a, 'b> {
-    pub fn new(
-        symbol_table: rc::Rc<SymbolTable<'a>>,
-        error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
-    ) -> Self {
+    pub fn new(error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         Self {
             error_diag,
             code: Vec::new(),
             labels: collections::HashMap::new(),
             control_statement_count: 0,
-            symbol_table,
             function_scope_depth: collections::HashMap::new(),
             current_function: None,
         }
-    }
-
-    fn symbol_table(&self) -> &rc::Rc<SymbolTable<'a>> {
-        &self.symbol_table
     }
 
     fn emit_function_label(&mut self, label: &str) {
@@ -462,7 +452,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Operation { operation });
     }
 
-    fn load(&mut self, level: u32, offset: i32, count: usize) {
+    fn load(&mut self, level: usize, offset: i32, count: usize) {
         for i in 0..count {
             self.emit_instruction(Instruction::Load {
                 level,
@@ -471,7 +461,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
-    fn store(&mut self, level: u32, offset: i32, count: usize) {
+    fn store(&mut self, level: usize, offset: i32, count: usize) {
         for i in 0..count {
             self.emit_instruction(Instruction::Store {
                 level,
@@ -509,29 +499,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Dbg { debug_keyword });
     }
 
-    fn push_scope(&mut self) {
-        let current_function_ident = self.current_function.unwrap();
-        self.function_scope_depth.insert(
-            current_function_ident,
-            self.function_scope_depth
-                .get(current_function_ident)
-                .unwrap_or(&0)
-                + 1,
-        );
-    }
-
-    fn pop_scope(&mut self) {
-        let current_function_ident = self.current_function.unwrap();
-        self.function_scope_depth.insert(
-            current_function_ident,
-            self.function_scope_depth
-                .get(current_function_ident)
-                .unwrap()
-                - 1,
-        );
-    }
-
-    fn emit_call_with_level(&mut self, level: u32, address: Address) {
+    fn emit_call_with_level(&mut self, level: usize, address: Address) {
         self.emit_instruction(Instruction::Call { level, address });
     }
 
@@ -1260,7 +1228,8 @@ mod parser {
 }
 
 mod analysis {
-    use std::{cell, collections, rc};
+    use std::fmt::Formatter;
+    use std::{cell, collections, fmt, rc};
 
     use crate::parse::parser::{
         BinaryOperator, DataType, Expression, Function, NumberType, UnaryOperator, Variable,
@@ -1327,6 +1296,8 @@ mod analysis {
     pub struct BoundFunction {
         index: usize,
         stack_frame_size: usize,
+        return_size: usize,
+        parameters: Vec<BoundVariablePosition>,
         statements: Vec<BoundStatement>,
     }
 
@@ -1356,7 +1327,10 @@ mod analysis {
         },
         Variable(BoundVariablePosition),
         FunctionCall {
+            level: usize,
             identifier: usize,
+            return_type_size: usize,
+            arguments_size: usize,
             arguments: Vec<BoundExpression>,
         },
     }
@@ -1380,6 +1354,7 @@ mod analysis {
         },
         Bye {
             expression: Option<BoundExpression>,
+            return_offset: i32,
         },
         Print {
             print_function: fn(&str),
@@ -1387,6 +1362,7 @@ mod analysis {
         },
         Expression(BoundExpression),
         For {
+            ident_position: BoundVariablePosition,
             ident_expression: Option<BoundExpression>,
             length_expression: BoundExpression,
             statement: Box<BoundStatement>,
@@ -1796,13 +1772,17 @@ mod analysis {
 
     impl BoundFunction {
         pub fn new(
-            identifier: usize,
+            index: usize,
             stack_frame_size: usize,
+            return_size: usize,
+            parameters: Vec<BoundVariablePosition>,
             statements: Vec<BoundStatement>,
         ) -> Self {
             BoundFunction {
-                index: identifier,
+                index,
                 stack_frame_size,
+                return_size,
+                parameters,
                 statements,
             }
         }
@@ -1816,17 +1796,39 @@ mod analysis {
         pub fn statements(&self) -> &Vec<BoundStatement> {
             &self.statements
         }
+        pub fn index(&self) -> usize {
+            self.index
+        }
+        pub fn parameters(&self) -> &Vec<BoundVariablePosition> {
+            &self.parameters
+        }
+        pub fn return_size(&self) -> usize {
+            self.return_size
+        }
     }
 
     impl BoundVariableAssignment {
         pub fn new(position: BoundVariablePosition, value: BoundExpression) -> Self {
             BoundVariableAssignment { position, value }
         }
+        pub fn position(&self) -> &BoundVariablePosition {
+            &self.position
+        }
+        pub fn value(&self) -> &BoundExpression {
+            &self.value
+        }
     }
 
     impl BoundVariablePosition {
         pub fn new(level: usize, offset: i32) -> Self {
             BoundVariablePosition { level, offset }
+        }
+
+        pub fn level(&self) -> usize {
+            self.level
+        }
+        pub fn offset(&self) -> i32 {
+            self.offset
         }
     }
 
@@ -1836,6 +1838,12 @@ mod analysis {
                 expression,
                 statements,
             }
+        }
+    }
+
+    impl fmt::Display for BoundVariablePosition {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            write!(f, "{} {}", self.level, self.offset)
         }
     }
 }
@@ -1855,12 +1863,12 @@ mod emitter {
         },
         /// Load (i.e. push onto the stack) the value of the cell identified by level and offset. A level value of 0 means the variable is in the currently executing procedure; 1 means it's in the immediately enclosing region of the program. 2 means it's the region outside that (in PL/0 as in Pascal procedures can nest indefinitely). The offset distinguishes among the variables declared at that level.
         Load {
-            level: u32,
+            level: usize,
             offset: i32,
         },
         /// Store the value currently at the top of the stack to the memory cell identified by level and offset, popping the value off the stack in the process.
         Store {
-            level: u32,
+            level: usize,
             offset: i32,
         },
         /// Call the subroutine at location address, which is level nesting levels different from the nesting level of the currently executing code. This instruction pushes a stack frame (or block mark) onto the stack, storing
@@ -1869,7 +1877,7 @@ mod emitter {
         ///     the current base address (so that it can be restored when the subroutine returns)
         ///     the current program counter (so that it can be restored when the subroutine returns)
         Call {
-            level: u32,
+            level: usize,
             address: Address,
         },
         Return,
@@ -2013,13 +2021,8 @@ pub mod compiler {
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
                 // TODO: Bound AST
-                dbg!(bound_translation_unit);
-                Self::emit(
-                    output_file,
-                    &translation_unit,
-                    SymbolTable::new(),
-                    &error_diag,
-                )?;
+                dbg!(&bound_translation_unit);
+                Self::emit(output_file, bound_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
             }
             let duration = start.elapsed();
@@ -2098,13 +2101,12 @@ pub mod compiler {
 
         fn emit<'a>(
             output_file: &str,
-            translation_unit: &TranslationUnit<'a>,
-            symbol_table: SymbolTable<'a>,
+            translation_unit: BoundTranslationUnit,
             error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
         ) -> io::Result<()> {
-            Emitter::new(rc::Rc::new(symbol_table), rc::Rc::clone(&error_diag)).emit_to_writer(
+            Emitter::new(rc::Rc::clone(&error_diag)).emit_to_writer(
                 &mut io::BufWriter::new(fs::File::create(output_file)?),
-                &translation_unit,
+                translation_unit,
             )
         }
     }
