@@ -1320,13 +1320,13 @@ mod analysis {
     pub struct BoundTranslationUnit {
         functions: Vec<BoundFunction>,
         global_variable_stack_size: usize,
-        global_variables: Vec<BoundVariableAssignment>,
+        global_variable_assignments: Vec<BoundVariableAssignment>,
     }
 
     #[derive(Clone, Debug)]
     pub struct BoundFunction {
         index: usize,
-        parameter_stack_size: usize,
+        stack_frame_size: usize,
         statements: Vec<BoundStatement>,
     }
 
@@ -1774,12 +1774,12 @@ mod analysis {
         pub fn new(
             functions: Vec<BoundFunction>,
             global_variable_stack_size: usize,
-            global_variables: Vec<BoundVariableAssignment>,
+            global_variable_assignments: Vec<BoundVariableAssignment>,
         ) -> Self {
             BoundTranslationUnit {
                 functions,
                 global_variable_stack_size,
-                global_variables,
+                global_variable_assignments,
             }
         }
 
@@ -1789,20 +1789,20 @@ mod analysis {
         pub fn global_variable_stack_size(&self) -> usize {
             self.global_variable_stack_size
         }
-        pub fn global_variables(&self) -> &Vec<BoundVariableAssignment> {
-            &self.global_variables
+        pub fn global_variable_assignments(&self) -> &Vec<BoundVariableAssignment> {
+            &self.global_variable_assignments
         }
     }
 
     impl BoundFunction {
         pub fn new(
             identifier: usize,
-            parameter_stack_size: usize,
+            stack_frame_size: usize,
             statements: Vec<BoundStatement>,
         ) -> Self {
             BoundFunction {
                 index: identifier,
-                parameter_stack_size,
+                stack_frame_size,
                 statements,
             }
         }
@@ -1810,8 +1810,8 @@ mod analysis {
         pub fn identifier(&self) -> usize {
             self.index
         }
-        pub fn parameter_stack_size(&self) -> usize {
-            self.parameter_stack_size
+        pub fn stack_frame_size(&self) -> usize {
+            self.stack_frame_size
         }
         pub fn statements(&self) -> &Vec<BoundStatement> {
             &self.statements
@@ -2013,6 +2013,7 @@ pub mod compiler {
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
                 // TODO: Bound AST
+                dbg!(bound_translation_unit);
                 Self::emit(
                     output_file,
                     &translation_unit,

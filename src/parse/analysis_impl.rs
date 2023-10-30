@@ -108,9 +108,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         let function_scope = sym_table.function_scope(function.identifier()).unwrap();
         // Shift the stack pointer by activation record + declared variable count.
 
+        let stack_position = function_scope.stack_position();
+        self.current_function_index += 1;
         BoundFunction::new(
             self.current_function_index,
-            function_scope.stack_position(),
+            stack_position,
             bound_statements,
         )
     }
@@ -142,8 +144,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 self.symbol_table_mut().push_global_variable(variable);
                 if let Some(expression) = variable.value() {
-                    Some(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(0, 0),
+                    let (level, var_decl) = self
+                        .symbol_table()
+                        .variable(variable.identifier(), self.current_function);
+                    let offset = var_decl.borrow().position_in_scope();
+                    return Some(BoundVariableAssignment::new(
+                        BoundVariablePosition::new(level as usize, offset as i32),
                         self.analyze_expr(
                             expression,
                             Some(variable.data_type()),
@@ -178,9 +184,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 self.symbol_table_mut().push_local_variable(variable, false);
                 if let Some(expression) = variable.value() {
-                    // TODO: Use symbol table.
+                    let (level, var_decl) = self
+                        .symbol_table()
+                        .variable(variable.identifier(), self.current_function);
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(0, 0),
+                        BoundVariablePosition::new(
+                            level as usize,
+                            var_decl.borrow().position_in_scope() as i32,
+                        ),
                         self.analyze_expr(
                             expression,
                             Some(variable.data_type()),
@@ -310,9 +321,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         Some(*position),
                     );
                     variable.borrow_mut().set_initialized();
-                    // TODO: Use symbol table.
+                    let (level, var_decl) = self
+                        .symbol_table()
+                        .variable(*identifier, self.current_function);
+
+                    let offset = var_decl.borrow().position_in_scope();
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(0, 0),
+                        BoundVariablePosition::new(level as usize, offset as i32),
                         expression,
                     ))
                 } else {
@@ -597,7 +612,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.expr(expression)
     }
 
-    fn expr(&self, expression: &Expression) -> BoundExpression {
+    fn expr(&self, expression: &Expression<'a>) -> BoundExpression {
         match expression {
             Expression::Number {
                 number_type, value, ..
@@ -618,8 +633,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 rhs: Box::new(self.expr(rhs)),
             },
             Expression::Identifier { identifier, .. } => {
-                // TODO: Use symbol table for lookup.
-                BoundExpression::Variable(BoundVariablePosition::new(0, 0))
+                let (level, var_decl) = self
+                    .symbol_table()
+                    .variable(*identifier, self.current_function);
+                let offset = var_decl.borrow().position_in_scope();
+                BoundExpression::Variable(BoundVariablePosition::new(level as usize, offset as i32))
             }
             Expression::FunctionCall {
                 identifier,
