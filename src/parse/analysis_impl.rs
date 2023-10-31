@@ -120,6 +120,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
         self.begin_function(&function);
+        let function_id = self
+            .symbol_table()
+            .function(function.identifier())
+            .unwrap()
+            .function_id();
         let mut current_size = 0;
         let parameters = function
             .parameters()
@@ -152,16 +157,16 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
         }
         self.end_function();
-        let sym_table = self.symbol_table();
-        let function_scope = sym_table.function_scope(function.identifier()).unwrap();
+        let function_scope = self
+            .symbol_table()
+            .function_scope(function.identifier())
+            .unwrap();
         // Shift the stack pointer by activation record + declared variable count.
 
         let stack_position = function_scope.stack_position();
 
-        let function_index = self.current_function_index;
-        self.current_function_index += 1;
         BoundFunction::new(
-            function_index,
+            function_id,
             stack_position,
             function.identifier() == "main",
             function.return_type().size_in_instructions(),
@@ -711,14 +716,27 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Expression::FunctionCall {
                 identifier,
                 arguments,
-                ..
+                position,
             } => {
-                // TODO: Use identifier map.
+                let (id, return_type_size, arguments_size);
+                if let Some(function) = self.symbol_table().function(identifier) {
+                    id = function.function_id();
+                    return_type_size = function.return_type().size_in_instructions();
+                    arguments_size = function.parameters_size()
+                } else {
+                    id = 0;
+                    return_type_size = 0;
+                    arguments_size = 0;
+
+                    self.error_diag
+                        .borrow_mut()
+                        .function_does_not_exist(*position, identifier);
+                }
                 BoundExpression::FunctionCall {
                     level: 1,
-                    identifier: 1,
-                    return_type_size: 0,
-                    arguments_size: 0,
+                    identifier: id,
+                    return_type_size,
+                    arguments_size,
                     arguments: arguments
                         .iter()
                         .map(|arg| self.expr(arg))

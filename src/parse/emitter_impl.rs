@@ -140,10 +140,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_int(function.stack_frame_size() as i32);
 
         // Load arguments.
-        function
-            .parameters()
-            .iter()
-            .for_each(|var| self.load(var.level(), var.offset(), 1));
+        let mut store_offset = 3;
+        function.parameters().iter().for_each(|var| {
+            self.load(var.level(), var.offset(), 1);
+            self.store(0, store_offset, 1);
+            store_offset += 1;
+        });
         function
             .statements()
             .iter()
@@ -587,8 +589,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
 
         // Call the function, finally.
-        self.echo(format!("Calling {}", identifier).as_str());
         let function_label = Self::create_function_label(identifier);
+        self.echo(format!("Calling {function_label}").as_str());
         self.emit_call_with_level(level, Address::Label(function_label));
 
         // Pop the arguments off the stack.

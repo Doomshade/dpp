@@ -52,7 +52,6 @@ pub struct SemanticAnalyzer<'a, 'b> {
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     current_function: Option<&'a str>,
     loop_stack: usize,
-    current_function_index: usize,
 }
 
 #[derive(Debug)]
@@ -341,7 +340,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             error_diag,
             current_function: None,
             loop_stack: 0,
-            current_function_index: 0,
         }
     }
 
@@ -1261,6 +1259,7 @@ mod analysis {
     pub struct FunctionDescriptor<'a> {
         return_type: DataType<'a>,
         parameters: Vec<Variable<'a>>,
+        function_id: usize,
     }
 
     #[derive(Clone, Debug)]
@@ -1409,7 +1408,9 @@ mod analysis {
         }
 
         pub fn push_global_function(&mut self, function: &Function<'a>) {
-            self.global_scope.push_function(function);
+            let function_id = self.global_scope.scope.functions.len();
+            self.global_scope.push_function(function, function_id);
+            assert!(self.global_scope.scope.functions.len() > function_id);
         }
 
         fn push_function_scope(&mut self, function_identifier: &'a str) {
@@ -1592,8 +1593,8 @@ mod analysis {
             self.scope.get_variable_descriptor_mut(identifier)
         }
 
-        pub fn push_function(&mut self, function: &Function<'a>) {
-            let function_descriptor = FunctionDescriptor::new(function);
+        pub fn push_function(&mut self, function: &Function<'a>, function_id: usize) {
+            let function_descriptor = FunctionDescriptor::new(function, function_id);
             self.scope
                 .push_function_descriptor(function.identifier(), function_descriptor);
         }
@@ -1706,10 +1707,11 @@ mod analysis {
     }
 
     impl<'a> FunctionDescriptor<'a> {
-        pub fn new(function: &Function<'a>) -> Self {
+        pub fn new(function: &Function<'a>, function_id: usize) -> Self {
             FunctionDescriptor {
                 return_type: function.return_type().clone(),
                 parameters: function.parameters().clone(),
+                function_id,
             }
         }
 
@@ -1725,6 +1727,9 @@ mod analysis {
             self.parameters().iter().fold(0, |acc, parameter| {
                 acc + parameter.data_type().size_in_instructions()
             })
+        }
+        pub fn function_id(&self) -> usize {
+            self.function_id
         }
     }
 
