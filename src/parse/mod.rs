@@ -26,40 +26,52 @@ pub struct ErrorDiagnosis<'a, 'b> {
 pub struct Lexer<'a, 'b> {
     /// The raw translation unit input.
     raw_input: &'a str,
+    /// The raw pointer to the string slice.
     pointer: usize,
     /// The input as a vector of characters because we want to index into it.
     chars: Vec<char>,
     /// The cursor to the chars vector.
     cursor: usize,
+    /// The current row.
     row: u32,
+    /// The current column.
     col: u32,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 #[derive(Debug)]
 pub struct Parser<'a, 'b> {
+    /// An RC to the tokens. The RC is there just to ensure immutability -- we don't wanna mutate
+    /// any token nor add any. TODO: This should probably be a peekable iterator.
     tokens: rc::Rc<Vec<Token<'a>>>,
-    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
+    /// The current token index to the tokens vector. TODO: The tokens should be an iterator.
     curr_token_index: usize,
+    /// The position of last token.
     position: (u32, u32),
+    /// A flag that says whether we encountered an error. Used for error recovery.
     error: bool,
+    /// A flag that says whether we are in the process of fixing the parsing process. Used for
+    /// error recovery.
     fixing_parsing: bool,
+    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 #[derive(Debug)]
 pub struct SemanticAnalyzer<'a, 'b> {
+    /// The symbol table.
     symbol_table: SymbolTable<'a>,
-    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
-    current_function: Option<&'a str>,
+    /// The current loop stack. Used to determine whether "break" or "continue" are out of place.
     loop_stack: usize,
+    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 #[derive(Debug)]
 pub struct Emitter<'a, 'b> {
-    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     /// The instructions to be emitted.
     code: Vec<Instruction>,
+    /// The current control statement index.
     control_statement_count: u32,
+    error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 impl<'a, 'b> Lexer<'a, 'b> {
