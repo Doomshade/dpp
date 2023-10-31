@@ -348,7 +348,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         Self {
             symbol_table: SymbolTable::new(),
             error_diag,
-            current_function: None,
             loop_stack: 0,
         }
     }
@@ -396,7 +395,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn begin_function(&mut self, function: &Function<'a>) {
         self.loop_stack = 0;
-        self.current_function = Some(function.identifier());
         let ref_mut = self.symbol_table_mut();
         ref_mut.push_function(function.clone());
         ref_mut.push_scope();
@@ -407,7 +405,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     }
 
     fn end_function(&mut self) {
-        self.current_function = None;
         self.symbol_table_mut().pop_scope();
     }
 }
