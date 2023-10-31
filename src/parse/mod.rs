@@ -1,8 +1,9 @@
-use std::{cell, collections, rc};
+use std::io::Write;
+use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{BoundVariablePosition, SymbolTable};
+use crate::parse::analysis::{BoundTranslationUnit, BoundVariablePosition, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
@@ -418,6 +419,100 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
+    /// # Summary
+    /// Generates instructions for the PL/0 interpreter.
+    ///
+    /// # Arguments
+    /// * `translation_unit`: the translation unit
+    ///
+    /// # Returns
+    /// * `Vec<Instruction>` - the instructions
+    pub fn into_pl0_instructions(
+        mut self,
+        translation_unit: BoundTranslationUnit,
+    ) -> Vec<Instruction> {
+        self.emit_translation_unit(&translation_unit);
+
+        self.code
+    }
+
+    /// # Summary
+    /// Emits the translation unit to the writer.
+    ///
+    /// # Arguments
+    ///
+    /// * `writer`: the writer
+    /// * `translation_unit`: the translation unit
+    ///
+    /// returns: Result<(), Error> - error if the writer fails to write
+    pub fn emit_to_writer(
+        mut self,
+        writer: &mut io::BufWriter<fs::File>,
+        translation_unit: BoundTranslationUnit,
+    ) -> io::Result<()> {
+        self.emit_translation_unit(&translation_unit);
+        for instruction in &self.code {
+            match instruction {
+                Instruction::Load { level, offset } => {
+                    writer.write_all(format!("LOD {level} {offset}\r\n").as_bytes())?;
+                }
+                Instruction::Store { level, offset } => {
+                    writer.write_all(format!("STO {level} {offset}\r\n").as_bytes())?;
+                }
+                Instruction::Literal { value } => {
+                    writer.write_all(format!("LIT 0 {value}\r\n").as_bytes())?;
+                }
+                Instruction::Jump { address } => {
+                    let str = format!("JMP 0 {address}\r\n");
+                    writer.write_all(str.as_bytes())?;
+                }
+                Instruction::Jmc { address } => {
+                    writer.write_all(format!("JMC 0 {address}\r\n").as_bytes())?;
+                }
+                Instruction::Call { level, address } => {
+                    writer.write_all(format!("CAL {level} {address}\r\n").as_bytes())?;
+                }
+                Instruction::Operation { operation } => {
+                    writer.write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
+                }
+                Instruction::Return => {
+                    writer.write_all(b"RET 0 0\r\n")?;
+                }
+                Instruction::Int { size } => {
+                    writer.write_all(format!("INT 0 {size}\r\n").as_bytes())?;
+                }
+                Instruction::Dbg { debug_keyword } => {
+                    if compiler::DEBUG {
+                        match debug_keyword {
+                            DebugKeyword::Registers => {
+                                writer.write_all(b"&REGS\r\n")?;
+                            }
+                            DebugKeyword::Stack => {
+                                writer.write_all(b"&STK\r\n")?;
+                            }
+                            DebugKeyword::StackA => {
+                                writer.write_all(b"&STKA\r\n")?;
+                            }
+                            DebugKeyword::StackRg { start, end } => {
+                                writer.write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+                            }
+                            DebugKeyword::StackN { amount } => {
+                                writer.write_all(format!("&STKN {amount}\r\n").as_bytes())?;
+                            }
+                            DebugKeyword::Echo { message } => {
+                                writer.write_all(format!("&ECHO {message}\r\n").as_bytes())?;
+                            }
+                        }
+                    }
+                }
+                Instruction::Label(label) => {
+                    writer.write_all(format!("\n@{label} ").as_bytes())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn emit_label(&mut self, label: &str) {
         self.emit_instruction(Instruction::Label(String::from(label)));
 
@@ -430,6 +525,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     fn emit_int(&mut self, size: i32) {
         self.emit_instruction(Instruction::Int { size })
+    }
+
+    fn create_stack_frame(&mut self, size: usize) {
+        self.emit_instruction(Instruction::Int { size: size as i32 })
     }
 
     fn emit_instruction(&mut self, instruction: Instruction) {
@@ -482,11 +581,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
-    fn emit_call_with_level(&mut self, level: usize, address: Address) {
+    fn emit_call(&mut self, level: usize, address: Address) {
         self.emit_instruction(Instruction::Call { level, address });
     }
 
-    pub fn emit_literal(&mut self, value: i32) {
+    fn emit_literal(&mut self, value: i32) {
         self.emit_instruction(Instruction::Literal { value })
     }
 }
@@ -1271,7 +1370,7 @@ mod analysis {
     pub struct BoundTranslationUnit {
         functions: Vec<BoundFunction>,
         main_function_identifier: usize,
-        global_variable_stack_size: usize,
+        global_stack_frame_size: usize,
         global_variable_assignments: Vec<BoundVariableAssignment>,
     }
 
@@ -1742,13 +1841,13 @@ mod analysis {
         pub fn new(
             functions: Vec<BoundFunction>,
             main_function_identifier: usize,
-            global_variable_stack_size: usize,
+            global_stack_frame_size: usize,
             global_variable_assignments: Vec<BoundVariableAssignment>,
         ) -> Self {
             BoundTranslationUnit {
                 functions,
                 main_function_identifier,
-                global_variable_stack_size,
+                global_stack_frame_size,
                 global_variable_assignments,
             }
         }
@@ -1756,8 +1855,8 @@ mod analysis {
         pub fn functions(&self) -> &Vec<BoundFunction> {
             &self.functions
         }
-        pub fn global_variable_stack_size(&self) -> usize {
-            self.global_variable_stack_size
+        pub fn global_stack_frame_size(&self) -> usize {
+            self.global_stack_frame_size
         }
         pub fn global_variable_assignments(&self) -> &Vec<BoundVariableAssignment> {
             &self.global_variable_assignments

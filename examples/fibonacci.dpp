@@ -30,11 +30,14 @@ FUNc trust_add(pp -> a, pp -> b) -> pp {
 }
 
 FUNc main() -> pp {
-    pp -> a = 0;
-    pp -> b = 0;
-    pp -> c = 0;
-    pp -> d = 0;
-    pp -> e = 0;
-    pp -> f = 0;
+    pp -> a = 1;
+    fibonacci(5);
+    pp -> b = 2;
+    pp -> c = 3;
+    fibonacci(c);
+    pp -> d = 4;
+    pp -> e = 5;
+    pp -> f = 6;
+    fibonacci_rec(2);
     bye fibonacci(10) + fibonacci_rec(10);
 }

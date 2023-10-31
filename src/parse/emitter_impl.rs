@@ -1,126 +1,38 @@
-use std::fs;
-use std::io;
-use std::io::Write;
-
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
     BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit, BoundVariableAssignment,
 };
-use crate::parse::compiler;
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{BinaryOperator, UnaryOperator};
 use crate::parse::Emitter;
 
 impl<'a, 'b> Emitter<'a, 'b> {
     /// # Summary
-    /// Generates instructions for the PL/0 interpreter.
-    ///
-    /// # Arguments
-    /// * `translation_unit`: the translation unit
-    ///
-    /// # Returns
-    /// * `Vec<Instruction>` - the instructions
-    pub fn into_pl0_instructions(
-        mut self,
-        translation_unit: BoundTranslationUnit,
-    ) -> Vec<Instruction> {
-        self.emit_translation_unit(&translation_unit);
-
-        self.code
-    }
-
-    /// # Summary
-    /// Emits the translation unit to the writer.
-    ///
-    /// # Arguments
-    ///
-    /// * `writer`: the writer
-    /// * `translation_unit`: the translation unit
-    ///
-    /// returns: Result<(), Error> - error if the writer fails to write
-    pub fn emit_to_writer(
-        mut self,
-        writer: &mut io::BufWriter<fs::File>,
-        translation_unit: BoundTranslationUnit,
-    ) -> io::Result<()> {
-        self.emit_translation_unit(&translation_unit);
-        for instruction in &self.code {
-            match instruction {
-                Instruction::Load { level, offset } => {
-                    writer.write_all(format!("LOD {level} {offset}\r\n").as_bytes())?;
-                }
-                Instruction::Store { level, offset } => {
-                    writer.write_all(format!("STO {level} {offset}\r\n").as_bytes())?;
-                }
-                Instruction::Literal { value } => {
-                    writer.write_all(format!("LIT 0 {value}\r\n").as_bytes())?;
-                }
-                Instruction::Jump { address } => {
-                    let str = format!("JMP 0 {address}\r\n");
-                    writer.write_all(str.as_bytes())?;
-                }
-                Instruction::Jmc { address } => {
-                    writer.write_all(format!("JMC 0 {address}\r\n").as_bytes())?;
-                }
-                Instruction::Call { level, address } => {
-                    writer.write_all(format!("CAL {level} {address}\r\n").as_bytes())?;
-                }
-                Instruction::Operation { operation } => {
-                    writer.write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
-                }
-                Instruction::Return => {
-                    writer.write_all(b"RET 0 0\r\n")?;
-                }
-                Instruction::Int { size } => {
-                    writer.write_all(format!("INT 0 {size}\r\n").as_bytes())?;
-                }
-                Instruction::Dbg { debug_keyword } => {
-                    if compiler::DEBUG {
-                        match debug_keyword {
-                            DebugKeyword::Registers => {
-                                writer.write_all(b"&REGS\r\n")?;
-                            }
-                            DebugKeyword::Stack => {
-                                writer.write_all(b"&STK\r\n")?;
-                            }
-                            DebugKeyword::StackA => {
-                                writer.write_all(b"&STKA\r\n")?;
-                            }
-                            DebugKeyword::StackRg { start, end } => {
-                                writer.write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
-                            }
-                            DebugKeyword::StackN { amount } => {
-                                writer.write_all(format!("&STKN {amount}\r\n").as_bytes())?;
-                            }
-                            DebugKeyword::Echo { message } => {
-                                writer.write_all(format!("&ECHO {message}\r\n").as_bytes())?;
-                            }
-                        }
-                    }
-                }
-                Instruction::Label(label) => {
-                    writer.write_all(format!("\n@{label} ").as_bytes())?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// # Summary
     /// Emits the translation unit.
     ///
     /// # Arguments
     ///
     /// * `translation_unit`: the translation unit
-    fn emit_translation_unit(&mut self, translation_unit: &BoundTranslationUnit) {
-        self.emit_int(translation_unit.global_variable_stack_size() as i32);
+    pub(crate) fn emit_translation_unit(&mut self, translation_unit: &BoundTranslationUnit) {
+        self.emit_global_scope(translation_unit);
+        self.emit_main_call(translation_unit.main_function_identifier());
+        self.emit_functions(translation_unit);
+    }
+
+    fn emit_global_scope(&mut self, translation_unit: &BoundTranslationUnit) {
+        self.create_stack_frame(translation_unit.global_stack_frame_size());
+        self.emit_global_variables(translation_unit);
+    }
+
+    fn emit_global_variables(&mut self, translation_unit: &BoundTranslationUnit) {
         translation_unit
             .global_variable_assignments()
             .iter()
             .for_each(|stmt| self.emit_variable_assignment(stmt));
-        self.emit_debug_info(DebugKeyword::Stack);
-        self.emit_main_call(translation_unit.main_function_identifier());
+    }
+
+    fn emit_functions(&mut self, translation_unit: &BoundTranslationUnit) {
         translation_unit
             .functions()
             .iter()
@@ -137,7 +49,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_label(Self::create_function_label(function.identifier()).as_str());
 
         // Shift the stack pointer by activation record + declared variable count.
-        self.emit_int(function.stack_frame_size() as i32);
+        self.create_stack_frame(function.stack_frame_size());
 
         // Load arguments.
         let mut store_offset = 3;
@@ -184,19 +96,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ) {
         match statement {
             BoundStatement::Expression { 0: expression, .. } => {
-                let return_type_sizee;
-                if let BoundExpression::FunctionCall {
-                    return_type_size, ..
-                } = &expression
-                {
-                    return_type_sizee = *return_type_size;
-                } else {
-                    return_type_sizee = 0;
-                }
                 self.emit_expression(expression);
-                if return_type_sizee > 0 {
-                    self.emit_int(-(return_type_sizee as i32));
-                }
             }
             BoundStatement::VariableAssignment { 0: variable, .. } => {
                 self.emit_variable_assignment(variable);
@@ -563,41 +463,26 @@ impl<'a, 'b> Emitter<'a, 'b> {
         // If the function has a return type we need to allocate
         // extra space on the stack for the thing it returns.
         if return_type_size > 0 {
-            self.emit_instruction(Instruction::Int {
-                size: return_type_size as i32,
-            });
-            self.echo(
-                format!(
-                    "Reserved {} bytes for return value of {}",
-                    return_type_size * 4,
-                    identifier
-                )
-                .as_str(),
-            );
+            self.emit_int(return_type_size as i32);
             self.emit_debug_info(DebugKeyword::Stack);
         }
 
         // Emit arguments AFTER the return type.
         if arguments.len() > 0 {
-            self.echo(format!("Storing {} arguments", arguments.len()).as_str());
             for argument in arguments {
                 self.emit_expression(argument);
-                self.echo(format!("Storing {:?}", argument).as_str());
             }
-            self.echo(format!("{} argument(s) stored", arguments.len()).as_str());
         }
 
         // Call the function, finally.
-        let function_label = Self::create_function_label(identifier);
-        self.echo(format!("Calling {function_label}").as_str());
-        self.emit_call_with_level(level, Address::Label(function_label));
+        self.emit_call(
+            level,
+            Address::Label(Self::create_function_label(identifier)),
+        );
 
         // Pop the arguments off the stack.
         if arguments_size > 0 {
-            self.echo(format!("Popping {arguments_size} argument(s) for {identifier}").as_str());
-            self.emit_instruction(Instruction::Int {
-                size: -(arguments_size as i32),
-            });
+            self.emit_int(-(arguments_size as i32));
         }
     }
 
