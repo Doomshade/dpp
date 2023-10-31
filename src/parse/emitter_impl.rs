@@ -142,8 +142,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         // Load arguments.
         let mut store_offset = 3;
         function.parameters().iter().for_each(|var| {
-            self.load(var.level(), var.offset(), 1);
-            self.store(0, store_offset, 1);
+            self.load_variable(var);
+            self.store(0, store_offset);
             store_offset += 1;
         });
         function
@@ -161,8 +161,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     fn emit_variable_assignment(&mut self, variable: &BoundVariableAssignment) {
         self.emit_expression(variable.value());
-        let position = variable.position();
-        self.store(position.level(), position.offset(), 1);
+        self.store_variable(variable.position());
     }
 
     /// # Summary
@@ -209,7 +208,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
                     self.echo(format!("Returning {expression:?}").as_str());
-                    self.store(0, *return_offset, 1);
+                    self.store(0, *return_offset);
                 }
                 self.emit_instruction(Instruction::Return);
             }
@@ -247,11 +246,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 } else {
                     self.emit_literal(0);
                 }
-                self.store(ident_position.level(), ident_position.offset(), 1);
+                self.store_variable(ident_position);
 
                 // Compare the variable with the length.
                 self.emit_label(cmp_label.as_str());
-                self.load(ident_position.level(), ident_position.offset(), 1);
+                self.load_variable(ident_position);
                 self.emit_expression(length_expression);
                 self.emit_operation(OperationType::LessThan);
                 self.emit_instruction(Instruction::Jmc {
@@ -261,10 +260,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_statement(statement, Some(cmp_label.as_str()), Some(end.as_str()));
 
                 // Increment i.
-                self.load(ident_position.level(), ident_position.offset(), 1);
+                self.load_variable(ident_position);
                 self.emit_literal(1);
                 self.emit_operation(OperationType::Add);
-                self.store(ident_position.level(), ident_position.offset(), 1);
+                self.store_variable(ident_position);
                 self.emit_jump(Address::Label(cmp_label.clone()));
                 self.emit_label(end.as_str());
             }
@@ -452,7 +451,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 }
             }
             BoundExpression::Variable { 0: position, .. } => {
-                self.load(position.level(), position.offset(), 1);
+                self.load_variable(position);
                 self.echo(format!("Loaded variable at {}", position).as_str());
                 self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
             }

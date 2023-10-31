@@ -2,7 +2,7 @@ use std::{cell, collections, rc};
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::SymbolTable;
+use crate::parse::analysis::{BoundVariablePosition, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
@@ -440,22 +440,20 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Operation { operation });
     }
 
-    fn load(&mut self, level: usize, offset: i32, count: usize) {
-        for i in 0..count {
-            self.emit_instruction(Instruction::Load {
-                level,
-                offset: offset + i as i32,
-            });
-        }
+    fn load_variable(&mut self, position: &BoundVariablePosition) {
+        self.load(position.level(), position.offset());
     }
 
-    fn store(&mut self, level: usize, offset: i32, count: usize) {
-        for i in 0..count {
-            self.emit_instruction(Instruction::Store {
-                level,
-                offset: offset + i as i32,
-            });
-        }
+    fn load(&mut self, level: usize, offset: i32) {
+        self.emit_instruction(Instruction::Load { level, offset });
+    }
+
+    fn store_variable(&mut self, position: &BoundVariablePosition) {
+        self.store(position.level(), position.offset());
+    }
+
+    fn store(&mut self, level: usize, offset: i32) {
+        self.emit_instruction(Instruction::Store { level, offset });
     }
 
     fn create_function_label(function_ident: usize) -> String {
