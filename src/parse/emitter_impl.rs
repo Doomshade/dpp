@@ -134,7 +134,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ///
     /// * `function`: the function
     fn emit_function(&mut self, function: &BoundFunction) {
-        self.emit_function_label(function.identifier());
+        self.emit_label(Self::create_function_label(function.identifier()).as_str());
 
         // Shift the stack pointer by activation record + declared variable count.
         self.emit_int(function.stack_frame_size() as i32);
@@ -216,10 +216,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 statement,
                 ..
             } => {
-                let start = self.create_label("while_s");
-                let end = self.create_label("while_e");
+                let start = self.create_control_label();
+                let end = self.create_control_label();
 
-                self.emit_control_label(start.as_str());
+                self.emit_label(start.as_str());
                 self.emit_expression(expression);
                 self.emit_instruction(Instruction::Jmc {
                     address: Address::Label(end.clone()),
@@ -228,7 +228,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_instruction(Instruction::Jump {
                     address: Address::Label(start),
                 });
-                self.emit_finishing_control_label(end.as_str());
+                self.emit_label(end.as_str());
             }
             BoundStatement::For {
                 ident_position,
@@ -236,8 +236,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 length_expression,
                 statement,
             } => {
-                let cmp_label = self.create_label("for_cmp");
-                let end = self.create_label("for_end");
+                let cmp_label = self.create_control_label();
+                let end = self.create_control_label();
 
                 // Create a new variable for the for loop and store its value.
                 if let Some(expression) = ident_expression {
@@ -248,7 +248,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.store(ident_position.level(), ident_position.offset(), 1);
 
                 // Compare the variable with the length.
-                self.emit_control_label(cmp_label.as_str());
+                self.emit_label(cmp_label.as_str());
                 self.load(ident_position.level(), ident_position.offset(), 1);
                 self.emit_expression(length_expression);
                 self.emit_operation(OperationType::LessThan);
@@ -264,7 +264,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_operation(OperationType::Add);
                 self.store(ident_position.level(), ident_position.offset(), 1);
                 self.emit_jump(Address::Label(cmp_label.clone()));
-                self.emit_control_label(end.as_str());
+                self.emit_label(end.as_str());
             }
 
             BoundStatement::Empty { .. } => {
@@ -274,14 +274,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 expression,
                 statement,
             } => {
-                let end = self.create_label("if_e");
+                let end = self.create_control_label();
 
                 self.emit_expression(expression);
                 self.emit_instruction(Instruction::Jmc {
                     address: Address::Label(end.clone()),
                 });
                 self.emit_statement(statement, start_label, end_label);
-                self.emit_finishing_control_label(end.as_str());
+                self.emit_label(end.as_str());
             }
             BoundStatement::IfElse {
                 expression,
@@ -289,8 +289,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 else_statement,
                 ..
             } => {
-                let end_if = self.create_label("if_e");
-                let else_block = self.create_label("else");
+                let end_if = self.create_control_label();
+                let else_block = self.create_control_label();
 
                 self.emit_expression(expression);
                 self.emit_instruction(Instruction::Jmc {
@@ -300,9 +300,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_instruction(Instruction::Jump {
                     address: Address::Label(end_if.clone()),
                 });
-                self.emit_finishing_control_label(else_block.as_str());
+                self.emit_label(else_block.as_str());
                 self.emit_statement(else_statement, start_label, end_label);
-                self.emit_finishing_control_label(end_if.as_str());
+                self.emit_label(end_if.as_str());
             }
             BoundStatement::Continue { .. } => {
                 self.echo("Jumping to the start of the loop (continue)");
@@ -381,8 +381,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 let short_circuit_label;
                 match op {
                     BinOp::And | BinOp::Or => {
-                        short_circuit_label = Some(self.create_label("short_crct"));
-                        after_expr_label = Some(self.create_label("after_bool_expr"));
+                        short_circuit_label = Some(self.create_control_label());
+                        after_expr_label = Some(self.create_control_label());
                         self.emit_binary_boolean_expression(
                             op,
                             short_circuit_label.clone().unwrap().as_str(),
@@ -436,7 +436,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 // If we short-circuit OR it means the value is true.
                 if let Some(label) = short_circuit_label {
                     self.echo(format!("Reached short-circuit label for {:?}", op).as_str());
-                    self.emit_control_label(label.as_str());
+                    self.emit_label(label.as_str());
                     match op {
                         BinaryOperator::And => self.emit_booba(false),
                         BinaryOperator::Or => self.emit_booba(true),
@@ -446,7 +446,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
                 // We jump here if the expression is not short-circuited.
                 if let Some(label) = after_expr_label {
-                    self.emit_control_label(label.as_str());
+                    self.emit_label(label.as_str());
                 }
             }
             BoundExpression::Variable { 0: position, .. } => {
@@ -588,7 +588,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         // Call the function, finally.
         self.echo(format!("Calling {}", identifier).as_str());
-        self.emit_call_with_level(level, Address::Label(identifier.to_string()));
+        let function_label = Self::create_function_label(identifier);
+        self.emit_call_with_level(level, Address::Label(function_label));
 
         // Pop the arguments off the stack.
         if arguments_size > 0 {

@@ -60,8 +60,6 @@ pub struct Emitter<'a, 'b> {
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     /// The instructions to be emitted.
     code: Vec<Instruction>,
-    /// The labels of the program.
-    labels: collections::HashMap<String, u32>,
     current_function: Option<&'a str>,
     function_scope_depth: collections::HashMap<&'a str, u32>,
     control_statement_count: u32,
@@ -411,37 +409,20 @@ impl<'a, 'b> Emitter<'a, 'b> {
         Self {
             error_diag,
             code: Vec::new(),
-            labels: collections::HashMap::new(),
             control_statement_count: 0,
             function_scope_depth: collections::HashMap::new(),
             current_function: None,
         }
     }
 
-    fn emit_function_label(&mut self, label: usize) {
-        self.emit_label(format!("f{}", label.to_string().as_str()).as_str());
-    }
-
-    fn emit_finishing_control_label(&mut self, label: &str) {
-        self.emit_control_label(label);
+    fn emit_label(&mut self, label: &str) {
+        self.emit_instruction(Instruction::Label(String::from(label)));
 
         // Need to emit an empty instruction because of a situation like
         // @while_end_0
         // @if_start_1 LOD ...
         // The PL0 interpret cannot interpret two labels properly..
-        if compiler::DEBUG {
-            self.emit_int(0);
-        }
-    }
-
-    fn emit_control_label(&mut self, label: &str) {
-        self.emit_label(format!("c{}", label).as_str());
-    }
-
-    fn emit_label(&mut self, label: &str) {
-        self.labels
-            .insert(label.to_string(), self.code.len() as u32);
-        self.emit_instruction(Instruction::Label(String::from(label)));
+        self.emit_int(0);
     }
 
     fn emit_int(&mut self, size: i32) {
@@ -474,13 +455,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
-    fn create_label(&mut self, label: &str) -> String {
-        let control_label;
-        if compiler::DEBUG {
-            control_label = format!("0{label}_{}", self.control_statement_count);
-        } else {
-            control_label = format!("{}", self.control_statement_count);
-        }
+    fn create_function_label(function_ident: usize) -> String {
+        format!("f{function_ident}")
+    }
+
+    fn create_control_label(&mut self) -> String {
+        let control_label = format!("c{}", self.control_statement_count);
         self.control_statement_count += 1;
         control_label
     }
