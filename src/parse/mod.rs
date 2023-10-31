@@ -513,8 +513,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         Ok(())
     }
 
-    fn emit_label(&mut self, label: &str) {
-        self.emit_instruction(Instruction::Label(String::from(label)));
+    fn emit_label(&mut self, label: String) {
+        self.emit_instruction(Instruction::Label(label));
 
         // Need to emit an empty instruction because of a situation like
         // @while_end_0
@@ -573,6 +573,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
     fn emit_jump(&mut self, address: Address) {
         self.emit_instruction(Instruction::Jump { address });
+    }
+
+    fn emit_jmc(&mut self, address: Address) {
+        self.emit_instruction(Instruction::Jmc { address });
     }
 
     fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {

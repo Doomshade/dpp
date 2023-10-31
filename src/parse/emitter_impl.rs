@@ -46,7 +46,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ///
     /// * `function`: the function
     fn emit_function(&mut self, function: &BoundFunction) {
-        self.emit_label(Self::create_function_label(function.identifier()).as_str());
+        self.emit_label(Self::create_function_label(function.identifier()));
 
         // Shift the stack pointer by activation record + declared variable count.
         self.create_stack_frame(function.stack_frame_size());
@@ -91,8 +91,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
     fn emit_statement(
         &mut self,
         statement: &BoundStatement,
-        start_label: Option<&str>,
-        end_label: Option<&str>,
+        start_label: Option<String>,
+        end_label: Option<String>,
     ) {
         match statement {
             BoundStatement::Expression { 0: expression, .. } => {
@@ -107,7 +107,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
             } => {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
-                    self.echo(format!("Returning {expression:?}").as_str());
                     self.store(0, *return_offset);
                 }
                 self.emit_instruction(Instruction::Return);
@@ -120,16 +119,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 let start = self.create_control_label();
                 let end = self.create_control_label();
 
-                self.emit_label(start.as_str());
+                self.emit_label(start.clone());
                 self.emit_expression(expression);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(end.clone()),
-                });
-                self.emit_statement(statement, Some(start.as_str()), Some(end.as_str()));
-                self.emit_instruction(Instruction::Jump {
-                    address: Address::Label(start),
-                });
-                self.emit_label(end.as_str());
+                self.emit_jmc(Address::Label(end.clone()));
+                self.emit_statement(statement, Some(start.clone()), Some(end.clone()));
+                self.emit_jump(Address::Label(start));
+                self.emit_label(end);
             }
             BoundStatement::For {
                 ident_position,
@@ -149,15 +144,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.store_variable(ident_position);
 
                 // Compare the variable with the length.
-                self.emit_label(cmp_label.as_str());
+                self.emit_label(cmp_label.clone());
                 self.load_variable(ident_position);
                 self.emit_expression(length_expression);
                 self.emit_operation(OperationType::LessThan);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(end.clone()),
-                });
+                self.emit_jmc(Address::Label(end.clone()));
 
-                self.emit_statement(statement, Some(cmp_label.as_str()), Some(end.as_str()));
+                // Emit the for statement.
+                self.emit_statement(statement, Some(cmp_label.clone()), Some(end.clone()));
 
                 // Increment i.
                 self.load_variable(ident_position);
@@ -165,7 +159,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_operation(OperationType::Add);
                 self.store_variable(ident_position);
                 self.emit_jump(Address::Label(cmp_label.clone()));
-                self.emit_label(end.as_str());
+                self.emit_label(end.clone());
             }
 
             BoundStatement::Empty { .. } => {
@@ -178,11 +172,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 let end = self.create_control_label();
 
                 self.emit_expression(expression);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(end.clone()),
-                });
+                self.emit_jmc(Address::Label(end.clone()));
                 self.emit_statement(statement, start_label, end_label);
-                self.emit_label(end.as_str());
+                self.emit_label(end);
             }
             BoundStatement::IfElse {
                 expression,
@@ -191,32 +183,26 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 ..
             } => {
                 let end_if = self.create_control_label();
-                let else_block = self.create_control_label();
+                let else_block_label = self.create_control_label();
 
                 self.emit_expression(expression);
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(else_block.clone()),
-                });
-                self.emit_statement(statement, start_label, end_label);
-                self.emit_instruction(Instruction::Jump {
-                    address: Address::Label(end_if.clone()),
-                });
-                self.emit_label(else_block.as_str());
+                self.emit_jmc(Address::Label(else_block_label.clone()));
+                self.emit_statement(statement, start_label.clone(), end_label.clone());
+                self.emit_jump(Address::Label(end_if.clone()));
+                self.emit_label(else_block_label);
                 self.emit_statement(else_statement, start_label, end_label);
-                self.emit_label(end_if.as_str());
+                self.emit_label(end_if);
             }
             BoundStatement::Continue { .. } => {
-                self.echo("Jumping to the start of the loop (continue)");
                 self.emit_jump(Address::Label(start_label.unwrap().to_string()));
             }
             BoundStatement::Break { .. } => {
-                self.echo("Breaking out of loop");
                 self.emit_jump(Address::Label(end_label.unwrap().to_string()));
             }
             BoundStatement::Statements(statements) => {
-                statements
-                    .iter()
-                    .for_each(|statement| self.emit_statement(statement, start_label, end_label));
+                statements.iter().for_each(|statement| {
+                    self.emit_statement(statement, start_label.clone(), end_label.clone())
+                });
             }
             _ => self
                 .error_diag
@@ -336,8 +322,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 // If we short-circuit AND it means the value is false.
                 // If we short-circuit OR it means the value is true.
                 if let Some(label) = short_circuit_label {
-                    self.echo(format!("Reached short-circuit label for {:?}", op).as_str());
-                    self.emit_label(label.as_str());
+                    self.emit_label(label);
                     match op {
                         BinaryOperator::And => self.emit_booba(false),
                         BinaryOperator::Or => self.emit_booba(true),
@@ -347,13 +332,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
                 // We jump here if the expression is not short-circuited.
                 if let Some(label) = after_expr_label {
-                    self.emit_label(label.as_str());
+                    self.emit_label(label);
                 }
             }
             BoundExpression::Variable { 0: position, .. } => {
                 self.load_variable(position);
-                self.echo(format!("Loaded variable at {}", position).as_str());
-                self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
             }
             BoundExpression::FunctionCall {
                 level,
@@ -432,9 +415,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_operation(OperationType::NotEqual);
 
                 // If the value is TRUE stop executing the rest of the expression.
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(short_circuit_label.to_string()),
-                });
+                self.emit_jmc(Address::Label(short_circuit_label.to_string()));
             }
             _ => {
                 unreachable!();
@@ -460,30 +441,22 @@ impl<'a, 'b> Emitter<'a, 'b> {
         identifier: usize,
         return_type_size: usize,
     ) {
-        // If the function has a return type we need to allocate
-        // extra space on the stack for the thing it returns.
-        if return_type_size > 0 {
-            self.emit_int(return_type_size as i32);
-            self.emit_debug_info(DebugKeyword::Stack);
+        // Allocate extra space on the stack for the return value.
+        self.emit_int(return_type_size as i32);
+
+        // Emit arguments.
+        for argument in arguments {
+            self.emit_expression(argument);
         }
 
-        // Emit arguments AFTER the return type.
-        if arguments.len() > 0 {
-            for argument in arguments {
-                self.emit_expression(argument);
-            }
-        }
-
-        // Call the function, finally.
+        // Call the function.
         self.emit_call(
             level,
             Address::Label(Self::create_function_label(identifier)),
         );
 
-        // Pop the arguments off the stack.
-        if arguments_size > 0 {
-            self.emit_int(-(arguments_size as i32));
-        }
+        // Pop the arguments.
+        self.emit_int(-(arguments_size as i32));
     }
 
     /// # Summary
@@ -500,11 +473,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
         };
         self.emit_expression(&main_function_call);
 
-        // The last instruction will be the JMP to 0 - indicating exit.
+        // The last instruction is return -- indicating exit.
         self.echo("Program returned with return value:");
         self.emit_debug_info(DebugKeyword::StackN { amount: 1 });
         self.emit_instruction(Instruction::Return);
-        // self.emit_jump(Address::Absolute(0));
     }
 
     fn pack_yarn(yarn: &str) -> Vec<i32> {
