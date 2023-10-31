@@ -59,8 +59,6 @@ pub struct Emitter<'a, 'b> {
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
     /// The instructions to be emitted.
     code: Vec<Instruction>,
-    current_function: Option<&'a str>,
-    function_scope_depth: collections::HashMap<&'a str, u32>,
     control_statement_count: u32,
 }
 
@@ -406,10 +404,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
     pub fn new(error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>) -> Self {
         Self {
             error_diag,
-            code: Vec::new(),
+            code: Vec::with_capacity(200),
             control_statement_count: 0,
-            function_scope_depth: collections::HashMap::new(),
-            current_function: None,
         }
     }
 
@@ -474,7 +470,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
-        self.emit_instruction(Instruction::Dbg { debug_keyword });
+        if compiler::DEBUG {
+            self.emit_instruction(Instruction::Dbg { debug_keyword });
+        }
     }
 
     fn emit_call_with_level(&mut self, level: usize, address: Address) {

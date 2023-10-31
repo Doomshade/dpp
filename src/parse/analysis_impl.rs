@@ -333,32 +333,31 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 if let Some(expression) = expression {
-                    // TODO: Check return type of function.
+                    let function_descriptor = self
+                        .symbol_table()
+                        .function(
+                            self.symbol_table()
+                                .current_function_scope()
+                                .unwrap()
+                                .function_identifier(),
+                        )
+                        .unwrap();
+
                     let expression = self.analyze_expr(expression, None, None);
                     self.check_data_type(
-                        self.symbol_table()
-                            .function(self.current_function.unwrap())
-                            .unwrap()
-                            .return_type(),
+                        function_descriptor.return_type(),
                         expression.0.as_ref(),
                         *position,
                     );
 
-                    let current_function = self
-                        .symbol_table()
-                        .function_scope(self.current_function.unwrap())
-                        .unwrap();
-                    let function_identifier = current_function.function_identifier();
-                    let function_descriptor =
-                        self.symbol_table().function(function_identifier).unwrap();
                     let parameters_size = function_descriptor.parameters_size();
                     let return_type_size = expression.0.unwrap().size_in_instructions();
-
                     return BoundStatement::Bye {
                         return_offset: -(return_type_size as i32) - parameters_size as i32,
                         expression: Some(expression.1),
                     };
                 }
+
                 BoundStatement::Bye {
                     return_offset: 0,
                     expression: None,
