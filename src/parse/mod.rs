@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Write;
 use std::{cell, collections, fs, io, rc};
 
@@ -70,6 +71,8 @@ pub struct SemanticAnalyzer<'a, 'b> {
 pub struct Emitter<'a, 'b> {
     /// The instructions to be emitted.
     code: Vec<Instruction>,
+    pc: usize,
+    labels: collections::HashMap<String, usize>,
     /// The current control statement index.
     control_statement_count: u32,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
@@ -415,6 +418,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         Self {
             error_diag,
             code: Vec::with_capacity(200),
+            labels: HashMap::new(),
+            pc: 0,
             control_statement_count: 0,
         }
     }
@@ -451,6 +456,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         translation_unit: BoundTranslationUnit,
     ) -> io::Result<()> {
         self.emit_translation_unit(&translation_unit);
+        dbg!(&self.code);
         for instruction in &self.code {
             match instruction {
                 Instruction::Load { level, offset } => {
@@ -463,14 +469,15 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     writer.write_all(format!("LIT 0 {value}\r\n").as_bytes())?;
                 }
                 Instruction::Jump { address } => {
-                    let str = format!("JMP 0 {address}\r\n");
-                    writer.write_all(str.as_bytes())?;
+                    writer.write_all(format!("JMP 0 {}\r\n", self.resolve(address)).as_bytes())?;
                 }
                 Instruction::Jmc { address } => {
-                    writer.write_all(format!("JMC 0 {address}\r\n").as_bytes())?;
+                    writer.write_all(format!("JMC 0 {}\r\n", self.resolve(address)).as_bytes())?;
                 }
                 Instruction::Call { level, address } => {
-                    writer.write_all(format!("CAL {level} {address}\r\n").as_bytes())?;
+                    writer.write_all(
+                        format!("CAL {level} {}\r\n", self.resolve(address)).as_bytes(),
+                    )?;
                 }
                 Instruction::Operation { operation } => {
                     writer.write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
@@ -513,14 +520,15 @@ impl<'a, 'b> Emitter<'a, 'b> {
         Ok(())
     }
 
-    fn emit_label(&mut self, label: String) {
-        self.emit_instruction(Instruction::Label(label));
+    fn resolve(&self, address: &Address) -> usize {
+        match address {
+            Address::Absolute(pc) => *pc,
+            Address::Label(label) => *self.labels.get(label.as_str()).unwrap(),
+        }
+    }
 
-        // Need to emit an empty instruction because of a situation like
-        // @while_end_0
-        // @if_start_1 LOD ...
-        // The PL0 interpret cannot interpret two labels properly..
-        self.emit_int(0);
+    fn emit_label(&mut self, label: String) {
+        self.labels.insert(label, self.pc);
     }
 
     fn emit_int(&mut self, size: i32) {
@@ -532,6 +540,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     fn emit_instruction(&mut self, instruction: Instruction) {
+        match instruction {
+            Instruction::Dbg { .. } => {}
+            _ => self.pc += 1,
+        };
         self.code.push(instruction);
     }
 
@@ -2033,7 +2045,7 @@ mod emitter {
 
     #[derive(Clone, Debug)]
     pub enum Address {
-        Absolute(u32),
+        Absolute(usize),
         Label(String),
     }
 
