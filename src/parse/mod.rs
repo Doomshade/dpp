@@ -2077,7 +2077,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    pub const DEBUG: bool = false;
+    pub const DEBUG: bool = true;
 
     impl DppCompiler {
         fn parse_args(bools: &[bool], params: &[&str]) -> Vec<String> {
@@ -2114,7 +2114,6 @@ pub mod compiler {
                 &file_contents,
             )));
 
-            // Pass error diag to each step.
             println!("Parsing program...");
             let start = time::Instant::now();
             {

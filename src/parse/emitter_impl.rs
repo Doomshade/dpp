@@ -2,6 +2,7 @@ use dpp_macros::Pos;
 
 use crate::parse::analysis::{
     BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit, BoundVariableAssignment,
+    Scope,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{BinaryOperator, UnaryOperator};
@@ -50,25 +51,19 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         // Shift the stack pointer by activation record + declared variable count.
         self.create_stack_frame(function.stack_frame_size());
+        // We expect the arguments to be loaded on stack by the callee, no need to load them.
 
-        // Load arguments.
-        let mut store_offset = 3;
-        function.parameters().iter().for_each(|var| {
-            self.load_variable(var);
-            self.store(0, store_offset);
-            store_offset += 1;
-        });
+        // Emit the statements.
         function
             .statements()
             .iter()
             .for_each(|statement| self.emit_statement(statement, None, None));
 
-        // We aren't forcing the return statement if it's nopp, so we'll emit it ourselves.
+        // We aren't forcing the function to have a return statement if it's nopp, so we'll emit it
+        // ourselves.
         if function.return_size() == 0 {
             self.emit_instruction(Instruction::Return);
         }
-
-        self.emit_debug_info(DebugKeyword::StackA);
     }
 
     fn emit_variable_assignment(&mut self, variable: &BoundVariableAssignment) {
@@ -107,7 +102,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             } => {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
-                    self.store(0, *return_offset);
+                    self.store(0, -1);
                 }
                 self.emit_instruction(Instruction::Return);
             }
@@ -441,22 +436,19 @@ impl<'a, 'b> Emitter<'a, 'b> {
         identifier: usize,
         return_type_size: usize,
     ) {
-        // Allocate extra space on the stack for the return value.
-        self.emit_int(return_type_size as i32);
-
-        // Emit arguments.
+        let arg_offset = arguments_size + Scope::ACTIVATION_RECORD_SIZE;
+        // Allocate extra space on the stack for the return value and emit arguments.
+        self.emit_int((return_type_size + Scope::ACTIVATION_RECORD_SIZE) as i32);
         for argument in arguments {
             self.emit_expression(argument);
         }
+        self.emit_int(-(arg_offset as i32));
 
         // Call the function.
         self.emit_call(
             level,
             Address::Label(Self::create_function_label(identifier)),
         );
-
-        // Pop the arguments.
-        self.emit_int(-(arguments_size as i32));
     }
 
     /// # Summary
