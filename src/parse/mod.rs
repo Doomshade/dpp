@@ -11,7 +11,10 @@ use crate::parse::analysis::{
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
-use crate::parse::parser::{Block, DataType, Expression, Function, NumberType, Variable};
+use crate::parse::parser::DataType::P;
+use crate::parse::parser::{
+    BinaryOperator, Block, DataType, Expression, Function, NumberType, Variable,
+};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -443,31 +446,84 @@ impl Optimizer {
                 let opt_lhs = self.optimize_expression(*lhs);
                 let opt_rhs = self.optimize_expression(*rhs);
 
-                let exclude_lhs = match &opt_lhs {
-                    BoundExpression::Number { value, number_type } => *value == 0,
-                    _ => false,
-                };
+                match &op {
+                    BinaryOperator::Add | BinaryOperator::Subtract => {
+                        // Adding/subtracting 0 makes no sense.
+                        let lhs_zero = match &opt_lhs {
+                            BoundExpression::Number { value, number_type } => *value == 0,
+                            _ => false,
+                        };
 
-                let exclude_rhs = match &opt_rhs {
-                    BoundExpression::Number { value, number_type } => *value == 0,
-                    _ => false,
-                };
-
-                if exclude_lhs && exclude_rhs {
-                    BoundExpression::Number {
-                        value: 0,
-                        number_type: NumberType::Pp,
+                        let rhs_zero = match &opt_rhs {
+                            BoundExpression::Number { value, number_type } => *value == 0,
+                            _ => false,
+                        };
+                        if rhs_zero {
+                            opt_lhs
+                        } else if lhs_zero {
+                            opt_rhs
+                        } else {
+                            BoundExpression::Binary {
+                                lhs: Box::new(opt_lhs),
+                                op,
+                                rhs: Box::new(opt_rhs),
+                            }
+                        }
                     }
-                } else if !exclude_lhs && !exclude_rhs {
-                    BoundExpression::Binary {
+                    BinaryOperator::And => {
+                        // Any false value -> both are false.
+                        let lhs = match &opt_lhs {
+                            BoundExpression::Booba(value) => Some(*value),
+                            _ => None,
+                        };
+
+                        let rhs = match &opt_rhs {
+                            BoundExpression::Booba(value) => Some(*value),
+                            _ => None,
+                        };
+
+                        if let Some(lhs) = lhs {
+                            if let Some(rhs) = rhs {
+                                if !lhs || !rhs {
+                                    return BoundExpression::Booba(false);
+                                } else if lhs && rhs {
+                                    return BoundExpression::Booba(true);
+                                }
+                            }
+                        }
+
+                        BoundExpression::Binary {
+                            lhs: Box::new(opt_lhs),
+                            op,
+                            rhs: Box::new(opt_rhs),
+                        }
+                    }
+                    BinaryOperator::Or => {
+                        // Any false value -> both are false.
+                        let lhs_true = match &opt_lhs {
+                            BoundExpression::Booba(value) => *value == true,
+                            _ => false,
+                        };
+
+                        let rhs_true = match &opt_rhs {
+                            BoundExpression::Booba(value) => *value == true,
+                            _ => false,
+                        };
+                        if lhs_true || rhs_true {
+                            BoundExpression::Booba(true)
+                        } else {
+                            BoundExpression::Binary {
+                                lhs: Box::new(opt_lhs),
+                                op,
+                                rhs: Box::new(opt_rhs),
+                            }
+                        }
+                    }
+                    _ => BoundExpression::Binary {
                         lhs: Box::new(opt_lhs),
                         op,
                         rhs: Box::new(opt_rhs),
-                    }
-                } else if exclude_rhs {
-                    opt_lhs
-                } else {
-                    opt_rhs
+                    },
                 }
             }
             _ => expression,
@@ -2201,10 +2257,8 @@ pub mod compiler {
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                dbg!(&bound_translation_unit);
                 let optimizer = Optimizer;
                 let optimized_translation_unit = optimizer.optimize(bound_translation_unit);
-                dbg!(&optimized_translation_unit);
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
             }

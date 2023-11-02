@@ -708,6 +708,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             },
             Expression::Identifier { identifier, .. } => {
                 let (level, var_decl) = self.symbol_table().variable(*identifier);
+                // TODO: Check if the variable exists.
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();
                 BoundExpression::Variable(BoundVariablePosition::new(level as usize, offset as i32))

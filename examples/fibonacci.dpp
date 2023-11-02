@@ -1,3 +1,6 @@
+pp -> asd = 4 + 69 * 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0;
+booba -> ok = yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem;
+
 FUNc fibonacci_rec(pp -> num) -> pp {
     if (num < 2) {
         bye num;
