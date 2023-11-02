@@ -428,7 +428,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 expression, cases, ..
             } => {
                 let expression = self.analyze_expr(expression, None, None);
-                dbg!(&cases);
                 return if let Some(switch_data_type) = expression.0 {
                     BoundStatement::Switch {
                         expression: expression.1,

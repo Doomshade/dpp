@@ -116,11 +116,11 @@ const A_ABSOLUTE_ADDRESSING: bool = true;
 
 fn run() {
     // TODO: Make these configurable.
-    const L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES: bool = true;
-    const I_INTERPRET_CODE: bool = false || compiler::DEBUG;
-    const T_DEBUG_RUN_INSTRUCTIONS: bool = true || compiler::DEBUG;
-    const S_DEBUG_STORE_INSTRUCTIONS: bool = false || compiler::DEBUG;
-    const D_PRINT_DEBUG_INFO: bool = false || compiler::DEBUG;
+    const L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES: bool = false;
+    const I_INTERPRET_CODE: bool = true;
+    const T_DEBUG_RUN_INSTRUCTIONS: bool = false;
+    const S_DEBUG_STORE_INSTRUCTIONS: bool = false;
+    const D_PRINT_DEBUG_INFO: bool = true;
     const OUTPUT: &'static str = "out/dpp/test.pl0";
     const PL0_INTERPRET_PATH: &'static str = "resources/pl0_interpret/bin/refint_pl0_ext.exe";
     let args: Vec<String> = env::args().collect();

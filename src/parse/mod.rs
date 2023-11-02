@@ -515,27 +515,25 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     writer.write_all(format!("{pc} INT 0 {size}\r\n").as_bytes())?;
                 }
                 Instruction::Dbg { debug_keyword } => {
-                    if compiler::DEBUG {
-                        pc -= 1;
-                        match debug_keyword {
-                            DebugKeyword::Registers => {
-                                writer.write_all(b"&REGS\r\n")?;
-                            }
-                            DebugKeyword::Stack => {
-                                writer.write_all(b"&STK\r\n")?;
-                            }
-                            DebugKeyword::StackA => {
-                                writer.write_all(b"&STKA\r\n")?;
-                            }
-                            DebugKeyword::StackRg { start, end } => {
-                                writer.write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
-                            }
-                            DebugKeyword::StackN { amount } => {
-                                writer.write_all(format!("&STKN {amount}\r\n").as_bytes())?;
-                            }
-                            DebugKeyword::Echo { message } => {
-                                writer.write_all(format!("&ECHO {message}\r\n").as_bytes())?;
-                            }
+                    pc -= 1;
+                    match debug_keyword {
+                        DebugKeyword::Registers => {
+                            writer.write_all(b"&REGS\r\n")?;
+                        }
+                        DebugKeyword::Stack => {
+                            writer.write_all(b"&STK\r\n")?;
+                        }
+                        DebugKeyword::StackA => {
+                            writer.write_all(b"&STKA\r\n")?;
+                        }
+                        DebugKeyword::StackRg { start, end } => {
+                            writer.write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+                        }
+                        DebugKeyword::StackN { amount } => {
+                            writer.write_all(format!("&STKN {amount}\r\n").as_bytes())?;
+                        }
+                        DebugKeyword::Echo { message } => {
+                            writer.write_all(format!("&ECHO {message}\r\n").as_bytes())?;
                         }
                     }
                 }
@@ -620,9 +618,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     fn emit_debug_info(&mut self, debug_keyword: DebugKeyword) {
-        if compiler::DEBUG {
-            self.emit_instruction(Instruction::Dbg { debug_keyword });
-        }
+        self.emit_instruction(Instruction::Dbg { debug_keyword });
     }
 
     fn emit_call(&mut self, level: usize, address: Address) {
@@ -2126,8 +2122,6 @@ pub mod compiler {
     use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Optimizer, Parser, SemanticAnalyzer};
 
     pub struct DppCompiler;
-
-    pub const DEBUG: bool = false;
 
     impl DppCompiler {
         fn parse_args(bools: &[bool], params: &[&str]) -> Vec<String> {
