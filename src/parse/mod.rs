@@ -4,11 +4,14 @@ use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{BoundTranslationUnit, BoundVariablePosition, SymbolTable};
+use crate::parse::analysis::{
+    BoundExpression, BoundTranslationUnit, BoundVariableAssignment, BoundVariablePosition,
+    SymbolTable,
+};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
-use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
+use crate::parse::parser::{Block, DataType, Expression, Function, NumberType, Variable};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -66,6 +69,9 @@ pub struct SemanticAnalyzer<'a, 'b> {
     loop_stack: usize,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
+
+#[derive(Debug)]
+pub struct Optimizer;
 
 #[derive(Debug)]
 pub struct Emitter<'a, 'b> {
@@ -410,6 +416,62 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn end_function(&mut self) {
         self.symbol_table_mut().pop_scope();
+    }
+}
+
+impl Optimizer {
+    pub fn optimize(self, mut translation_unit: BoundTranslationUnit) -> BoundTranslationUnit {
+        translation_unit.global_variable_assignments = translation_unit
+            .global_variable_assignments
+            .into_iter()
+            .map(|assignment| self.optimize_assignment(assignment))
+            .collect::<Vec<BoundVariableAssignment>>();
+        translation_unit
+    }
+
+    fn optimize_assignment(
+        &self,
+        mut assignment: BoundVariableAssignment,
+    ) -> BoundVariableAssignment {
+        assignment.value = self.optimize_expression(assignment.value);
+        assignment
+    }
+
+    fn optimize_expression(&self, mut expression: BoundExpression) -> BoundExpression {
+        match expression {
+            BoundExpression::Binary { lhs, rhs, op } => {
+                let opt_lhs = self.optimize_expression(*lhs);
+                let opt_rhs = self.optimize_expression(*rhs);
+
+                let exclude_lhs = match &opt_lhs {
+                    BoundExpression::Number { value, number_type } => *value == 0,
+                    _ => false,
+                };
+
+                let exclude_rhs = match &opt_rhs {
+                    BoundExpression::Number { value, number_type } => *value == 0,
+                    _ => false,
+                };
+
+                if exclude_lhs && exclude_rhs {
+                    BoundExpression::Number {
+                        value: 0,
+                        number_type: NumberType::Pp,
+                    }
+                } else if !exclude_lhs && !exclude_rhs {
+                    BoundExpression::Binary {
+                        lhs: Box::new(opt_lhs),
+                        op,
+                        rhs: Box::new(opt_rhs),
+                    }
+                } else if exclude_rhs {
+                    opt_lhs
+                } else {
+                    opt_rhs
+                }
+            }
+            _ => expression,
+        }
     }
 }
 
@@ -1391,7 +1453,7 @@ mod analysis {
         functions: Vec<BoundFunction>,
         main_function_identifier: usize,
         global_stack_frame_size: usize,
-        global_variable_assignments: Vec<BoundVariableAssignment>,
+        pub global_variable_assignments: Vec<BoundVariableAssignment>,
     }
 
     #[derive(Clone, Debug)]
@@ -1406,8 +1468,8 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct BoundVariableAssignment {
-        position: BoundVariablePosition,
-        value: BoundExpression,
+        pub position: BoundVariablePosition,
+        pub value: BoundExpression,
     }
 
     #[derive(Clone, Debug)]
@@ -1881,6 +1943,7 @@ mod analysis {
         pub fn global_variable_assignments(&self) -> &Vec<BoundVariableAssignment> {
             &self.global_variable_assignments
         }
+
         pub fn main_function_identifier(&self) -> usize {
             self.main_function_identifier
         }
@@ -1965,6 +2028,8 @@ mod analysis {
         }
     }
 }
+
+mod optimizer {}
 
 mod emitter {
     use std::fmt;
@@ -2088,7 +2153,7 @@ pub mod compiler {
     use crate::parse::error_diagnosis::SyntaxError;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
-    use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Parser, SemanticAnalyzer};
+    use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Optimizer, Parser, SemanticAnalyzer};
 
     pub struct DppCompiler;
 
@@ -2136,7 +2201,11 @@ pub mod compiler {
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                Self::emit(output_file, bound_translation_unit, &error_diag)?;
+                dbg!(&bound_translation_unit);
+                let optimizer = Optimizer;
+                let optimized_translation_unit = optimizer.optimize(bound_translation_unit);
+                dbg!(&optimized_translation_unit);
+                Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
             }
             let duration = start.elapsed();
