@@ -111,8 +111,8 @@ impl Error for ArgsError {}
 
 const STACK_SIZE: usize = 16 * 1024 * 1024;
 
-/// This will always be false as we are using labels.
-const A_ABSOLUTE_ADDRESSING: bool = false;
+/// This will always be false as we are emitting absolute addresses.
+const A_ABSOLUTE_ADDRESSING: bool = true;
 
 fn run() {
     // TODO: Make these configurable.

@@ -456,39 +456,46 @@ impl<'a, 'b> Emitter<'a, 'b> {
         translation_unit: BoundTranslationUnit,
     ) -> io::Result<()> {
         self.emit_translation_unit(&translation_unit);
+
+        let mut pc = 0;
         for instruction in &self.code {
             match instruction {
                 Instruction::Load { level, offset } => {
-                    writer.write_all(format!("LOD {level} {offset}\r\n").as_bytes())?;
+                    writer.write_all(format!("{pc} LOD {level} {offset}\r\n").as_bytes())?;
                 }
                 Instruction::Store { level, offset } => {
-                    writer.write_all(format!("STO {level} {offset}\r\n").as_bytes())?;
+                    writer.write_all(format!("{pc} STO {level} {offset}\r\n").as_bytes())?;
                 }
                 Instruction::Literal { value } => {
-                    writer.write_all(format!("LIT 0 {value}\r\n").as_bytes())?;
+                    writer.write_all(format!("{pc} LIT 0 {value}\r\n").as_bytes())?;
                 }
                 Instruction::Jump { address } => {
-                    writer.write_all(format!("JMP 0 {}\r\n", self.resolve(address)).as_bytes())?;
+                    writer.write_all(
+                        format!("{pc} JMP 0 {}\r\n", self.resolve(address)).as_bytes(),
+                    )?;
                 }
                 Instruction::Jmc { address } => {
-                    writer.write_all(format!("JMC 0 {}\r\n", self.resolve(address)).as_bytes())?;
+                    writer.write_all(
+                        format!("{pc} JMC 0 {}\r\n", self.resolve(address)).as_bytes(),
+                    )?;
                 }
                 Instruction::Call { level, address } => {
                     writer.write_all(
-                        format!("CAL {level} {}\r\n", self.resolve(address)).as_bytes(),
+                        format!("{pc} CAL {level} {}\r\n", self.resolve(address)).as_bytes(),
                     )?;
                 }
                 Instruction::Operation { operation } => {
-                    writer.write_all(format!("OPR 0 {}\r\n", *operation as u32).as_bytes())?;
+                    writer.write_all(format!("{pc} OPR 0 {}\r\n", *operation as u32).as_bytes())?;
                 }
                 Instruction::Return => {
-                    writer.write_all(b"RET 0 0\r\n")?;
+                    writer.write_all(format!("{pc} RET 0 0\r\n").as_bytes())?;
                 }
                 Instruction::Int { size } => {
-                    writer.write_all(format!("INT 0 {size}\r\n").as_bytes())?;
+                    writer.write_all(format!("{pc} INT 0 {size}\r\n").as_bytes())?;
                 }
                 Instruction::Dbg { debug_keyword } => {
                     if compiler::DEBUG {
+                        pc -= 1;
                         match debug_keyword {
                             DebugKeyword::Registers => {
                                 writer.write_all(b"&REGS\r\n")?;
@@ -511,10 +518,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
                         }
                     }
                 }
-                Instruction::Label(label) => {
-                    writer.write_all(format!("\n@{label} ").as_bytes())?;
-                }
             }
+            pc += 1;
         }
         Ok(())
     }
@@ -2009,7 +2014,6 @@ mod emitter {
         Dbg {
             debug_keyword: DebugKeyword,
         },
-        Label(String),
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -2174,9 +2178,7 @@ pub mod compiler {
                         });
                 }
 
-                if DEBUG {
-                    println!("{stdout}");
-                }
+                println!("{stdout}");
 
                 if !stderr.is_empty() {
                     eprintln!("ERROR: {stderr}");
