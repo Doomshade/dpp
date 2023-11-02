@@ -456,7 +456,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
         translation_unit: BoundTranslationUnit,
     ) -> io::Result<()> {
         self.emit_translation_unit(&translation_unit);
-        dbg!(&self.code);
         for instruction in &self.code {
             match instruction {
                 Instruction::Load { level, offset } => {
@@ -2089,7 +2088,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
-    pub const DEBUG: bool = true;
+    pub const DEBUG: bool = false;
 
     impl DppCompiler {
         fn parse_args(bools: &[bool], params: &[&str]) -> Vec<String> {

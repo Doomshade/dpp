@@ -259,22 +259,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 use BinaryOperator as BinOp;
                 use OperationType as Op;
                 self.emit_expression(lhs);
-                let after_expr_label;
-                let short_circuit_label;
-                match op {
-                    BinOp::And | BinOp::Or => {
-                        short_circuit_label = Some(self.create_control_label());
-                        after_expr_label = Some(self.create_control_label());
-                        self.emit_binary_boolean_expression(
-                            op,
-                            short_circuit_label.clone().unwrap().as_str(),
-                        );
-                    }
-                    _ => {
-                        after_expr_label = None;
-                        short_circuit_label = None;
-                    }
-                }
                 self.emit_expression(rhs);
                 match op {
                     BinOp::Add => self.emit_operation(Op::Add),
@@ -287,48 +271,21 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     BinOp::GreaterThanOrEqual => self.emit_operation(Op::GreaterThanOrEqualTo),
                     BinOp::Divide => self.emit_operation(Op::Divide),
                     BinOp::LessThan => self.emit_operation(Op::LessThan),
-                    BinOp::And | BinOp::Or => {
-                        self.emit_binary_boolean_expression(
-                            op,
-                            short_circuit_label.clone().unwrap().as_str(),
-                        );
+                    BinOp::And => {
+                        self.emit_operation(Op::Multiply);
+
+                        // Clamp the boolean expression.
+                        self.emit_literal(0);
+                        self.emit_operation(Op::NotEqual);
+                    }
+                    BinOp::Or => {
+                        self.emit_operation(Op::Add);
+
+                        // Clamp the boolean expression.
+                        self.emit_literal(0);
+                        self.emit_operation(Op::NotEqual);
                     }
                 };
-
-                // If we reached at the end of the expression we DID not short-circuit (see below).
-                // If we don't short-circuit AND it means the value is true.
-                // If we don't short-circuit OR it means the value is false.
-                if after_expr_label.is_some() {
-                    match op {
-                        BinaryOperator::And => self.emit_booba(true),
-                        BinaryOperator::Or => self.emit_booba(false),
-                        _ => {}
-                    };
-
-                    // Jump to the END of the expression because below this is the short
-                    // circuiting code.
-                    self.emit_jump(Address::Label(after_expr_label.clone().unwrap()));
-                }
-
-                // If we short-circuit the boolean expression we need to emit the value of the
-                // expression. For AND short-circuiting it means we found a false value. For OR it
-                // means we found a true value.
-                //
-                // If we short-circuit AND it means the value is false.
-                // If we short-circuit OR it means the value is true.
-                if let Some(label) = short_circuit_label {
-                    self.emit_label(label);
-                    match op {
-                        BinaryOperator::And => self.emit_booba(false),
-                        BinaryOperator::Or => self.emit_booba(true),
-                        _ => {}
-                    };
-                }
-
-                // We jump here if the expression is not short-circuited.
-                if let Some(label) = after_expr_label {
-                    self.emit_label(label);
-                }
             }
             BoundExpression::Variable { 0: position, .. } => {
                 self.load_variable(position);
@@ -373,52 +330,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     /// # Summary
-    /// Emits the binary boolean expression. If the expression on top of stack is false and the
-    /// operator is AND or if it's true and the operator is OR we jump to the short circuit label.
-    ///
-    /// # Arguments
-    ///
-    /// * `binop`: the binary operator -- can either be AND or OR
-    /// * `short_circuit_label`: the short circuit label
-    fn emit_binary_boolean_expression(
-        &mut self,
-        binop: &BinaryOperator,
-        short_circuit_label: &str,
-    ) {
-        match binop {
-            BinaryOperator::And => {
-                // Compare the value to true.
-                self.emit_booba(true);
-                self.emit_operation(OperationType::Equal);
-
-                // Need to create a value for JMC instruction for AND.
-                self.emit_booba(true);
-                self.emit_operation(OperationType::Equal);
-
-                // If the value is FALSE stop executing the rest of the expression.
-                self.emit_instruction(Instruction::Jmc {
-                    address: Address::Label(short_circuit_label.to_string()),
-                });
-            }
-            BinaryOperator::Or => {
-                // Compare the value to true.
-                self.emit_booba(true);
-                self.emit_operation(OperationType::Equal);
-
-                // Need to create a value for JMC instruction for OR.
-                self.emit_booba(true);
-                self.emit_operation(OperationType::NotEqual);
-
-                // If the value is TRUE stop executing the rest of the expression.
-                self.emit_jmc(Address::Label(short_circuit_label.to_string()));
-            }
-            _ => {
-                unreachable!();
-            }
-        }
-    }
-
-    /// # Summary
     /// Emits a function call. This will reserve space on the stack for the return value and
     /// store the arguments on the stack. Afterwards, the function is called. The called function
     /// then stores the result value (if any) in the reserved space. Lastly, the arguments are
@@ -436,13 +347,21 @@ impl<'a, 'b> Emitter<'a, 'b> {
         identifier: usize,
         return_type_size: usize,
     ) {
-        let arg_offset = arguments_size + Scope::ACTIVATION_RECORD_SIZE;
-        // Allocate extra space on the stack for the return value and emit arguments.
-        self.emit_int((return_type_size + Scope::ACTIVATION_RECORD_SIZE) as i32);
-        for argument in arguments {
-            self.emit_expression(argument);
+        // With no arguments make space for the return type size only.
+        // With arguments: Increment the SP by activation record size and return type size. Emit
+        // the arguments there - after CAL 1 X the arguments will be the first variables after
+        // the activation record. Afterwards decrement the SP to right after the return type size.
+        if arguments_size == 0 {
+            if return_type_size != 0 {
+                self.emit_int(return_type_size as i32);
+            }
+        } else {
+            self.emit_int((return_type_size + Scope::ACTIVATION_RECORD_SIZE) as i32);
+            for argument in arguments {
+                self.emit_expression(argument);
+            }
+            self.emit_int(-((arguments_size + Scope::ACTIVATION_RECORD_SIZE) as i32));
         }
-        self.emit_int(-(arg_offset as i32));
 
         // Call the function.
         self.emit_call(

@@ -5,7 +5,7 @@ FUNc fibonacci_rec(pp -> num) -> pp {
     bye fibonacci_rec(num - 1) + fibonacci_rec(num - 2);
 }
 
-FUNc fibonacci(pp -> num, pp-> ok) -> pp {
+FUNc fibonacci(pp -> num) -> pp {
     pp -> a = 0;
     pp -> b = 1;
     pp -> c = 1;
@@ -18,7 +18,7 @@ FUNc fibonacci(pp -> num, pp-> ok) -> pp {
 }
 
 FUNc main() -> pp {
-    bye fibonacci(10, 69) + fibonacci_rec(10);
+    bye fibonacci(10) + fibonacci_rec(10);
 }
 
 FUNc fibonacci_rec2(pp -> num) -> pp {
