@@ -87,7 +87,6 @@
     rust_2018_idioms
 )]
 
-use crate::parse::compiler;
 use std::env;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -111,17 +110,17 @@ impl Error for ArgsError {}
 
 const STACK_SIZE: usize = 16 * 1024 * 1024;
 
-/// This will always be false as we are emitting absolute addresses.
+/// This will always be true as we are emitting absolute addresses.
 const A_ABSOLUTE_ADDRESSING: bool = true;
+/// We create a .pl0 file that has all the instructions in it instead.
+const L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES: bool = false;
 
 fn run() {
     // TODO: Make these configurable.
-    const L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES: bool = false;
     const I_INTERPRET_CODE: bool = true;
     const T_DEBUG_RUN_INSTRUCTIONS: bool = false;
     const S_DEBUG_STORE_INSTRUCTIONS: bool = false;
     const D_PRINT_DEBUG_INFO: bool = true;
-    const OUTPUT: &'static str = "out/dpp/test.pl0";
     const PL0_INTERPRET_PATH: &'static str = "resources/pl0_interpret/bin/refint_pl0_ext.exe";
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -131,6 +130,16 @@ fn run() {
     }
 
     let file_path = &args[1];
+    let file_name_with_ext = match file_path.rsplit_once('/') {
+        Some((_, b)) => b,
+        None => file_path,
+    };
+
+    let file_name = match file_name_with_ext.rsplit_once('.') {
+        Some((a, _)) => a,
+        None => file_name_with_ext,
+    };
+    let output = format!("out/dpp/{file_name}.pl0");
     match DppCompiler::compile_translation_unit(
         A_ABSOLUTE_ADDRESSING,
         L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES,
@@ -139,10 +148,10 @@ fn run() {
         S_DEBUG_STORE_INSTRUCTIONS,
         D_PRINT_DEBUG_INFO,
         file_path,
-        OUTPUT,
+        output.as_str(),
         PL0_INTERPRET_PATH,
     ) {
-        Ok(_) => println!("{file_path} compiled successfully into {OUTPUT}"),
+        Ok(_) => println!("{file_path} compiled successfully into {output}"),
         Err(err) => eprintln!("{:?}", err),
     }
 }
