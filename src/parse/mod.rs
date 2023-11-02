@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::io::Write;
 use std::{cell, collections, fs, io, rc};
 
@@ -11,15 +11,13 @@ use crate::parse::analysis::{
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
-use crate::parse::parser::DataType::P;
-use crate::parse::parser::{
-    BinaryOperator, Block, DataType, Expression, Function, NumberType, Variable,
-};
+use crate::parse::parser::{BinaryOperator, Block, DataType, Expression, Function, Variable};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
 pub mod error_diagnosis_impl;
 pub mod lexer_impl;
+pub mod optimizer_impl;
 pub mod parser_impl;
 
 #[derive(Debug)]
@@ -70,11 +68,15 @@ pub struct SemanticAnalyzer<'a, 'b> {
     symbol_table: SymbolTable<'a>,
     /// The current loop stack. Used to determine whether "break" or "continue" are out of place.
     loop_stack: usize,
+    assignment_count: collections::HashMap<BoundVariablePosition, usize>,
+    referenced_variables: collections::HashSet<BoundVariablePosition>,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 #[derive(Debug)]
-pub struct Optimizer;
+pub struct Optimizer {
+    referenced_variables: collections::HashSet<BoundVariablePosition>,
+}
 
 #[derive(Debug)]
 pub struct Emitter<'a, 'b> {
@@ -362,6 +364,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             symbol_table: SymbolTable::new(),
             error_diag,
             loop_stack: 0,
+            assignment_count: collections::HashMap::new(),
+            referenced_variables: HashSet::new(),
         }
     }
 
@@ -406,6 +410,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
     }
 
+    fn increment_assignment_at(&mut self, position: BoundVariablePosition) {
+        let value = self.assignment_count.get(&position).unwrap_or(&0);
+        self.assignment_count.insert(position, value + 1);
+    }
+
     fn begin_function(&mut self, function: &Function<'a>) {
         self.loop_stack = 0;
         let ref_mut = self.symbol_table_mut();
@@ -423,111 +432,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 }
 
 impl Optimizer {
-    pub fn optimize(self, mut translation_unit: BoundTranslationUnit) -> BoundTranslationUnit {
-        translation_unit.global_variable_assignments = translation_unit
-            .global_variable_assignments
-            .into_iter()
-            .map(|assignment| self.optimize_assignment(assignment))
-            .collect::<Vec<BoundVariableAssignment>>();
-        translation_unit
-    }
-
-    fn optimize_assignment(
-        &self,
-        mut assignment: BoundVariableAssignment,
-    ) -> BoundVariableAssignment {
-        assignment.value = self.optimize_expression(assignment.value);
-        assignment
-    }
-
-    fn optimize_expression(&self, mut expression: BoundExpression) -> BoundExpression {
-        match expression {
-            BoundExpression::Binary { lhs, rhs, op } => {
-                let opt_lhs = self.optimize_expression(*lhs);
-                let opt_rhs = self.optimize_expression(*rhs);
-
-                match &op {
-                    BinaryOperator::Add | BinaryOperator::Subtract => {
-                        // Adding/subtracting 0 makes no sense.
-                        let lhs_zero = match &opt_lhs {
-                            BoundExpression::Number { value, number_type } => *value == 0,
-                            _ => false,
-                        };
-
-                        let rhs_zero = match &opt_rhs {
-                            BoundExpression::Number { value, number_type } => *value == 0,
-                            _ => false,
-                        };
-                        if rhs_zero {
-                            opt_lhs
-                        } else if lhs_zero {
-                            opt_rhs
-                        } else {
-                            BoundExpression::Binary {
-                                lhs: Box::new(opt_lhs),
-                                op,
-                                rhs: Box::new(opt_rhs),
-                            }
-                        }
-                    }
-                    BinaryOperator::And => {
-                        // Any false value -> both are false.
-                        let lhs = match &opt_lhs {
-                            BoundExpression::Booba(value) => Some(*value),
-                            _ => None,
-                        };
-
-                        let rhs = match &opt_rhs {
-                            BoundExpression::Booba(value) => Some(*value),
-                            _ => None,
-                        };
-
-                        if let Some(lhs) = lhs {
-                            if let Some(rhs) = rhs {
-                                if !lhs || !rhs {
-                                    return BoundExpression::Booba(false);
-                                } else if lhs && rhs {
-                                    return BoundExpression::Booba(true);
-                                }
-                            }
-                        }
-
-                        BoundExpression::Binary {
-                            lhs: Box::new(opt_lhs),
-                            op,
-                            rhs: Box::new(opt_rhs),
-                        }
-                    }
-                    BinaryOperator::Or => {
-                        // Any false value -> both are false.
-                        let lhs_true = match &opt_lhs {
-                            BoundExpression::Booba(value) => *value == true,
-                            _ => false,
-                        };
-
-                        let rhs_true = match &opt_rhs {
-                            BoundExpression::Booba(value) => *value == true,
-                            _ => false,
-                        };
-                        if lhs_true || rhs_true {
-                            BoundExpression::Booba(true)
-                        } else {
-                            BoundExpression::Binary {
-                                lhs: Box::new(opt_lhs),
-                                op,
-                                rhs: Box::new(opt_rhs),
-                            }
-                        }
-                    }
-                    _ => BoundExpression::Binary {
-                        lhs: Box::new(opt_lhs),
-                        op,
-                        rhs: Box::new(opt_rhs),
-                    },
-                }
-            }
-            _ => expression,
-        }
+    pub fn optimize(self, translation_unit: BoundTranslationUnit) -> BoundTranslationUnit {
+        self.optimize_translation_unit(translation_unit)
     }
 }
 
@@ -536,7 +442,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         Self {
             error_diag,
             code: Vec::with_capacity(200),
-            labels: HashMap::new(),
+            labels: collections::HashMap::new(),
             pc: 0,
             control_statement_count: 0,
         }
@@ -1506,7 +1412,7 @@ mod analysis {
 
     #[derive(Clone, Debug)]
     pub struct BoundTranslationUnit {
-        functions: Vec<BoundFunction>,
+        pub functions: Vec<BoundFunction>,
         main_function_identifier: usize,
         global_stack_frame_size: usize,
         pub global_variable_assignments: Vec<BoundVariableAssignment>,
@@ -1519,7 +1425,7 @@ mod analysis {
         stack_frame_size: usize,
         return_size: usize,
         parameters: Vec<BoundVariablePosition>,
-        statements: Vec<BoundStatement>,
+        pub statements: Vec<BoundStatement>,
     }
 
     #[derive(Clone, Debug)]
@@ -1556,7 +1462,7 @@ mod analysis {
         },
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Eq, PartialEq, Hash, Clone, Debug)]
     pub struct BoundVariablePosition {
         level: usize,
         offset: i32,
@@ -2202,6 +2108,7 @@ mod emitter {
 }
 
 pub mod compiler {
+    use std::collections::HashSet;
     use std::io::Write;
     use std::{cell, error, fs, io, process, rc, time};
 
@@ -2257,7 +2164,9 @@ pub mod compiler {
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                let optimizer = Optimizer;
+                let optimizer = Optimizer {
+                    referenced_variables: HashSet::new(),
+                };
                 let optimized_translation_unit = optimizer.optimize(bound_translation_unit);
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;

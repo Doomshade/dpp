@@ -207,8 +207,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let (level, var_decl) = self.symbol_table().variable(variable.identifier());
                     let var_decl = var_decl.unwrap();
                     let offset = var_decl.stack_position();
+                    let position = BoundVariablePosition::new(level, offset as i32);
+                    self.increment_assignment_at(position.clone());
                     return Some(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(level, offset as i32),
+                        position,
                         self.analyze_expr(
                             expression,
                             Some(variable.data_type()),
@@ -248,14 +250,19 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .set_variable_initialized(variable.identifier());
                     let (level, var_decl) = self.symbol_table().variable(variable.identifier());
                     let var_decl = var_decl.unwrap();
-                    return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(level, var_decl.stack_position() as i32),
-                        self.analyze_expr(
+                    let position =
+                        BoundVariablePosition::new(level, var_decl.stack_position() as i32);
+                    let value = self
+                        .analyze_expr(
                             expression,
                             Some(variable.data_type()),
                             Some(variable.position()),
                         )
-                        .1,
+                        .1;
+
+                    self.increment_assignment_at(position.clone());
+                    return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
+                        position, value,
                     ));
                 }
                 BoundStatement::Empty
@@ -343,14 +350,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         )
                         .unwrap();
 
-                    let expression = self.analyze_expr(expression, None, None);
-                    self.check_data_type(
-                        function_descriptor.return_type(),
-                        expression.0.as_ref(),
-                        *position,
-                    );
-
+                    let return_type = function_descriptor.return_type();
                     let parameters_size = function_descriptor.parameters_size();
+                    let expression = self.analyze_expr(expression, None, None);
+                    self.check_data_type(return_type, expression.0.as_ref(), *position);
+
                     let return_type_size = expression.0.unwrap().size_in_instructions();
                     return BoundStatement::Bye {
                         return_offset: -(return_type_size as i32) - parameters_size as i32,
@@ -405,8 +409,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                     let offset = variable.stack_position();
                     self.symbol_table_mut().set_variable_initialized(identifier);
+
+                    let position = BoundVariablePosition::new(level, offset as i32);
+                    self.increment_assignment_at(position.clone());
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        BoundVariablePosition::new(level, offset as i32),
+                        position,
                         expression.1,
                     ))
                 } else {
@@ -711,7 +718,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // TODO: Check if the variable exists.
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();
-                BoundExpression::Variable(BoundVariablePosition::new(level as usize, offset as i32))
+                let position = BoundVariablePosition::new(level, offset as i32);
+
+                BoundExpression::Variable(position)
             }
             Expression::FunctionCall {
                 identifier,
