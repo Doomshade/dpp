@@ -75,6 +75,7 @@ pub struct SemanticAnalyzer<'a, 'b> {
 
 #[derive(Debug)]
 pub struct Optimizer {
+    optimizations: Vec<String>,
     referenced_variables: collections::HashSet<BoundVariablePosition>,
 }
 
@@ -432,7 +433,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 }
 
 impl Optimizer {
-    pub fn optimize(self, translation_unit: BoundTranslationUnit) -> BoundTranslationUnit {
+    pub fn optimize(&mut self, translation_unit: BoundTranslationUnit) -> BoundTranslationUnit {
         self.optimize_translation_unit(translation_unit)
     }
 }
@@ -1081,7 +1082,7 @@ mod parser {
         },
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub enum BinaryOperator {
         Add,
         And,
@@ -1097,7 +1098,7 @@ mod parser {
         LessThanOrEqual,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub enum UnaryOperator {
         Not,
         Negate,
@@ -1428,13 +1429,13 @@ mod analysis {
         pub statements: Vec<BoundStatement>,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct BoundVariableAssignment {
         pub position: BoundVariablePosition,
         pub value: BoundExpression,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub enum BoundExpression {
         Number {
             number_type: NumberType,
@@ -1468,7 +1469,7 @@ mod analysis {
         offset: i32,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub enum BoundStatement {
         If {
             expression: BoundExpression,
@@ -1516,7 +1517,7 @@ mod analysis {
         Empty,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct BoundCase {
         expression: BoundExpression,
         statements: Vec<BoundStatement>,
@@ -2164,10 +2165,15 @@ pub mod compiler {
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                let optimizer = Optimizer {
+                let mut optimizer = Optimizer {
+                    optimizations: Vec::new(),
                     referenced_variables: HashSet::new(),
                 };
                 let optimized_translation_unit = optimizer.optimize(bound_translation_unit);
+                fs::write(
+                    "out/dpp/optimizations.txt",
+                    optimizer.optimizations.join("\n"),
+                )?;
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
             }

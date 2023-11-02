@@ -117,8 +117,10 @@ FUNc fibonacci5(pp -> num) -> pp {
 }
 
 FUNc main5() -> pp {
-    if (nom) {
+    if (yem && yem && yem) {
         pp -> haha = 0 + 4 + 3;
+        pp -> hahaa = 0 + 4 + 3;
+        pp -> hahaaa = 0 + 4 + 3;
     }
     if (yem) {}
     if (yem) {}

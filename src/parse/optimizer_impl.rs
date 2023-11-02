@@ -3,10 +3,11 @@ use crate::parse::analysis::{
 };
 use crate::parse::parser::{BinaryOperator, NumberType};
 use crate::parse::Optimizer;
+use std::fmt::Write;
 
 impl Optimizer {
     pub fn optimize_translation_unit(
-        mut self,
+        &mut self,
         mut translation_unit: BoundTranslationUnit,
     ) -> BoundTranslationUnit {
         translation_unit.global_variable_assignments = translation_unit
@@ -32,22 +33,23 @@ impl Optimizer {
     }
 
     fn optimize_statement(&mut self, mut statement: BoundStatement) -> BoundStatement {
-        match statement {
+        let statement_str = format!("{statement:?}");
+        let optimized_statement = match statement {
             BoundStatement::If {
                 expression,
                 statement,
             } => {
                 let optimized_expression = self.optimize_expression(expression);
-                let optimized_statement = self.optimize_statement(*statement);
                 if let BoundExpression::Booba(value) = optimized_expression {
                     return if value {
-                        optimized_statement
+                        self.optimize_statement(*statement)
                     } else {
                         BoundStatement::Empty
                     };
                 }
+
                 BoundStatement::If {
-                    statement: Box::new(optimized_statement),
+                    statement: Box::new(self.optimize_statement(*statement)),
                     expression: optimized_expression,
                 }
             }
@@ -69,7 +71,15 @@ impl Optimizer {
                 }
             }
             _ => statement,
+        };
+        let optimized_statement_str = format!("{optimized_statement:?}");
+        if statement_str != optimized_statement_str {
+            self.optimizations.push(format!(
+                "[INFO] Optimized\n   {statement_str}\n-> {optimized_statement_str}"
+            ));
         }
+
+        optimized_statement
     }
 
     fn optimize_assignment(
@@ -81,7 +91,8 @@ impl Optimizer {
     }
 
     fn optimize_expression(&mut self, mut expression: BoundExpression) -> BoundExpression {
-        match expression {
+        let expression_str = format!("{expression:?}");
+        let optimized_expression = match expression {
             BoundExpression::Binary { lhs, rhs, op } => {
                 let opt_lhs = self.optimize_expression(*lhs);
                 let opt_rhs = self.optimize_expression(*rhs);
@@ -197,6 +208,14 @@ impl Optimizer {
                 BoundExpression::Variable(variable_position)
             }
             _ => expression,
+        };
+        let optimized_expression_str = format!("{optimized_expression:?}");
+        if expression_str != optimized_expression_str {
+            self.optimizations.push(format!(
+                "[INFO] Optimized\n   {expression_str}\n-> {optimized_expression_str}"
+            ));
         }
+
+        optimized_expression
     }
 }
