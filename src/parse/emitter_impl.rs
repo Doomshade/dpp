@@ -199,6 +199,26 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     self.emit_statement(statement, start_label.clone(), end_label.clone())
                 });
             }
+            BoundStatement::Switch { expression, cases } => {
+                let switch_end_label = self.create_control_label();
+                cases.iter().for_each(|case| {
+                    let end_case = self.create_control_label();
+
+                    // Compare the case statement with the expression.
+                    self.emit_expression(expression);
+                    self.emit_expression(case.expression());
+                    self.emit_operation(OperationType::Equal);
+
+                    // If it's not ok, jump to the next case which is after statement.
+                    self.emit_jmc(Address::Label(end_case.clone()));
+                    case.statements()
+                        .iter()
+                        .for_each(|statement| self.emit_statement(statement, None, None));
+                    self.emit_jump(Address::Label(switch_end_label.clone()));
+                    self.emit_label(end_case.clone());
+                });
+                self.emit_label(switch_end_label);
+            }
             _ => self
                 .error_diag
                 .borrow_mut()

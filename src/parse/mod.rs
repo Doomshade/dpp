@@ -1,17 +1,13 @@
-use std::collections::HashSet;
 use std::io::Write;
 use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{
-    BoundExpression, BoundTranslationUnit, BoundVariableAssignment, BoundVariablePosition,
-    SymbolTable,
-};
+use crate::parse::analysis::{BoundTranslationUnit, BoundVariablePosition, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
-use crate::parse::parser::{BinaryOperator, Block, DataType, Expression, Function, Variable};
+use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -366,7 +362,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             error_diag,
             loop_stack: 0,
             assignment_count: collections::HashMap::new(),
-            referenced_variables: HashSet::new(),
+            referenced_variables: collections::HashSet::new(),
         }
     }
 
@@ -552,7 +548,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
     fn resolve(&self, address: &Address) -> usize {
         match address {
             Address::Absolute(pc) => *pc,
-            Address::Label(label) => *self.labels.get(label.as_str()).unwrap(),
+            Address::Label(label) => *self
+                .labels
+                .get(label.as_str())
+                .expect(format!("Did not emit {label}").as_str()),
         }
     }
 
@@ -1982,6 +1981,13 @@ mod analysis {
                 expression,
                 statements,
             }
+        }
+
+        pub fn expression(&self) -> &BoundExpression {
+            &self.expression
+        }
+        pub fn statements(&self) -> &Vec<BoundStatement> {
+            &self.statements
         }
     }
 

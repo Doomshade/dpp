@@ -1,12 +1,12 @@
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit, BoundVariableAssignment,
-    BoundVariablePosition,
+    BoundCase, BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit,
+    BoundVariableAssignment, BoundVariablePosition,
 };
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
-    Block, DataType, NumberType, Statement, TranslationUnit, UnaryOperator, Variable,
+    Block, Case, DataType, NumberType, Statement, TranslationUnit, UnaryOperator, Variable,
 };
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
@@ -427,38 +427,16 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::Switch {
                 expression, cases, ..
             } => {
-                if let Some(switch_data_type) = self.calc_data_type(expression) {
-                    if let Some(mismatched_data_type) = cases
-                        .iter()
-                        .map(|case| {
-                            (
-                                case.block().position(),
-                                self.calc_data_type(case.expression()),
-                            )
-                        })
-                        .find(|(_, data_type)| {
-                            if let Some(data_type) = data_type {
-                                data_type != &switch_data_type
-                            } else {
-                                false
-                            }
-                        })
-                    {
-                        self.check_data_type(
-                            &switch_data_type,
-                            mismatched_data_type.1.as_ref(),
-                            mismatched_data_type.0,
-                        );
+                let expression = self.analyze_expr(expression, None, None);
+                dbg!(&cases);
+                return if let Some(switch_data_type) = expression.0 {
+                    BoundStatement::Switch {
+                        expression: expression.1,
+                        cases: self.analyze_cases(cases, Some(&switch_data_type)),
                     }
-
-                    // TODO: This checks for the expression data type for no reason and will
-                    // produce duplicate errors.
-                    let expression = self.analyze_expr(expression, None, None);
-
-                    // BoundStatement::Switch {expression, cases: self.analyze_cases}
-                    return BoundStatement::Empty;
-                }
-                BoundStatement::Empty
+                } else {
+                    BoundStatement::Empty
+                };
             }
             Statement::For {
                 index_ident,
@@ -523,6 +501,23 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 BoundStatement::Empty
             }
         }
+    }
+
+    fn analyze_cases(
+        &mut self,
+        cases: &Vec<Case<'a>>,
+        expected_data_type: Option<&DataType<'a>>,
+    ) -> Vec<BoundCase> {
+        cases
+            .iter()
+            .map(|case| {
+                BoundCase::new(
+                    self.analyze_expr(case.expression(), expected_data_type, Some(case.position()))
+                        .1,
+                    self.analyze_block(case.block()),
+                )
+            })
+            .collect::<Vec<BoundCase>>()
     }
 
     /// # Summary

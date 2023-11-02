@@ -122,6 +122,23 @@ FUNc main5() -> pp {
         pp -> hahaa = 0 + 4 + 3;
         pp -> hahaaa = 0 + 4 + 3;
     }
+    switch(69){
+        case 5 {
+            pp -> KEK = 123456798;
+        },
+        case 5 {
+            pp -> KEK = 123456798;
+        },
+        case 5 {
+            pp -> KEK = 123456798;
+        },
+        case 5 {
+            pp -> KEK = 123456798;
+        },
+        case 5 {
+            pp -> KEK = 123456798;
+        }
+    }
     if (yem) {}
     if (yem) {}
     if (yem) {}

@@ -94,91 +94,77 @@ impl Optimizer {
         let expression_str = format!("{expression:?}");
         let optimized_expression = match expression {
             BoundExpression::Binary { lhs, rhs, op } => {
-                let opt_lhs = self.optimize_expression(*lhs);
-                let opt_rhs = self.optimize_expression(*rhs);
+                let optimized_lhs = self.optimize_expression(*lhs);
+                let optimized_rhs = self.optimize_expression(*rhs);
 
                 use BinaryOperator as BinOp;
                 match &op {
                     BinOp::Add | BinOp::Subtract => {
                         // Adding/subtracting 0 makes no sense.
-                        let lhs_zero = match &opt_lhs {
-                            BoundExpression::Number { value, number_type } => *value == 0,
-                            _ => false,
-                        };
+                        let lhs_zero = Self::is_zero(&optimized_lhs);
+                        let rhs_zero = Self::is_zero(&optimized_rhs);
 
-                        let rhs_zero = match &opt_rhs {
-                            BoundExpression::Number { value, number_type } => *value == 0,
-                            _ => false,
-                        };
                         if rhs_zero {
-                            opt_lhs
+                            optimized_lhs
                         } else if lhs_zero {
-                            opt_rhs
+                            optimized_rhs
                         } else {
                             BoundExpression::Binary {
-                                lhs: Box::new(opt_lhs),
+                                lhs: Box::new(optimized_lhs),
                                 op,
-                                rhs: Box::new(opt_rhs),
+                                rhs: Box::new(optimized_rhs),
                             }
                         }
                     }
                     BinOp::And => {
                         // Any false value -> both are false.
-                        let lhs = match &opt_lhs {
-                            BoundExpression::Booba(value) => Some(*value),
-                            _ => None,
-                        };
-
-                        let rhs = match &opt_rhs {
-                            BoundExpression::Booba(value) => Some(*value),
-                            _ => None,
-                        };
+                        let lhs = Self::booba_value(&optimized_lhs);
+                        let rhs = Self::booba_value(&optimized_rhs);
 
                         if let Some(lhs) = lhs {
                             if let Some(rhs) = rhs {
-                                if !lhs || !rhs {
-                                    return BoundExpression::Booba(false);
-                                } else if lhs && rhs {
+                                if lhs && rhs {
                                     return BoundExpression::Booba(true);
+                                } else if !lhs || !rhs {
+                                    return BoundExpression::Booba(false);
                                 }
                             }
                         }
 
                         BoundExpression::Binary {
-                            lhs: Box::new(opt_lhs),
+                            lhs: Box::new(optimized_lhs),
                             op,
-                            rhs: Box::new(opt_rhs),
+                            rhs: Box::new(optimized_rhs),
                         }
                     }
                     BinOp::Or => {
                         // Any false value -> both are false.
-                        let lhs_true = match &opt_lhs {
-                            BoundExpression::Booba(value) => *value == true,
-                            _ => false,
-                        };
+                        let lhs = Self::booba_value(&optimized_lhs);
+                        let rhs = Self::booba_value(&optimized_rhs);
 
-                        let rhs_true = match &opt_rhs {
-                            BoundExpression::Booba(value) => *value == true,
-                            _ => false,
-                        };
-                        if lhs_true || rhs_true {
-                            BoundExpression::Booba(true)
-                        } else {
-                            BoundExpression::Binary {
-                                lhs: Box::new(opt_lhs),
-                                op,
-                                rhs: Box::new(opt_rhs),
+                        if let Some(lhs) = lhs {
+                            if let Some(rhs) = rhs {
+                                if lhs || rhs {
+                                    return BoundExpression::Booba(true);
+                                } else if !lhs && !rhs {
+                                    return BoundExpression::Booba(false);
+                                }
                             }
+                        }
+                        BoundExpression::Binary {
+                            lhs: Box::new(optimized_lhs),
+                            op,
+                            rhs: Box::new(optimized_rhs),
                         }
                     }
                     BinOp::Multiply => {
                         // Multiplying by 0 makes no sense.
-                        let lhs_zero = match &opt_lhs {
+                        let lhs_zero = match &optimized_lhs {
                             BoundExpression::Number { value, number_type } => *value == 0,
                             _ => false,
                         };
 
-                        let rhs_zero = match &opt_rhs {
+                        let rhs_zero = match &optimized_rhs {
                             BoundExpression::Number { value, number_type } => *value == 0,
                             _ => false,
                         };
@@ -190,16 +176,16 @@ impl Optimizer {
                             }
                         } else {
                             BoundExpression::Binary {
-                                lhs: Box::new(opt_lhs),
+                                lhs: Box::new(optimized_lhs),
                                 op,
-                                rhs: Box::new(opt_rhs),
+                                rhs: Box::new(optimized_rhs),
                             }
                         }
                     }
                     _ => BoundExpression::Binary {
-                        lhs: Box::new(opt_lhs),
+                        lhs: Box::new(optimized_lhs),
                         op,
-                        rhs: Box::new(opt_rhs),
+                        rhs: Box::new(optimized_rhs),
                     },
                 }
             }
@@ -217,5 +203,19 @@ impl Optimizer {
         }
 
         optimized_expression
+    }
+
+    fn is_zero(expression: &BoundExpression) -> bool {
+        match expression {
+            BoundExpression::Number { value, .. } => *value == 0,
+            _ => false,
+        }
+    }
+
+    fn booba_value(expression: &BoundExpression) -> Option<bool> {
+        match expression {
+            BoundExpression::Booba(value) => Some(*value),
+            _ => None,
+        }
     }
 }
