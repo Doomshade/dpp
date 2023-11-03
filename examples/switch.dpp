@@ -1,6 +1,11 @@
+pp -> b = 420;
+
 FUNc main() -> pp {
-    const pp -> a = 69;
-    if (0 == 0) {}
+    const pp -> a = 0 + 0 + 0 + 0 + 1 + 4 + 5;
+    if (0 == 1) {
+        pp -> zz = 12345789;
+        pp -> zza = 12345789;
+    }
     switch(69) {
         case 420 {
             bye 420;

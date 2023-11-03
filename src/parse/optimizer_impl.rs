@@ -1,6 +1,6 @@
 use crate::parse::analysis::{
     BoundCase, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
-    BoundTranslationUnit, BoundVariableAssignment,
+    BoundTranslationUnit, BoundVariable, BoundVariableAssignment,
 };
 use crate::parse::parser::BinaryOperator;
 use crate::parse::Optimizer;
@@ -152,6 +152,27 @@ impl Optimizer {
                         println!("Division by 0 detected :(");
                         Some(BoundExpression::Literal(BoundLiteralValue::Pp(0)))
                     }
+                    _ => None,
+                };
+            }
+        }
+        None
+    }
+
+    fn join_constant_values(
+        lhs: &BoundExpression,
+        op: &BinaryOperator,
+        rhs: &BoundExpression,
+    ) -> Option<BoundExpression> {
+        if let BoundExpression::Literal(lhs) = &lhs {
+            if let BoundExpression::Literal(rhs) = &rhs {
+                let lhs = lhs.clone();
+                let rhs = rhs.clone();
+                return match op {
+                    BinaryOperator::Add => Some(BoundExpression::Literal(lhs + rhs)),
+                    BinaryOperator::Subtract => Some(BoundExpression::Literal(lhs - rhs)),
+                    BinaryOperator::Multiply => Some(BoundExpression::Literal(lhs * rhs)),
+                    BinaryOperator::Divide => Some(BoundExpression::Literal(lhs / rhs)),
                     _ => None,
                 };
             }

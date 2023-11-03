@@ -1399,7 +1399,7 @@ mod parser {
 
 mod analysis {
     use std::fmt::Formatter;
-    use std::{collections, fmt};
+    use std::{collections, fmt, ops};
 
     use crate::parse::parser::{
         BinaryOperator, DataType, Expression, Function, Modifier, UnaryOperator, Variable,
@@ -2054,6 +2054,62 @@ mod analysis {
     impl fmt::Display for BoundVariable {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             write!(f, "{} {}", self.level, self.offset)
+        }
+    }
+
+    impl ops::Add<BoundLiteralValue> for BoundLiteralValue {
+        type Output = BoundLiteralValue;
+
+        fn add(self, rhs: BoundLiteralValue) -> Self::Output {
+            match self {
+                BoundLiteralValue::Pp(lpp) => match rhs {
+                    BoundLiteralValue::Pp(rpp) => BoundLiteralValue::Pp(lpp + rpp),
+                    _ => panic!("Undefined operation"),
+                },
+                _ => panic!("Undefined operation"),
+            }
+        }
+    }
+
+    impl ops::Sub for BoundLiteralValue {
+        type Output = BoundLiteralValue;
+
+        fn sub(self, rhs: Self) -> Self::Output {
+            match self {
+                BoundLiteralValue::Pp(lpp) => match rhs {
+                    BoundLiteralValue::Pp(rpp) => BoundLiteralValue::Pp(lpp - rpp),
+                    _ => panic!("Undefined operation"),
+                },
+                _ => panic!("Undefined operation"),
+            }
+        }
+    }
+
+    impl ops::Div for BoundLiteralValue {
+        type Output = BoundLiteralValue;
+
+        fn div(self, rhs: Self) -> Self::Output {
+            match self {
+                BoundLiteralValue::Pp(lpp) => match rhs {
+                    BoundLiteralValue::Pp(rpp) => BoundLiteralValue::Pp(lpp / rpp),
+                    _ => panic!("Undefined operation"),
+                },
+                _ => panic!("Undefined operation"),
+            }
+        }
+    }
+
+    impl ops::Mul for BoundLiteralValue {
+        type Output = BoundLiteralValue;
+
+        fn mul(self, rhs: Self) -> Self::Output {
+            match self {
+                BoundLiteralValue::Pp(lpp) => match rhs {
+                    BoundLiteralValue::Pp(rpp) => BoundLiteralValue::Pp(lpp * rpp),
+                    _ => panic!("Undefined operation"),
+                },
+                _ => panic!("Undefined operation"),
+            }
         }
     }
 }
