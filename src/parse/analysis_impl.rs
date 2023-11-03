@@ -5,9 +5,7 @@ use crate::parse::analysis::{
     BoundTranslationUnit, BoundVariableAssignment, BoundVariablePosition,
 };
 use crate::parse::error_diagnosis::SyntaxError;
-use crate::parse::parser::{
-    Block, Case, DataType, LiteralValue, Statement, TranslationUnit, UnaryOperator, Variable,
-};
+use crate::parse::parser::{Block, Case, DataType, LiteralValue, Modifier, Statement, TranslationUnit, UnaryOperator, Variable};
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -404,6 +402,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let (level, var_decl) = self.symbol_table().variable(identifier);
                 if let Some(variable) = var_decl {
+                    if variable.has_modifier(Modifier::Const) {
+                        self.error_diag.borrow_mut().cannot_assign_to_const_variable(
+                            *position,
+                            identifier,
+                        );
+                    }
                     let data_type = variable.data_type();
                     let expression =
                         self.analyze_expr(expression, Some(data_type), Some(*position));
@@ -473,6 +477,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     *position,
                     index_ident,
                     DataType::Pp,
+                    Vec::new(),
                     ident_expression.clone(),
                 );
                 self.symbol_table_mut()

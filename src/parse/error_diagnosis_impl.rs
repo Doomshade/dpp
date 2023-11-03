@@ -173,6 +173,13 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             format!("Variable with name \"{var_name}\" already exists.").as_str(),
         );
     }
+    pub fn cannot_assign_to_const_variable(&mut self, position: (u32, u32), var_name: &str) {
+        self.insert_error_message(
+            position,
+            format!("Cannot assign to const variable \"{var_name}\".").as_str(),
+        );
+    }
+
     pub fn variable_not_found(&mut self, position: (u32, u32), var_name: &str) {
         self.insert_error_message(
             position,

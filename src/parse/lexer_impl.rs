@@ -397,6 +397,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "nopp" => TokenKind::NoppKeyword,
             "booba" => TokenKind::BoobaKeyword,
             "if" => TokenKind::IfKeyword,
+            "const" => TokenKind::ConstKeyword,
             "while" => TokenKind::WhileKeyword,
             "else" => TokenKind::ElseKeyword,
             "for" => TokenKind::ForKeyword,

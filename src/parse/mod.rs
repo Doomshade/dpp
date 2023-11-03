@@ -265,6 +265,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         false
     }
 
+    fn matches_modifier(&self) -> bool {
+        if let Some(token) = self.token() {
+            return matches!(
+                token.kind(),
+                TokenKind::ConstKeyword
+            );
+        }
+        false
+    }
+
     /// Expects a **token** of a certain kind. If the token is not present an error is added to the
     /// error diagnostics. If the token is present, it is consumed and the value of the token is
     /// returned. If the token has no value, an empty string is returned.
@@ -787,6 +797,7 @@ mod lexer {
         SwitchKeyword,      // switch
         PipePipe,           // ||
         AmpersandAmpersand, // &&
+        ConstKeyword,
     }
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -861,6 +872,7 @@ mod lexer {
                 Self::PipePipe => "\"||\"",
                 Self::Comma => "\",\"",
                 Self::IfKeyword => "\"if\"",
+                Self::ConstKeyword => "\"const\"",
                 Self::LetKeyword => "\"let\"",
                 Self::ByeKeyword => "\"bye\"",
                 Self::PprintKeyword => "\"pprint\"",
@@ -910,7 +922,6 @@ mod lexer {
 
 mod parser {
     use std::fmt;
-    use std::fmt::Formatter;
     use std::mem;
 
     use dpp_macros::Pos;
@@ -1018,6 +1029,7 @@ mod parser {
     pub struct Variable<'a> {
         position: (u32, u32),
         identifier: &'a str,
+        modifiers: Vec<Modifier>,
         data_type: DataType<'a>,
         size: usize,
         value: Option<Expression<'a>>,
@@ -1041,6 +1053,11 @@ mod parser {
         Nopp,    // void
         Ratio,   // ratio
         Struct { name: &'a str },
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum Modifier {
+        Const,
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1179,11 +1196,13 @@ mod parser {
             position: (u32, u32),
             identifier: &'a str,
             data_type: DataType<'a>,
+            modifiers: Vec<Modifier>,
             value: Option<Expression<'a>>,
         ) -> Self {
             Variable {
                 position,
                 identifier,
+                modifiers,
                 size: data_type.size(),
                 data_type,
                 value,
@@ -1207,6 +1226,9 @@ mod parser {
         }
         pub fn size_in_instructions(&self) -> usize {
             ((self.size() - 1) / 4) + 1
+        }
+        pub fn modifiers(&self) -> &Vec<Modifier> {
+            &self.modifiers
         }
     }
 
@@ -1374,9 +1396,7 @@ mod analysis {
     use std::fmt::Formatter;
     use std::{collections, fmt};
 
-    use crate::parse::parser::{
-        BinaryOperator, DataType, Expression, Function, UnaryOperator, Variable,
-    };
+    use crate::parse::parser::{BinaryOperator, DataType, Expression, Function, Modifier, UnaryOperator, Variable};
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct SymbolTable<'a> {
@@ -1414,6 +1434,7 @@ mod analysis {
     pub struct VariableDescriptor<'a> {
         stack_position: usize,
         data_type: DataType<'a>,
+        modifiers: Vec<Modifier>,
         size: usize,
         value: Option<Expression<'a>>,
         is_parameter: bool,
@@ -1845,6 +1866,7 @@ mod analysis {
             VariableDescriptor {
                 stack_position,
                 is_parameter,
+                modifiers: variable.modifiers().clone(),
                 size: variable.size(),
                 data_type: variable.data_type().clone(),
                 value: variable.value().cloned(),
@@ -1872,6 +1894,9 @@ mod analysis {
         }
         pub fn size(&self) -> usize {
             self.size
+        }
+        pub fn has_modifier(&self, modifier: Modifier) -> bool {
+            self.modifiers.contains(&modifier)
         }
     }
 

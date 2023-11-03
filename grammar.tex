@@ -24,7 +24,7 @@
 
         <params> ::= `(' [ <param> \{ `,' <param> \} ] `)'
 
-        <param> ::= <data-type> `->' <ident>
+        <param> ::= <modifiers> <data-type> `->' <ident>
 
         <block> ::= `{' \{ <stat> \} `}'
 
@@ -73,7 +73,7 @@
 
         <assign> ::= <ident> `=' <expr> `;'
 
-        <var-decl> ::= <data-type> `->' <ident> [ `=' <expr> ] `;'
+        <var-decl> ::= <modifiers> <data-type> `->' <ident> [ `=' <expr> ] `;'
 
         <block-stat> ::= <block>
 
@@ -87,6 +87,10 @@
         \alt `ab' // ratio
         \alt `flaccid' // float
         \alt `struct' // record
+
+        <modifiers> ::= \{ <modifier> \}
+
+        <modifier> ::= `const'
 
         <expr> ::= <equ>
 

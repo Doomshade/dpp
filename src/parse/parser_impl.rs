@@ -42,7 +42,8 @@
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::{LiteralKind, TokenKind};
 use crate::parse::parser::{
-    BinaryOperator, Case, DataType, LiteralValue, Statement, TranslationUnit, UnaryOperator,
+    BinaryOperator, Case, DataType, LiteralValue, Modifier, Statement, TranslationUnit,
+    UnaryOperator,
 };
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
@@ -82,7 +83,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if let Some(function) = self._function() {
                     functions.push(function);
                 }
-            } else if self.matches_data_type() {
+            } else if self.matches_data_type() || self.matches_modifier() {
                 if let Some(var_decl) = self._var_decl() {
                     variable_declarations.push(var_decl);
                 }
@@ -162,10 +163,13 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn _param(&mut self) -> Option<Variable<'a>> {
         let position = self.position;
+        let modifiers = self._modifiers();
         let data_type = self._data_type()?;
         self.expect(TokenKind::Arrow)?;
         let identifier = self.expect(TokenKind::Identifier)?;
-        Some(Variable::new(position, identifier, data_type, None))
+        Some(Variable::new(
+            position, identifier, data_type, modifiers, None,
+        ))
     }
 
     fn _block(&mut self) -> Option<Block<'a>> {
@@ -218,7 +222,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::FlaccidKeyword
             | TokenKind::ABKeyword
             | TokenKind::BoobaKeyword
-            | TokenKind::YarnKeyword => self._var_decl(),
+            | TokenKind::YarnKeyword
+            | TokenKind::ConstKeyword => self._var_decl(),
             _ => {
                 self.error_diag.borrow_mut().unexpected_token_error(token);
                 self.add_error("statement");
@@ -445,6 +450,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn _var_decl(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
+        let modifiers = self._modifiers();
         let data_type = self._data_type()?;
         self.expect(TokenKind::Arrow)?;
 
@@ -454,12 +460,18 @@ impl<'a, 'b> Parser<'a, 'b> {
             let expression = self._expr()?;
             Statement::VariableDeclaration {
                 position,
-                variable: Variable::new(self.position, identifier, data_type, Some(expression)),
+                variable: Variable::new(
+                    self.position,
+                    identifier,
+                    data_type,
+                    modifiers,
+                    Some(expression),
+                ),
             }
         } else {
             Statement::VariableDeclaration {
                 position,
-                variable: Variable::new(self.position, identifier, data_type, None),
+                variable: Variable::new(self.position, identifier, data_type, modifiers, None),
             }
         };
 
@@ -505,6 +517,22 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),
             TokenKind::YarnKeyword => Some(DataType::Yarn),
+            _ => None,
+        }
+    }
+
+    fn _modifiers(&mut self) -> Vec<Modifier> {
+        let mut modifiers = Vec::new();
+        while let Some(modifier) = self._modifier() {
+            self.consume_token();
+            modifiers.push(modifier);
+        }
+        modifiers
+    }
+
+    fn _modifier(&mut self) -> Option<Modifier> {
+        match self.token()?.kind() {
+            TokenKind::ConstKeyword => Some(Modifier::Const),
             _ => None,
         }
     }

@@ -9,6 +9,7 @@ FUNc fibonacci_rec(pp -> num) -> pp {
 }
 
 FUNc fibonacci(pp -> num) -> pp {
+    pp -> aa = 0;
     pp -> a = 0;
     pp -> b = 1;
     pp -> c = 1;
