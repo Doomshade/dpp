@@ -713,7 +713,8 @@ mod lexer {
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub enum TokenKind {
-        Identifier,         // identifier literal
+        Identifier, // identifier
+        Literal(LiteralKind),
         NumberLiteral,      // number literal
         PLiteral,           // char literal
         YarnLiteral,        // String literal
@@ -779,6 +780,21 @@ mod lexer {
         SwitchKeyword,      // switch
         PipePipe,           // ||
         AmpersandAmpersand, // &&
+    }
+
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub enum LiteralKind {
+        Pp,
+        Flaccid,
+        AB,
+        P,
+        Yarn,
+    }
+
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub enum FlaccidRepresentation {
+        Integer,
+        Real,
     }
 
     impl<'a> Token<'a> {
@@ -873,8 +889,33 @@ mod lexer {
                 Self::ContinueKeyword => "\"continue\"",
                 Self::SwitchKeyword => "\"switch\"",
                 Self::CaseKeyword => "\"case\"",
+                Self::Literal(literal_kind) => {
+                    return write!(f, "{literal_kind}");
+                }
             };
             write!(f, "{text_representation}")
+        }
+    }
+
+    impl fmt::Display for LiteralKind {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                LiteralKind::Pp => write!(f, "pp"),
+                LiteralKind::Flaccid => write!(f, "flaccid"),
+                LiteralKind::P => write!(f, "p"),
+                LiteralKind::Yarn => write!(f, "yarn"),
+                LiteralKind::AB => write!(f, "ab"),
+            }
+        }
+    }
+
+    impl fmt::Display for FlaccidRepresentation {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                FlaccidRepresentation::Integer | FlaccidRepresentation::Real => {
+                    write!(f, "flaccid")
+                }
+            }
         }
     }
 }

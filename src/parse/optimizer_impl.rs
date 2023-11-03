@@ -3,7 +3,6 @@ use crate::parse::analysis::{
 };
 use crate::parse::parser::{BinaryOperator, NumberType};
 use crate::parse::Optimizer;
-use std::fmt::Write;
 
 impl Optimizer {
     pub fn optimize_translation_unit(
@@ -105,56 +104,31 @@ impl Optimizer {
 
                 use BinaryOperator as BinOp;
                 match &op {
-                    BinOp::Add | BinOp::Subtract => {
+                    BinOp::Add | BinOp::Subtract | BinOp::Multiply => {
                         // Adding/subtracting 0 makes no sense.
-                        let lhs_zero = Self::is_zero(&optimized_lhs);
-                        let rhs_zero = Self::is_zero(&optimized_rhs);
-
-                        if rhs_zero {
-                            optimized_lhs
-                        } else if lhs_zero {
-                            optimized_rhs
-                        } else {
-                            BoundExpression::Binary {
-                                lhs: Box::new(optimized_lhs),
-                                op,
-                                rhs: Box::new(optimized_rhs),
-                            }
-                        }
-                    }
-                    BinOp::And => {
-                        // Any false value -> both are false.
-                        let lhs = Self::booba_value(&optimized_lhs);
-                        let rhs = Self::booba_value(&optimized_rhs);
-
-                        if let Some(lhs) = lhs {
-                            if let Some(rhs) = rhs {
-                                if lhs && rhs {
-                                    return BoundExpression::Booba(true);
-                                } else if !lhs || !rhs {
-                                    return BoundExpression::Booba(false);
-                                }
+                        if let Some(lhs_zero) = Self::is_zero(&optimized_lhs) {
+                            if lhs_zero {
+                                return match &op {
+                                    BinOp::Add | BinOp::Subtract => optimized_rhs,
+                                    BinOp::Multiply => BoundExpression::Number {
+                                        value: 0,
+                                        number_type: NumberType::Pp,
+                                    },
+                                    _ => unreachable!(),
+                                };
                             }
                         }
 
-                        BoundExpression::Binary {
-                            lhs: Box::new(optimized_lhs),
-                            op,
-                            rhs: Box::new(optimized_rhs),
-                        }
-                    }
-                    BinOp::Or => {
-                        // Any false value -> both are false.
-                        let lhs = Self::booba_value(&optimized_lhs);
-                        let rhs = Self::booba_value(&optimized_rhs);
-
-                        if let Some(lhs) = lhs {
-                            if let Some(rhs) = rhs {
-                                if lhs || rhs {
-                                    return BoundExpression::Booba(true);
-                                } else if !lhs && !rhs {
-                                    return BoundExpression::Booba(false);
-                                }
+                        if let Some(rhs_zero) = Self::is_zero(&optimized_rhs) {
+                            if rhs_zero {
+                                return match &op {
+                                    BinOp::Add | BinOp::Subtract => optimized_lhs,
+                                    BinOp::Multiply => BoundExpression::Number {
+                                        value: 0,
+                                        number_type: NumberType::Pp,
+                                    },
+                                    _ => unreachable!(),
+                                };
                             }
                         }
                         BoundExpression::Binary {
@@ -163,29 +137,64 @@ impl Optimizer {
                             rhs: Box::new(optimized_rhs),
                         }
                     }
-                    BinOp::Multiply => {
-                        // Multiplying by 0 makes no sense.
-                        let lhs_zero = match &optimized_lhs {
-                            BoundExpression::Number { value, number_type } => *value == 0,
-                            _ => false,
-                        };
-
-                        let rhs_zero = match &optimized_rhs {
-                            BoundExpression::Number { value, number_type } => *value == 0,
-                            _ => false,
-                        };
-
-                        if lhs_zero || rhs_zero {
-                            BoundExpression::Number {
-                                value: 0,
-                                number_type: NumberType::Pp,
+                    BinOp::And
+                    | BinOp::Or
+                    | BinOp::Equal
+                    | BinOp::NotEqual
+                    | BinOp::GreaterThan
+                    | BinOp::GreaterThanOrEqual
+                    | BinOp::LessThan
+                    | BinOp::LessThanOrEqual => {
+                        if let Some(lhs) = Self::booba_value(&optimized_lhs) {
+                            if let Some(rhs) = Self::booba_value(&optimized_rhs) {
+                                return match &op {
+                                    BinOp::And => BoundExpression::Booba(lhs && rhs),
+                                    BinOp::Or => BoundExpression::Booba(lhs || rhs),
+                                    BinOp::Equal => BoundExpression::Booba(lhs == rhs),
+                                    BinOp::NotEqual => BoundExpression::Booba(lhs != rhs),
+                                    _ => unreachable!(),
+                                };
                             }
-                        } else {
-                            BoundExpression::Binary {
-                                lhs: Box::new(optimized_lhs),
-                                op,
-                                rhs: Box::new(optimized_rhs),
+                        }
+
+                        if let BoundExpression::Number {
+                            number_type: lhs_number_type,
+                            value: lhs_value,
+                        } = &optimized_lhs
+                        {
+                            if let BoundExpression::Number {
+                                number_type: rhs_number_type,
+                                value: rhs_value,
+                            } = &optimized_rhs
+                            {
+                                return match &op {
+                                    BinOp::Equal => {
+                                        BoundExpression::Booba(*lhs_value == *rhs_value)
+                                    }
+                                    BinOp::NotEqual => {
+                                        BoundExpression::Booba(*lhs_value != *rhs_value)
+                                    }
+                                    BinOp::GreaterThan => {
+                                        BoundExpression::Booba(*lhs_value > *rhs_value)
+                                    }
+                                    BinOp::GreaterThanOrEqual => {
+                                        BoundExpression::Booba(*lhs_value >= *rhs_value)
+                                    }
+                                    BinOp::LessThan => {
+                                        BoundExpression::Booba(*lhs_value < *rhs_value)
+                                    }
+                                    BinOp::LessThanOrEqual => {
+                                        BoundExpression::Booba(*lhs_value <= *rhs_value)
+                                    }
+                                    _ => unreachable!(),
+                                };
                             }
+                        }
+
+                        BoundExpression::Binary {
+                            lhs: Box::new(optimized_lhs),
+                            op,
+                            rhs: Box::new(optimized_rhs),
                         }
                     }
                     _ => BoundExpression::Binary {
@@ -211,10 +220,10 @@ impl Optimizer {
         optimized_expression
     }
 
-    fn is_zero(expression: &BoundExpression) -> bool {
+    fn is_zero(expression: &BoundExpression) -> Option<bool> {
         match expression {
-            BoundExpression::Number { value, .. } => *value == 0,
-            _ => false,
+            BoundExpression::Number { value, .. } => Some(*value == 0),
+            _ => None,
         }
     }
 

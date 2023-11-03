@@ -1,7 +1,7 @@
 //! The tokenizer for the dpp language.
 
 use crate::parse::error_diagnosis::SyntaxError;
-use crate::parse::lexer::{Token, TokenKind};
+use crate::parse::lexer::{LiteralKind, Token, TokenKind};
 use crate::parse::Lexer;
 
 impl<'a, 'b> Lexer<'a, 'b> {
@@ -316,7 +316,11 @@ impl<'a, 'b> Lexer<'a, 'b> {
             end += self.advance();
         }
 
+        let literal_kind;
+        // 69.69
         if self.peek() == '.' {
+            literal_kind = LiteralKind::Flaccid;
+
             end += self.advance();
             if !self.peek().is_ascii_digit() {
                 self.error_diag.borrow_mut().invalid_number(self.position());
@@ -324,9 +328,25 @@ impl<'a, 'b> Lexer<'a, 'b> {
             while self.peek().is_ascii_digit() {
                 end += self.advance();
             }
-            if self.peek() == 'f' || self.peek() == 'r' {
+            if self.peek() == 'f' {
+                // 69.69f
                 end += self.advance();
             }
+        }
+        // 69f
+        else if self.peek() == 'f' {
+            literal_kind = LiteralKind::Flaccid;
+            end += self.advance();
+        }
+        // 69|69
+        else if self.peek() == '|' {
+            literal_kind = LiteralKind::AB;
+            end += self.advance();
+            while self.peek().is_ascii_digit() {
+                end += self.advance();
+            }
+        } else {
+            literal_kind = LiteralKind::Pp;
         }
 
         self.new_token(TokenKind::NumberLiteral, &self.raw_input[start..end])

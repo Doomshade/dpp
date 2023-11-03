@@ -119,8 +119,9 @@ FUNc fibonacci5(pp -> num) -> pp {
 FUNc main5() -> pp {
     if (yem && yem && yem) {
         pp -> haha = 0 + 4 + 3 + 0 + 0 + 0+0 + 0 + 0 + 0 + 0;
-        pp -> hahaa = 0 + 4 + 3;
+        pp -> hahaa = 0 + 4 + 3 + 0 + 0 + 0;
         pp -> hahaaa = 0 + 4 + 3;
+        booba -> mhm = 45678 > 6;
     }
     switch(69){
         case 5 {
