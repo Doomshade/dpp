@@ -57,6 +57,7 @@ impl Optimizer {
                 if let BoundExpression::FunctionCall { .. } = expression {
                     BoundStatement::Expression(self.optimize_expression(expression))
                 } else {
+                    // Any other expression statement is pointless.
                     BoundStatement::Empty
                 }
             }
@@ -67,7 +68,12 @@ impl Optimizer {
                 if statements.is_empty() {
                     BoundStatement::Empty
                 } else {
-                    BoundStatement::Statements(statements)
+                    BoundStatement::Statements(
+                        statements
+                            .into_iter()
+                            .map(|statement| self.optimize_statement(statement))
+                            .collect::<Vec<BoundStatement>>(),
+                    )
                 }
             }
             _ => statement,
