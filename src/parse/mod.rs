@@ -253,10 +253,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         if let Some(token) = self.token() {
             return matches!(
                 token.kind(),
-                TokenKind::XxlppKeyword
+                TokenKind::ABKeyword
                     | TokenKind::PpKeyword
-                    | TokenKind::SppKeyword
-                    | TokenKind::XsppKeyword
+                    | TokenKind::FlaccidKeyword
                     | TokenKind::PKeyword
                     | TokenKind::NoppKeyword
                     | TokenKind::BoobaKeyword
@@ -759,15 +758,13 @@ mod lexer {
         PprintlnKeyword,    // writeln()
         PpanicKeyword,      // panic()
         PpinKeyword,        // read()
-        XxlppKeyword,       // i64
         PpKeyword,          // i32
-        SppKeyword,         // i16
-        XsppKeyword,        // i8
+        FlaccidKeyword,     // float
         PKeyword,           // char
+        ABKeyword,          // ratio
         BoobaKeyword,       // bool
         NoppKeyword,        // void
         YarnKeyword,        // String
-        RatioKeyword,       // ratio
         ForKeyword,         // for
         ElseKeyword,        // else
         DoubleQuote,        // "
@@ -859,10 +856,9 @@ mod lexer {
                 Self::FUNcKeyword => "\"FUNc\"",
                 Self::ElseKeyword => "\"else\"",
                 Self::ForKeyword => "\"for\"",
-                Self::XxlppKeyword => "data type \"xxlpp\"",
                 Self::PpKeyword => "data type \"pp\"",
-                Self::SppKeyword => "data type \"spp\"",
-                Self::XsppKeyword => "data type \"xspp\"",
+                Self::FlaccidKeyword => "data type \"flaccid\"",
+                Self::ABKeyword => "data type \"ab\"",
                 Self::PKeyword => "data type \"p\"",
                 Self::BoobaKeyword => "data type \"booba\"",
                 Self::NoppKeyword => "void data type \"nopp\"",
@@ -877,7 +873,6 @@ mod lexer {
                 Self::ContinueKeyword => "\"continue\"",
                 Self::SwitchKeyword => "\"switch\"",
                 Self::CaseKeyword => "\"case\"",
-                Self::RatioKeyword => "\"ratio\"",
             };
             write!(f, "{text_representation}")
         }

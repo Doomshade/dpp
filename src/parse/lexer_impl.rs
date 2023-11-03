@@ -317,10 +317,14 @@ impl<'a, 'b> Lexer<'a, 'b> {
         }
 
         if self.peek() == '.' {
+            end += self.advance();
             if !self.peek().is_ascii_digit() {
                 self.error_diag.borrow_mut().invalid_number(self.position());
             }
             while self.peek().is_ascii_digit() {
+                end += self.advance();
+            }
+            if self.peek() == 'f' || self.peek() == 'r' {
                 end += self.advance();
             }
         }
@@ -356,10 +360,9 @@ impl<'a, 'b> Lexer<'a, 'b> {
         }
 
         let kind = match ident_value {
-            "xxlpp" => TokenKind::XxlppKeyword,
             "pp" => TokenKind::PpKeyword,
-            "spp" => TokenKind::SppKeyword,
-            "xspp" => TokenKind::XsppKeyword,
+            "flaccid" => TokenKind::FlaccidKeyword,
+            "ab" => TokenKind::ABKeyword,
             "p" => TokenKind::PKeyword,
             "nopp" => TokenKind::NoppKeyword,
             "booba" => TokenKind::BoobaKeyword,
@@ -384,7 +387,6 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "switch" => TokenKind::SwitchKeyword,
             "case" => TokenKind::CaseKeyword,
             "yarn" => TokenKind::YarnKeyword,
-            "ratio" => TokenKind::RatioKeyword,
             _ => TokenKind::Identifier,
         };
 

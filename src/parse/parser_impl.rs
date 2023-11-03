@@ -216,7 +216,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::OpenBrace => self._block_stat(),
             TokenKind::PpKeyword
             | TokenKind::PKeyword
-            | TokenKind::RatioKeyword
+            | TokenKind::FlaccidKeyword
+            | TokenKind::ABKeyword
             | TokenKind::BoobaKeyword
             | TokenKind::YarnKeyword => self._var_decl(),
             _ => {
@@ -488,15 +489,13 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn _data_type(&mut self) -> Option<DataType<'a>> {
         let token = self.expect_one_from(&[
-            TokenKind::XxlppKeyword,
             TokenKind::PpKeyword,
-            TokenKind::SppKeyword,
-            TokenKind::XsppKeyword,
+            TokenKind::FlaccidKeyword,
+            TokenKind::ABKeyword,
             TokenKind::PKeyword,
             TokenKind::NoppKeyword,
             TokenKind::BoobaKeyword,
             TokenKind::YarnKeyword,
-            TokenKind::RatioKeyword,
         ])?;
 
         match token.1 {
@@ -505,7 +504,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),
             TokenKind::YarnKeyword => Some(DataType::Yarn),
-            TokenKind::RatioKeyword => Some(DataType::Ratio),
             _ => None,
         }
     }
