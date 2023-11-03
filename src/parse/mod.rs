@@ -474,6 +474,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         mut self,
         writer: &mut io::BufWriter<fs::File>,
         translation_unit: BoundTranslationUnit,
+        emit_debug_info: bool,
     ) -> io::Result<()> {
         self.emit_translation_unit(&translation_unit);
 
@@ -515,24 +516,26 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 }
                 Instruction::Dbg { debug_keyword } => {
                     pc -= 1;
-                    match debug_keyword {
-                        DebugKeyword::Registers => {
-                            writer.write_all(b"&REGS\r\n")?;
-                        }
-                        DebugKeyword::Stack => {
-                            writer.write_all(b"&STK\r\n")?;
-                        }
-                        DebugKeyword::StackA => {
-                            writer.write_all(b"&STKA\r\n")?;
-                        }
-                        DebugKeyword::StackRg { start, end } => {
-                            writer.write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
-                        }
-                        DebugKeyword::StackN { amount } => {
-                            writer.write_all(format!("&STKN {amount}\r\n").as_bytes())?;
-                        }
-                        DebugKeyword::Echo { message } => {
-                            writer.write_all(format!("&ECHO {message}\r\n").as_bytes())?;
+                    if emit_debug_info {
+                        match debug_keyword {
+                            DebugKeyword::Registers => {
+                                writer.write_all(b"&REGS\r\n")?;
+                            }
+                            DebugKeyword::Stack => {
+                                writer.write_all(b"&STK\r\n")?;
+                            }
+                            DebugKeyword::StackA => {
+                                writer.write_all(b"&STKA\r\n")?;
+                            }
+                            DebugKeyword::StackRg { start, end } => {
+                                writer.write_all(format!("&STKRG {start} {end}\r\n").as_bytes())?;
+                            }
+                            DebugKeyword::StackN { amount } => {
+                                writer.write_all(format!("&STKN {amount}\r\n").as_bytes())?;
+                            }
+                            DebugKeyword::Echo { message } => {
+                                writer.write_all(format!("&ECHO {message}\r\n").as_bytes())?;
+                            }
                         }
                     }
                 }
@@ -900,16 +903,11 @@ mod lexer {
 
 mod parser {
     use std::fmt;
+    use std::fmt::Formatter;
     use std::mem;
 
     use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
-
-    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub enum FlaccidRepresentation {
-        Integer(i32, i32),
-        Real(f64),
-    }
 
     #[derive(Clone, Debug, Pos)]
     pub struct TranslationUnit<'a> {
@@ -1009,7 +1007,7 @@ mod parser {
         },
     }
 
-    #[derive(Clone, Debug, Pos)]
+    #[derive(Clone, Debug, Pos, PartialEq)]
     pub struct Variable<'a> {
         position: (u32, u32),
         identifier: &'a str,
@@ -1038,19 +1036,20 @@ mod parser {
         Struct { name: &'a str },
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, PartialEq)]
     pub struct Struct {}
 
+    #[derive(Clone, Debug, PartialEq)]
     pub enum LiteralValue<'a> {
         Pp(i32),
-        Flaccid(FlaccidRepresentation),
+        Flaccid(i32, i32),
         AB(i32, i32),
         P(char),
         Booba(bool),
         Yarn(&'a str),
     }
 
-    #[derive(Clone, Debug, Pos)]
+    #[derive(Clone, Debug, Pos, PartialEq)]
     pub enum Expression<'a> {
         // TODO: Use LiteralExpression instead.
         Literal {
@@ -1310,12 +1309,27 @@ mod parser {
         }
     }
 
+    impl fmt::Display for LiteralValue<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                LiteralValue::Pp(pp) => write!(f, "{pp}"),
+                LiteralValue::Flaccid(a, b) => write!(f, "{a}.{b}"),
+                LiteralValue::AB(a, b) => write!(f, "{a}|{b}"),
+                LiteralValue::P(p) => write!(f, "{p}"),
+                LiteralValue::Booba(booba) => write!(f, "{booba}"),
+                LiteralValue::Yarn(yarn) => write!(f, "{yarn}"),
+            }
+        }
+    }
+
     impl PartialEq for DataType<'_> {
         fn eq(&self, other: &Self) -> bool {
             matches!(
                 (self, other),
-                (DataType::Number(..), DataType::Number(..))
+                (DataType::Pp, DataType::Pp)
                     | (DataType::P, DataType::P)
+                    | (DataType::Flaccid, DataType::Flaccid)
+                    | (DataType::AB, DataType::AB)
                     | (DataType::Yarn, DataType::Yarn)
                     | (DataType::Booba, DataType::Booba)
                     | (DataType::Nopp, DataType::Nopp)
@@ -1357,7 +1371,7 @@ mod analysis {
         BinaryOperator, DataType, Expression, Function, UnaryOperator, Variable,
     };
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug, PartialEq)]
     pub struct SymbolTable<'a> {
         /// The global scope holding global variables and function identifiers.
         global_scope: GlobalScope<'a>,
@@ -1365,7 +1379,7 @@ mod analysis {
         function_scopes: Vec<FunctionScope<'a>>,
     }
 
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug, Default, PartialEq)]
     pub struct Scope<'a> {
         /// Variable symbol table.
         variables: collections::HashMap<&'a str, VariableDescriptor<'a>>,
@@ -1373,13 +1387,13 @@ mod analysis {
         functions: collections::HashMap<&'a str, FunctionDescriptor<'a>>,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct GlobalScope<'a> {
         scope: Scope<'a>,
         stack_position: usize,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct FunctionScope<'a> {
         // This is a stack of scopes that is popped once the scope is ended.
         scopes: Vec<Scope<'a>>,
@@ -1389,7 +1403,7 @@ mod analysis {
         stack_position: usize,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct VariableDescriptor<'a> {
         stack_position: usize,
         data_type: DataType<'a>,
@@ -1399,14 +1413,14 @@ mod analysis {
         initialized: bool,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct FunctionDescriptor<'a> {
         return_type: DataType<'a>,
         parameters: Vec<Variable<'a>>,
         function_id: usize,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct BoundTranslationUnit {
         pub functions: Vec<BoundFunction>,
         main_function_identifier: usize,
@@ -1414,7 +1428,7 @@ mod analysis {
         pub global_variable_assignments: Vec<BoundVariableAssignment>,
     }
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct BoundFunction {
         identifier: usize,
         is_main_function: bool,
@@ -1430,16 +1444,10 @@ mod analysis {
         pub value: BoundExpression,
     }
 
-
-    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub enum BoundFlaccidRepresentation {
-        Integer(i32, i32),
-        Real(f64),
-    }
-
+    #[derive(Clone, PartialEq, Debug)]
     pub enum BoundLiteralValue {
         Pp(i32),
-        Flaccid(BoundFlaccidRepresentation),
+        Flaccid(i32, i32),
         AB(i32, i32),
         P(char),
         Booba(bool),
@@ -2267,6 +2275,7 @@ pub mod compiler {
             Emitter::new(rc::Rc::clone(&error_diag)).emit_to_writer(
                 &mut io::BufWriter::new(fs::File::create(output_file)?),
                 translation_unit,
+                false,
             )
         }
     }

@@ -1,6 +1,9 @@
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{BoundExpression, BoundFlaccidRepresentation, BoundFunction, BoundLiteralValue, BoundStatement, BoundTranslationUnit, BoundVariableAssignment, Scope};
+use crate::parse::analysis::{
+    BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement, BoundTranslationUnit,
+    BoundVariableAssignment, Scope,
+};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{BinaryOperator, UnaryOperator};
 use crate::parse::Emitter;
@@ -231,45 +234,24 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// * `expression`: the expression
     fn emit_expression(&mut self, expression: &BoundExpression) {
         match expression {
-            BoundExpression::Literal(value) => {
-                match value {
-                    BoundLiteralValue::Pp(pp) => self.emit_literal(*pp),
-                    BoundLiteralValue::Flaccid(representation) => {
-                        match representation {
-                            BoundFlaccidRepresentation::Integer(a, b) => {
-                                self.emit_literal(*a);
-                                self.emit_literal(*b);
-                            }
-                            BoundFlaccidRepresentation::Real(f) => {
-                                // TODO: um.
-                            }
-                        }
-                    }
-                    BoundLiteralValue::AB(a, b) => {
-                        self.emit_literal(*a);
-                        self.emit_literal(*b);
-                    }
-                    BoundLiteralValue::P(p) => {
-                        self.emit_literal(*p as i32);
-                    }
-                    BoundLiteralValue::Booba(booba) => {
-                        self.emit_literal(*booba as i32);
-                    }
-                    BoundLiteralValue::Yarn(yarn) => {}
+            BoundExpression::Literal(value) => match value {
+                BoundLiteralValue::Pp(pp) => self.emit_literal(*pp),
+                BoundLiteralValue::Flaccid(a, b) => {
+                    self.emit_literal(*a);
+                    self.emit_literal(*b);
                 }
-            }
-            BoundExpression::P { 0: p, .. } => {
-                self.emit_literal(*p as i32);
-            }
-            BoundExpression::Booba { 0: booba, .. } => {
-                self.emit_literal(i32::from(*booba));
-            }
-            BoundExpression::Yarn { 0: yarn, .. } => {
-                self.emit_literal(yarn.len() as i32);
-                // Self::pack_yarn(yarn)
-                //     .into_iter()
-                //     .for_each(|four_packed_chars| self.emit_literal(four_packed_chars));
-            }
+                BoundLiteralValue::AB(a, b) => {
+                    self.emit_literal(*a);
+                    self.emit_literal(*b);
+                }
+                BoundLiteralValue::P(p) => {
+                    self.emit_literal(*p as i32);
+                }
+                BoundLiteralValue::Booba(booba) => {
+                    self.emit_literal(*booba as i32);
+                }
+                BoundLiteralValue::Yarn(yarn) => {}
+            },
             BoundExpression::Binary { lhs, rhs, op, .. } => {
                 // Ok so this is a little complicated, but bear with me:
                 // We need to check what kind of binary operator we have.
@@ -367,7 +349,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     ///
     /// * `value`: the booba value
     fn emit_booba(&mut self, value: bool) {
-        self.emit_expression(&BoundExpression::Booba(value));
+        self.emit_expression(&BoundExpression::Literal(BoundLiteralValue::Booba(value)));
     }
 
     /// # Summary

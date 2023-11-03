@@ -1,8 +1,8 @@
 use crate::parse::analysis::{
-    BoundCase, BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit,
-    BoundVariableAssignment,
+    BoundCase, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
+    BoundTranslationUnit, BoundVariableAssignment,
 };
-use crate::parse::parser::{BinaryOperator};
+use crate::parse::parser::BinaryOperator;
 use crate::parse::Optimizer;
 
 impl Optimizer {
@@ -27,25 +27,42 @@ impl Optimizer {
         function.statements = function
             .statements
             .into_iter()
-            .map(|statement| self.optimize_statement(statement))
+            .map(|statement| self.optimize_statement_with_debug(statement))
             .collect::<Vec<BoundStatement>>();
         function
     }
 
-    fn optimize_statement(&mut self, mut statement: BoundStatement) -> BoundStatement {
+    fn optimize_statement_with_debug(&mut self, statement: BoundStatement) -> BoundStatement {
         let statement_str = format!("{statement:?}");
-        let optimized_statement = match statement {
+        let optimized_statement = self.optimize_statement(statement);
+        let optimized_statement_str = format!("{optimized_statement:?}");
+        if statement_str != optimized_statement_str {
+            self.optimizations.push(format!(
+                "[INFO] Optimized statement\n   {statement_str}\n-> {optimized_statement_str}"
+            ));
+        }
+
+        optimized_statement
+    }
+
+    fn optimize_statement(&mut self, mut statement: BoundStatement) -> BoundStatement {
+        match statement {
             BoundStatement::If {
                 expression,
                 statement,
             } => {
-                let optimized_expression = self.optimize_expression(expression);
-                if let BoundExpression::Booba(value) = optimized_expression {
-                    return if value {
-                        self.optimize_statement(*statement)
-                    } else {
-                        BoundStatement::Empty
-                    };
+                let optimized_expression = self.optimize_expression_with_debug(expression);
+                if let BoundExpression::Literal(value) = &optimized_expression {
+                    match value {
+                        BoundLiteralValue::Booba(booba_value) => {
+                            return if *booba_value {
+                                self.optimize_statement(*statement)
+                            } else {
+                                BoundStatement::Empty
+                            };
+                        }
+                        _ => {}
+                    }
                 }
 
                 BoundStatement::If {
@@ -55,7 +72,7 @@ impl Optimizer {
             }
             BoundStatement::Expression(expression) => {
                 if let BoundExpression::FunctionCall { .. } = expression {
-                    BoundStatement::Expression(self.optimize_expression(expression))
+                    BoundStatement::Expression(self.optimize_expression_with_debug(expression))
                 } else {
                     // Any other expression statement is pointless.
                     BoundStatement::Empty
@@ -77,33 +94,36 @@ impl Optimizer {
                 }
             }
             BoundStatement::Switch { expression, cases } => {
-                let expression = self.optimize_expression(expression);
+                let expression = self.optimize_expression_with_debug(expression);
                 let cases = self.optimize_cases(&expression, cases);
                 BoundStatement::Switch { expression, cases }
             }
             _ => statement,
-        };
-        let optimized_statement_str = format!("{optimized_statement:?}");
-        if statement_str != optimized_statement_str {
-            self.optimizations.push(format!(
-                "[INFO] Optimized\n   {statement_str}\n-> {optimized_statement_str}"
-            ));
         }
-
-        optimized_statement
     }
 
     fn optimize_assignment(
         &mut self,
         mut assignment: BoundVariableAssignment,
     ) -> BoundVariableAssignment {
-        assignment.value = self.optimize_expression(assignment.value);
+        assignment.value = self.optimize_expression_with_debug(assignment.value);
         assignment
     }
 
-    fn optimize_expression(&mut self, mut expression: BoundExpression) -> BoundExpression {
+    fn optimize_expression_with_debug(&mut self, expression: BoundExpression) -> BoundExpression {
         let expression_str = format!("{expression:?}");
-        let optimized_expression = match expression {
+        let optimized_expression = self.optimize_expression(expression);
+        let optimized_expression_str = format!("{optimized_expression:?}");
+        if expression_str != optimized_expression_str {
+            self.optimizations.push(format!(
+                "[INFO] Optimized expression\n   {expression_str}\n-> {optimized_expression_str}"
+            ));
+        }
+        optimized_expression
+    }
+
+    fn optimize_expression(&mut self, mut expression: BoundExpression) -> BoundExpression {
+        match expression {
             BoundExpression::Binary { lhs, rhs, op } => {
                 let optimized_lhs = self.optimize_expression(*lhs);
                 let optimized_rhs = self.optimize_expression(*rhs);
@@ -116,10 +136,9 @@ impl Optimizer {
                             if lhs_zero {
                                 return match &op {
                                     BinOp::Add | BinOp::Subtract => optimized_rhs,
-                                    BinOp::Multiply => BoundExpression::Number {
-                                        value: 0,
-                                        number_type: NumberType::Pp,
-                                    },
+                                    BinOp::Multiply => {
+                                        BoundExpression::Literal(BoundLiteralValue::Pp(0))
+                                    }
                                     _ => unreachable!(),
                                 };
                             }
@@ -129,10 +148,9 @@ impl Optimizer {
                             if rhs_zero {
                                 return match &op {
                                     BinOp::Add | BinOp::Subtract => optimized_lhs,
-                                    BinOp::Multiply => BoundExpression::Number {
-                                        value: 0,
-                                        number_type: NumberType::Pp,
-                                    },
+                                    BinOp::Multiply => {
+                                        BoundExpression::Literal(BoundLiteralValue::Pp(0))
+                                    }
                                     _ => unreachable!(),
                                 };
                             }
@@ -154,46 +172,50 @@ impl Optimizer {
                         if let Some(lhs) = Self::booba_value(&optimized_lhs) {
                             if let Some(rhs) = Self::booba_value(&optimized_rhs) {
                                 return match &op {
-                                    BinOp::And => BoundExpression::Booba(lhs && rhs),
-                                    BinOp::Or => BoundExpression::Booba(lhs || rhs),
-                                    BinOp::Equal => BoundExpression::Booba(lhs == rhs),
-                                    BinOp::NotEqual => BoundExpression::Booba(lhs != rhs),
+                                    BinOp::And => BoundExpression::Literal(
+                                        BoundLiteralValue::Booba(lhs && rhs),
+                                    ),
+                                    BinOp::Or => BoundExpression::Literal(
+                                        BoundLiteralValue::Booba(lhs || rhs),
+                                    ),
+                                    BinOp::Equal => BoundExpression::Literal(
+                                        BoundLiteralValue::Booba(lhs == rhs),
+                                    ),
+                                    BinOp::NotEqual => BoundExpression::Literal(
+                                        BoundLiteralValue::Booba(lhs != rhs),
+                                    ),
                                     _ => unreachable!(),
                                 };
                             }
                         }
 
-                        if let BoundExpression::Number {
-                            number_type: lhs_number_type,
-                            value: lhs_value,
-                        } = &optimized_lhs
-                        {
-                            if let BoundExpression::Number {
-                                number_type: rhs_number_type,
-                                value: rhs_value,
-                            } = &optimized_rhs
-                            {
-                                return match &op {
-                                    BinOp::Equal => {
-                                        BoundExpression::Booba(*lhs_value == *rhs_value)
+                        if let BoundExpression::Literal(lhs_value) = &optimized_lhs {
+                            if let BoundLiteralValue::Pp(lhs_value) = lhs_value {
+                                if let BoundExpression::Literal(rhs_value) = &optimized_rhs {
+                                    if let BoundLiteralValue::Pp(rhs_value) = rhs_value {
+                                        return match &op {
+                                            BinOp::Equal => BoundExpression::Literal(
+                                                BoundLiteralValue::Booba(*lhs_value == *rhs_value),
+                                            ),
+                                            BinOp::NotEqual => BoundExpression::Literal(
+                                                BoundLiteralValue::Booba(*lhs_value != *rhs_value),
+                                            ),
+                                            BinOp::GreaterThan => BoundExpression::Literal(
+                                                BoundLiteralValue::Booba(*lhs_value > *rhs_value),
+                                            ),
+                                            BinOp::GreaterThanOrEqual => BoundExpression::Literal(
+                                                BoundLiteralValue::Booba(*lhs_value >= *rhs_value),
+                                            ),
+                                            BinOp::LessThan => BoundExpression::Literal(
+                                                BoundLiteralValue::Booba(*lhs_value < *rhs_value),
+                                            ),
+                                            BinOp::LessThanOrEqual => BoundExpression::Literal(
+                                                BoundLiteralValue::Booba(*lhs_value <= *rhs_value),
+                                            ),
+                                            _ => unreachable!(),
+                                        };
                                     }
-                                    BinOp::NotEqual => {
-                                        BoundExpression::Booba(*lhs_value != *rhs_value)
-                                    }
-                                    BinOp::GreaterThan => {
-                                        BoundExpression::Booba(*lhs_value > *rhs_value)
-                                    }
-                                    BinOp::GreaterThanOrEqual => {
-                                        BoundExpression::Booba(*lhs_value >= *rhs_value)
-                                    }
-                                    BinOp::LessThan => {
-                                        BoundExpression::Booba(*lhs_value < *rhs_value)
-                                    }
-                                    BinOp::LessThanOrEqual => {
-                                        BoundExpression::Booba(*lhs_value <= *rhs_value)
-                                    }
-                                    _ => unreachable!(),
-                                };
+                                }
                             }
                         }
 
@@ -215,15 +237,7 @@ impl Optimizer {
                 BoundExpression::Variable(variable_position)
             }
             _ => expression,
-        };
-        let optimized_expression_str = format!("{optimized_expression:?}");
-        if expression_str != optimized_expression_str {
-            self.optimizations.push(format!(
-                "[INFO] Optimized\n   {expression_str}\n-> {optimized_expression_str}"
-            ));
         }
-
-        optimized_expression
     }
 
     fn optimize_cases(
@@ -233,10 +247,7 @@ impl Optimizer {
     ) -> Vec<BoundCase> {
         // Check if it's a constant.
         match expression {
-            BoundExpression::Number { value, number_type } => {}
-            BoundExpression::P(_) => {}
-            BoundExpression::Booba(_) => {}
-            BoundExpression::Yarn(_) => {}
+            BoundExpression::Literal(_) => {}
             BoundExpression::Unary { .. } => {}
             BoundExpression::Binary { .. } => {}
             BoundExpression::Variable(_) => {}
@@ -247,14 +258,21 @@ impl Optimizer {
 
     fn is_zero(expression: &BoundExpression) -> Option<bool> {
         match expression {
-            BoundExpression::Number { value, .. } => Some(*value == 0),
+            BoundExpression::Literal(value) => match value {
+                BoundLiteralValue::Pp(value) => Some(*value == 0),
+                BoundLiteralValue::Flaccid(a, b) => Some(*a == 0 && *b == 0),
+                _ => None,
+            },
             _ => None,
         }
     }
 
     fn booba_value(expression: &BoundExpression) -> Option<bool> {
         match expression {
-            BoundExpression::Booba(value) => Some(*value),
+            BoundExpression::Literal(value) => match value {
+                BoundLiteralValue::Booba(value) => Some(*value),
+                _ => None,
+            },
             _ => None,
         }
     }

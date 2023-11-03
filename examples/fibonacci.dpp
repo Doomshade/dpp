@@ -21,7 +21,7 @@ FUNc fibonacci(pp -> num) -> pp {
 }
 
 FUNc main() -> pp {
-    pp -> asd = 4 + 69 * 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0;
+    pp -> asd = 5 + 69 * 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0;
     bye fibonacci(10) + fibonacci_rec(10);
 }
 
@@ -140,7 +140,9 @@ FUNc main5() -> pp {
             pp -> KEK = 123456798;
         }
     }
-    if (yem) {}
+    if (nom) {
+        pp -> adjdsaf = 0;
+    }
     if (yem) {}
     if (yem) {}
     if (yem) {}

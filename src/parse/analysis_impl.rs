@@ -1,13 +1,12 @@
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundCase, BoundExpression, BoundFlaccidRepresentation, BoundFunction, BoundLiteralValue,
-    BoundStatement, BoundTranslationUnit, BoundVariableAssignment, BoundVariablePosition,
+    BoundCase, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
+    BoundTranslationUnit, BoundVariableAssignment, BoundVariablePosition,
 };
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
-    Block, Case, DataType, FlaccidRepresentation, LiteralValue, Statement, TranslationUnit,
-    UnaryOperator, Variable,
+    Block, Case, DataType, LiteralValue, Statement, TranslationUnit, UnaryOperator, Variable,
 };
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
@@ -51,8 +50,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.error_diag
                     .borrow_mut()
                     .function_already_exists(function.position(), function.identifier());
+            } else {
+                self.symbol_table_mut().push_global_function(function);
             }
-            self.symbol_table_mut().push_global_function(function)
         });
 
         // Analyze global statements.
@@ -553,7 +553,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         return match expr {
             Expression::Literal { value, .. } => Some(match value {
                 LiteralValue::Pp(_) => DataType::Pp,
-                LiteralValue::Flaccid(_) => DataType::Flaccid,
+                LiteralValue::Flaccid(_, _) => DataType::Flaccid,
                 LiteralValue::AB(_, _) => DataType::AB,
                 LiteralValue::P(_) => DataType::P,
                 LiteralValue::Booba(_) => DataType::Booba,
@@ -697,14 +697,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         match expression {
             Expression::Literal { value, .. } => BoundExpression::Literal(match value {
                 LiteralValue::Pp(pp) => BoundLiteralValue::Pp(*pp),
-                LiteralValue::Flaccid(representation) => {
-                    BoundLiteralValue::Flaccid(match representation {
-                        FlaccidRepresentation::Integer(a, b) => {
-                            BoundFlaccidRepresentation::Integer(*a, *b)
-                        }
-                        FlaccidRepresentation::Real(f) => BoundFlaccidRepresentation::Real(*f),
-                    })
-                }
+                LiteralValue::Flaccid(a, b) => BoundLiteralValue::Flaccid(*a, *b),
                 LiteralValue::AB(a, b) => BoundLiteralValue::AB(*a, *b),
                 LiteralValue::P(p) => BoundLiteralValue::P(*p),
                 LiteralValue::Booba(booba) => BoundLiteralValue::Booba(*booba),

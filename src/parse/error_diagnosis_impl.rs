@@ -94,7 +94,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     pub fn function_already_exists(&mut self, position: (u32, u32), function_name: &'a str) {
         self.insert_error_message(
             position,
-            format!("Function \"{function_name}\" already exists.").as_str(),
+            format!("Function with name \"{function_name}\" already exists.").as_str(),
         );
     }
 
@@ -170,7 +170,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     pub fn variable_already_exists(&mut self, position: (u32, u32), var_name: &str) {
         self.insert_error_message(
             position,
-            format!("Variable \"{var_name}\" already exists.").as_str(),
+            format!("Variable with name \"{var_name}\" already exists.").as_str(),
         );
     }
     pub fn variable_not_found(&mut self, position: (u32, u32), var_name: &str) {

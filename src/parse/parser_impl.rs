@@ -42,7 +42,7 @@
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::{LiteralKind, TokenKind};
 use crate::parse::parser::{
-    BinaryOperator, Case, DataType, Statement, TranslationUnit, UnaryOperator,
+    BinaryOperator, Case, DataType, LiteralValue, Statement, TranslationUnit, UnaryOperator,
 };
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
@@ -498,7 +498,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         ])?;
 
         match token.1 {
-            TokenKind::PpKeyword => Some(DataType::Number(NumberType::Pp)),
+            TokenKind::PpKeyword => Some(DataType::Pp),
+            TokenKind::FlaccidKeyword => Some(DataType::Flaccid),
+            TokenKind::ABKeyword => Some(DataType::AB),
             TokenKind::PKeyword => Some(DataType::P),
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),
@@ -658,17 +660,17 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::YemKeyword => {
                 let position = self.position;
                 self.expect(TokenKind::YemKeyword)?;
-                Some(Expression::Booba {
+                Some(Expression::Literal {
                     position,
-                    value: true,
+                    value: LiteralValue::Booba(true),
                 })
             }
             TokenKind::NomKeyword => {
                 let position = self.position;
                 self.expect(TokenKind::NomKeyword)?;
-                Some(Expression::Booba {
+                Some(Expression::Literal {
                     position,
-                    value: false,
+                    value: LiteralValue::Booba(false),
                 })
             }
             TokenKind::Literal(literal_kind) => {
@@ -677,10 +679,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                 match literal_kind {
                     LiteralKind::Pp => {
                         if let Ok(value) = literal.parse::<i32>() {
-                            Some(Expression::Number {
+                            Some(Expression::Literal {
                                 position,
-                                number_type: NumberType::Pp,
-                                value,
+                                value: LiteralValue::Pp(value),
                             })
                         } else {
                             panic!("Invalid number")
@@ -688,14 +689,17 @@ impl<'a, 'b> Parser<'a, 'b> {
                     }
                     LiteralKind::P => {
                         if let Some(value) = literal.chars().next() {
-                            Some(Expression::P { position, value })
+                            Some(Expression::Literal {
+                                position,
+                                value: LiteralValue::P(value),
+                            })
                         } else {
                             panic!("Invalid character")
                         }
                     }
-                    LiteralKind::Yarn => Some(Expression::Yarn {
+                    LiteralKind::Yarn => Some(Expression::Literal {
                         position,
-                        value: literal,
+                        value: LiteralValue::Yarn(literal),
                     }),
                     _ => todo!("Not yet implemented"),
                 }
