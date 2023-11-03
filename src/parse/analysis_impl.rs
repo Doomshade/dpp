@@ -1,12 +1,13 @@
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundCase, BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit,
-    BoundVariableAssignment, BoundVariablePosition,
+    BoundCase, BoundExpression, BoundFlaccidRepresentation, BoundFunction, BoundLiteralValue,
+    BoundStatement, BoundTranslationUnit, BoundVariableAssignment, BoundVariablePosition,
 };
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
-    Block, Case, DataType, NumberType, Statement, TranslationUnit, UnaryOperator, Variable,
+    Block, Case, DataType, FlaccidRepresentation, LiteralValue, Statement, TranslationUnit,
+    UnaryOperator, Variable,
 };
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
@@ -454,7 +455,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 if let Some(ident_expression) = ident_expression {
                     bound_ident_expression = Some(self.analyze_expr(
                         ident_expression,
-                        Some(&DataType::Number(NumberType::Pp)),
+                        Some(&DataType::Pp),
                         Some(ident_expression.position()),
                     ));
                 } else {
@@ -463,7 +464,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 let bound_length_expression = self.analyze_expr(
                     length_expression,
-                    Some(&DataType::Number(NumberType::Pp)),
+                    Some(&DataType::Pp),
                     Some(length_expression.position()),
                 );
 
@@ -471,7 +472,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let index_variable = Variable::new(
                     *position,
                     index_ident,
-                    DataType::Number(NumberType::Pp),
+                    DataType::Pp,
                     ident_expression.clone(),
                 );
                 self.symbol_table_mut()
@@ -487,7 +488,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut().pop_scope();
 
                 BoundStatement::For {
-                    ident_position: BoundVariablePosition::new(level as usize, offset as i32),
+                    ident_position: BoundVariablePosition::new(level, offset as i32),
                     ident_expression: bound_ident_expression.map(|exp| exp.1),
                     length_expression: bound_length_expression.1,
                     statement: Box::new(bound_statement),
@@ -550,10 +551,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// Option<DataType> - the data type of the expression if it is valid, None otherwise
     fn calc_data_type(&self, expr: &Expression<'a>) -> Option<DataType<'a>> {
         return match expr {
-            Expression::Number { number_type, .. } => Some(DataType::Number(number_type.clone())),
-            Expression::P { .. } => Some(DataType::P),
-            Expression::Booba { .. } => Some(DataType::Booba),
-            Expression::Yarn { .. } => Some(DataType::Yarn),
+            Expression::Literal { value, .. } => Some(match value {
+                LiteralValue::Pp(_) => DataType::Pp,
+                LiteralValue::Flaccid(_) => DataType::Flaccid,
+                LiteralValue::AB(_, _) => DataType::AB,
+                LiteralValue::P(_) => DataType::P,
+                LiteralValue::Booba(_) => DataType::Booba,
+                LiteralValue::Yarn(_) => DataType::Yarn,
+            }),
             Expression::Unary {
                 operand,
                 op,
@@ -573,11 +578,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         }
                     },
                     UnaryOperator::Negate => match data_type {
-                        DataType::Number(..) => Some(data_type),
+                        DataType::Pp => Some(data_type),
+                        DataType::Flaccid => Some(data_type),
                         _ => {
                             self.error_diag.borrow_mut().invalid_data_type(
                                 *position,
-                                &DataType::Number(NumberType::Pp),
+                                &DataType::Pp,
                                 &data_type,
                             );
                             Some(data_type)
@@ -689,15 +695,21 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn expr(&self, expression: &Expression<'a>) -> BoundExpression {
         match expression {
-            Expression::Number {
-                number_type, value, ..
-            } => BoundExpression::Number {
-                number_type: number_type.clone(),
-                value: *value,
-            },
-            Expression::P { value, .. } => BoundExpression::P(*value),
-            Expression::Booba { value, .. } => BoundExpression::Booba(*value),
-            Expression::Yarn { value, .. } => BoundExpression::Yarn(String::from(*value)),
+            Expression::Literal { value, .. } => BoundExpression::Literal(match value {
+                LiteralValue::Pp(pp) => BoundLiteralValue::Pp(*pp),
+                LiteralValue::Flaccid(representation) => {
+                    BoundLiteralValue::Flaccid(match representation {
+                        FlaccidRepresentation::Integer(a, b) => {
+                            BoundFlaccidRepresentation::Integer(*a, *b)
+                        }
+                        FlaccidRepresentation::Real(f) => BoundFlaccidRepresentation::Real(*f),
+                    })
+                }
+                LiteralValue::AB(a, b) => BoundLiteralValue::AB(*a, *b),
+                LiteralValue::P(p) => BoundLiteralValue::P(*p),
+                LiteralValue::Booba(booba) => BoundLiteralValue::Booba(*booba),
+                LiteralValue::Yarn(yarn) => BoundLiteralValue::Yarn(String::from(*yarn)),
+            }),
             Expression::Unary { op, operand, .. } => BoundExpression::Unary {
                 op: op.clone(),
                 operand: Box::new(self.expr(operand)),

@@ -1,7 +1,8 @@
 use crate::parse::analysis::{
-    BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit, BoundVariableAssignment,
+    BoundCase, BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit,
+    BoundVariableAssignment,
 };
-use crate::parse::parser::{BinaryOperator, NumberType};
+use crate::parse::parser::{BinaryOperator};
 use crate::parse::Optimizer;
 
 impl Optimizer {
@@ -74,6 +75,11 @@ impl Optimizer {
                             .collect::<Vec<BoundStatement>>(),
                     )
                 }
+            }
+            BoundStatement::Switch { expression, cases } => {
+                let expression = self.optimize_expression(expression);
+                let cases = self.optimize_cases(&expression, cases);
+                BoundStatement::Switch { expression, cases }
             }
             _ => statement,
         };
@@ -218,6 +224,25 @@ impl Optimizer {
         }
 
         optimized_expression
+    }
+
+    fn optimize_cases(
+        &mut self,
+        expression: &BoundExpression,
+        mut cases: Vec<BoundCase>,
+    ) -> Vec<BoundCase> {
+        // Check if it's a constant.
+        match expression {
+            BoundExpression::Number { value, number_type } => {}
+            BoundExpression::P(_) => {}
+            BoundExpression::Booba(_) => {}
+            BoundExpression::Yarn(_) => {}
+            BoundExpression::Unary { .. } => {}
+            BoundExpression::Binary { .. } => {}
+            BoundExpression::Variable(_) => {}
+            BoundExpression::FunctionCall { .. } => {}
+        }
+        vec![]
     }
 
     fn is_zero(expression: &BoundExpression) -> Option<bool> {

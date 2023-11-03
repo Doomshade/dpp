@@ -1,9 +1,6 @@
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{
-    BoundExpression, BoundFunction, BoundStatement, BoundTranslationUnit, BoundVariableAssignment,
-    Scope,
-};
+use crate::parse::analysis::{BoundExpression, BoundFlaccidRepresentation, BoundFunction, BoundLiteralValue, BoundStatement, BoundTranslationUnit, BoundVariableAssignment, Scope};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{BinaryOperator, UnaryOperator};
 use crate::parse::Emitter;
@@ -234,8 +231,32 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// * `expression`: the expression
     fn emit_expression(&mut self, expression: &BoundExpression) {
         match expression {
-            BoundExpression::Number { value, .. } => {
-                self.emit_literal(*value);
+            BoundExpression::Literal(value) => {
+                match value {
+                    BoundLiteralValue::Pp(pp) => self.emit_literal(*pp),
+                    BoundLiteralValue::Flaccid(representation) => {
+                        match representation {
+                            BoundFlaccidRepresentation::Integer(a, b) => {
+                                self.emit_literal(*a);
+                                self.emit_literal(*b);
+                            }
+                            BoundFlaccidRepresentation::Real(f) => {
+                                // TODO: um.
+                            }
+                        }
+                    }
+                    BoundLiteralValue::AB(a, b) => {
+                        self.emit_literal(*a);
+                        self.emit_literal(*b);
+                    }
+                    BoundLiteralValue::P(p) => {
+                        self.emit_literal(*p as i32);
+                    }
+                    BoundLiteralValue::Booba(booba) => {
+                        self.emit_literal(*booba as i32);
+                    }
+                    BoundLiteralValue::Yarn(yarn) => {}
+                }
             }
             BoundExpression::P { 0: p, .. } => {
                 self.emit_literal(*p as i32);

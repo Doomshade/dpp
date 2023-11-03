@@ -95,14 +95,17 @@ impl<'a, 'b> Lexer<'a, 'b> {
 
         if self.peek() != '\'' {
             self.error_diag.borrow_mut().expected_different_token_error(
-                &self.new_token(TokenKind::PLiteral, ""),
-                TokenKind::PLiteral,
+                &self.new_token(TokenKind::Literal(LiteralKind::P), ""),
+                TokenKind::Literal(LiteralKind::P),
             );
             return self.new_token(TokenKind::Eof, "EOF");
         }
 
         end += self.advance(); // Consume closing quote.
-        self.new_token(TokenKind::PLiteral, &self.raw_input[start + 1..end - 1])
+        self.new_token(
+            TokenKind::Literal(LiteralKind::P),
+            &self.raw_input[start + 1..end - 1],
+        )
     }
 
     /// # Summary
@@ -295,11 +298,17 @@ impl<'a, 'b> Lexer<'a, 'b> {
             let _ = self.advance(); // Consume the closing quote.
         } else {
             self.error_diag.borrow_mut().expected_different_token_error(
-                &self.new_token(TokenKind::YarnLiteral, &self.raw_input[start + 1..end]),
+                &self.new_token(
+                    TokenKind::Literal(LiteralKind::Yarn),
+                    &self.raw_input[start + 1..end],
+                ),
                 TokenKind::DoubleQuote,
             );
         }
-        self.new_token(TokenKind::YarnLiteral, &self.raw_input[start + 1..end - 1])
+        self.new_token(
+            TokenKind::Literal(LiteralKind::Yarn),
+            &self.raw_input[start + 1..end - 1],
+        )
     }
 
     /// # Summary
@@ -316,10 +325,10 @@ impl<'a, 'b> Lexer<'a, 'b> {
             end += self.advance();
         }
 
-        let literal_kind;
+        let number_kind;
         // 69.69
         if self.peek() == '.' {
-            literal_kind = LiteralKind::Flaccid;
+            number_kind = LiteralKind::Flaccid;
 
             end += self.advance();
             if !self.peek().is_ascii_digit() {
@@ -335,21 +344,22 @@ impl<'a, 'b> Lexer<'a, 'b> {
         }
         // 69f
         else if self.peek() == 'f' {
-            literal_kind = LiteralKind::Flaccid;
+            number_kind = LiteralKind::Flaccid;
             end += self.advance();
         }
         // 69|69
-        else if self.peek() == '|' {
-            literal_kind = LiteralKind::AB;
-            end += self.advance();
-            while self.peek().is_ascii_digit() {
-                end += self.advance();
-            }
-        } else {
-            literal_kind = LiteralKind::Pp;
+        // else if self.peek() == '|' {
+        //     number_kind = LiteralKind::AB;
+        //     end += self.advance();
+        //     while self.peek().is_ascii_digit() {
+        //         end += self.advance();
+        //     }
+        // }
+        else {
+            number_kind = LiteralKind::Pp;
         }
 
-        self.new_token(TokenKind::NumberLiteral, &self.raw_input[start..end])
+        self.new_token(TokenKind::Literal(number_kind), &self.raw_input[start..end])
     }
 
     /// # Summary

@@ -40,9 +40,9 @@
 //! the error.
 
 use crate::parse::error_diagnosis::SyntaxError;
-use crate::parse::lexer::TokenKind;
+use crate::parse::lexer::{LiteralKind, TokenKind};
 use crate::parse::parser::{
-    BinaryOperator, Case, DataType, NumberType, Statement, TranslationUnit, UnaryOperator,
+    BinaryOperator, Case, DataType, Statement, TranslationUnit, UnaryOperator,
 };
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
@@ -201,8 +201,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::Semicolon => self._empty(),
             TokenKind::YemKeyword
             | TokenKind::NomKeyword
-            | TokenKind::NumberLiteral
-            | TokenKind::YarnLiteral
+            | TokenKind::Literal(_)
             | TokenKind::OpenParen => self._expr_stat(),
             TokenKind::Identifier => {
                 // Identifier can also be an expression. Need to look ahead,
@@ -636,7 +635,8 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _primary(&mut self) -> Option<Expression<'a>> {
-        match self.token()?.kind() {
+        let token_kind = self.token()?.kind();
+        match token_kind {
             TokenKind::Identifier => {
                 let position = self.position;
                 let identifier = self.expect(TokenKind::Identifier)?;
@@ -671,35 +671,34 @@ impl<'a, 'b> Parser<'a, 'b> {
                     value: false,
                 })
             }
-            TokenKind::NumberLiteral => {
+            TokenKind::Literal(literal_kind) => {
                 let position = self.position;
-                let number = self.expect(TokenKind::NumberLiteral)?;
-                if let Ok(value) = number.parse::<i32>() {
-                    Some(Expression::Number {
+                let literal = self.expect(token_kind)?;
+                match literal_kind {
+                    LiteralKind::Pp => {
+                        if let Ok(value) = literal.parse::<i32>() {
+                            Some(Expression::Number {
+                                position,
+                                number_type: NumberType::Pp,
+                                value,
+                            })
+                        } else {
+                            panic!("Invalid number")
+                        }
+                    }
+                    LiteralKind::P => {
+                        if let Some(value) = literal.chars().next() {
+                            Some(Expression::P { position, value })
+                        } else {
+                            panic!("Invalid character")
+                        }
+                    }
+                    LiteralKind::Yarn => Some(Expression::Yarn {
                         position,
-                        number_type: NumberType::Pp,
-                        value,
-                    })
-                } else {
-                    panic!("Invalid number")
+                        value: literal,
+                    }),
+                    _ => todo!("Not yet implemented"),
                 }
-            }
-            TokenKind::PLiteral => {
-                let position = self.position;
-                let char = self.expect(TokenKind::PLiteral)?;
-                if let Some(value) = char.chars().next() {
-                    Some(Expression::P { position, value })
-                } else {
-                    panic!("Invalid character")
-                }
-            }
-            TokenKind::YarnLiteral => {
-                let position = self.position;
-                let yarn = self.expect(TokenKind::YarnLiteral)?;
-                Some(Expression::Yarn {
-                    position,
-                    value: yarn,
-                })
             }
             TokenKind::OpenParen => {
                 self.expect(TokenKind::OpenParen)?;

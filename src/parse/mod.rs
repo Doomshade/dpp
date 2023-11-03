@@ -715,9 +715,6 @@ mod lexer {
     pub enum TokenKind {
         Identifier, // identifier
         Literal(LiteralKind),
-        NumberLiteral,      // number literal
-        PLiteral,           // char literal
-        YarnLiteral,        // String literal
         BangEqual,          // !=
         Comment,            // #
         Whitespace,         //
@@ -791,12 +788,6 @@ mod lexer {
         Yarn,
     }
 
-    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub enum FlaccidRepresentation {
-        Integer,
-        Real,
-    }
-
     impl<'a> Token<'a> {
         pub fn new(kind: TokenKind, position: (u32, u32), value: &'a str) -> Self {
             Token {
@@ -827,9 +818,6 @@ mod lexer {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let text_representation = match self {
                 Self::Identifier => "identifier",
-                Self::NumberLiteral => "integer",
-                Self::PLiteral => "p",
-                Self::YarnLiteral => "yarn",
                 Self::BangEqual => "\"!=\"",
                 Self::Comment | Self::Whitespace | Self::Eof | Self::Unknown => "",
                 Self::EqualEqual => "\"==\"",
@@ -908,16 +896,6 @@ mod lexer {
             }
         }
     }
-
-    impl fmt::Display for FlaccidRepresentation {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                FlaccidRepresentation::Integer | FlaccidRepresentation::Real => {
-                    write!(f, "flaccid")
-                }
-            }
-        }
-    }
 }
 
 mod parser {
@@ -926,6 +904,12 @@ mod parser {
 
     use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
+
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub enum FlaccidRepresentation {
+        Integer(i32, i32),
+        Real(f64),
+    }
 
     #[derive(Clone, Debug, Pos)]
     pub struct TranslationUnit<'a> {
@@ -1043,50 +1027,35 @@ mod parser {
 
     #[derive(Debug, Clone)]
     pub enum DataType<'a> {
-        // Xxlpp, Pp, Spp, Xspp
-        Number(NumberType),
-        // char
-        P,
-        // string
-        Yarn,
-        // bool
-        Booba,
-        // void
-        Nopp,
-        // ratio
-        Ratio,
+        Pp,      // int
+        AB,      // ratio
+        Flaccid, // float
+        P,       // char
+        Yarn,    // string
+        Booba,   // bool
+        Nopp,    // void
+        Ratio,   // ratio
         Struct { name: &'a str },
-    }
-
-    #[derive(Debug, PartialEq, Eq, Clone)]
-    pub enum NumberType {
-        Pp,    // int
-        Ratio, // ratio
-        Glide, // float
     }
 
     #[derive(Clone, Debug)]
     pub struct Struct {}
 
+    pub enum LiteralValue<'a> {
+        Pp(i32),
+        Flaccid(FlaccidRepresentation),
+        AB(i32, i32),
+        P(char),
+        Booba(bool),
+        Yarn(&'a str),
+    }
+
     #[derive(Clone, Debug, Pos)]
     pub enum Expression<'a> {
         // TODO: Use LiteralExpression instead.
-        Number {
+        Literal {
             position: (u32, u32),
-            number_type: NumberType,
-            value: i32,
-        },
-        P {
-            position: (u32, u32),
-            value: char,
-        },
-        Booba {
-            position: (u32, u32),
-            value: bool,
-        },
-        Yarn {
-            position: (u32, u32),
-            value: &'a str,
+            value: LiteralValue<'a>,
         },
         Unary {
             position: (u32, u32),
@@ -1259,15 +1228,13 @@ mod parser {
     impl<'a> DataType<'a> {
         pub fn size(&self) -> usize {
             match self {
-                DataType::Number(number) => match number {
-                    NumberType::Pp => mem::size_of::<i32>(),
-                    NumberType::Ratio => mem::size_of::<i32>() * 2,
-                    NumberType::Glide => mem::size_of::<i32>() * 2,
-                },
+                DataType::Pp => mem::size_of::<i32>(),
+                DataType::Ratio => mem::size_of::<i32>() * 2,
+                DataType::Flaccid => mem::size_of::<i32>() * 2,
                 DataType::P => mem::size_of::<char>(),
                 DataType::Booba => mem::size_of::<bool>(),
                 DataType::Nopp => 0,
-                _ => panic!("Invalid data type {self}"),
+                _ => panic!("Not yet implemented {self}"),
             }
         }
 
@@ -1327,10 +1294,7 @@ mod parser {
     impl fmt::Display for Expression<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let formatted = match self {
-                Expression::Number { value, .. } => value.to_string(),
-                Expression::P { value, .. } => value.to_string(),
-                Expression::Booba { value, .. } => value.to_string(),
-                Expression::Yarn { value, .. } => value.to_string(),
+                Expression::Literal { value, .. } => value.to_string(),
                 Expression::Unary { operand, op, .. } => {
                     format!("Unary expression {}{}", op, operand)
                 }
@@ -1362,16 +1326,16 @@ mod parser {
     impl fmt::Display for DataType<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                DataType::Number(_) => write!(f, "number")?,
-                DataType::P => write!(f, "p")?,
-                DataType::Yarn => write!(f, "yarn")?,
-                DataType::Booba => write!(f, "booba")?,
-                DataType::Nopp => write!(f, "nopp")?,
-                DataType::Ratio => write!(f, "ratio")?,
-                DataType::Struct { name } => write!(f, "struct {name}")?,
-            };
-
-            Ok(())
+                DataType::Pp => write!(f, "integer"),
+                DataType::Flaccid => write!(f, "flaccid"),
+                DataType::P => write!(f, "p"),
+                DataType::Yarn => write!(f, "yarn"),
+                DataType::Booba => write!(f, "booba"),
+                DataType::Nopp => write!(f, "nopp"),
+                DataType::Ratio => write!(f, "ratio"),
+                DataType::Struct { name } => write!(f, "struct {name}"),
+                DataType::AB => write!(f, "ratio"),
+            }
         }
     }
 
@@ -1390,7 +1354,7 @@ mod analysis {
     use std::{collections, fmt};
 
     use crate::parse::parser::{
-        BinaryOperator, DataType, Expression, Function, NumberType, UnaryOperator, Variable,
+        BinaryOperator, DataType, Expression, Function, UnaryOperator, Variable,
     };
 
     #[derive(Debug)]
@@ -1466,15 +1430,25 @@ mod analysis {
         pub value: BoundExpression,
     }
 
-    #[derive(Clone, PartialEq, Debug)]
-    pub enum BoundExpression {
-        Number {
-            number_type: NumberType,
-            value: i32,
-        },
+
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub enum BoundFlaccidRepresentation {
+        Integer(i32, i32),
+        Real(f64),
+    }
+
+    pub enum BoundLiteralValue {
+        Pp(i32),
+        Flaccid(BoundFlaccidRepresentation),
+        AB(i32, i32),
         P(char),
         Booba(bool),
         Yarn(String),
+    }
+
+    #[derive(Clone, PartialEq, Debug)]
+    pub enum BoundExpression {
+        Literal(BoundLiteralValue),
         Unary {
             op: UnaryOperator,
             operand: Box<BoundExpression>,
@@ -2304,7 +2278,7 @@ pub mod compiler {
 
         use TokenKind as TK;
 
-        use crate::parse::lexer::TokenKind;
+        use crate::parse::lexer::{LiteralKind, TokenKind};
         use crate::parse::{ErrorDiagnosis, Lexer};
 
         fn test_generic_lex(
@@ -2343,7 +2317,7 @@ pub mod compiler {
                     TK::Arrow,
                     TK::Identifier,
                     TK::Equal,
-                    TK::NumberLiteral,
+                    TK::Literal(LiteralKind::Pp),
                     TK::Semicolon,
                     TK::Eof,
                 ],
