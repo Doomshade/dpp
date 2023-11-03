@@ -428,6 +428,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 }
 
 impl Optimizer {
+    pub fn new() -> Self {
+        Self {
+            optimizations: Vec::new(),
+            referenced_variables: collections::HashSet::new(),
+        }
+    }
+
     pub fn optimize(&mut self, translation_unit: BoundTranslationUnit) -> BoundTranslationUnit {
         self.optimize_translation_unit(translation_unit)
     }
@@ -2183,14 +2190,14 @@ pub mod compiler {
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                let mut optimizer = Optimizer {
-                    optimizations: Vec::new(),
-                    referenced_variables: HashSet::new(),
-                };
-                let optimized_translation_unit = optimizer.optimize(bound_translation_unit);
+                const TIMES: u32 = 1;
+                println!("OPTIMIZING {TIMES} TIMES BECAUSE I CAN");
+                let mut root_optimizer = Optimizer::new();
+                let optimized_translation_unit =
+                    Self::optimize(bound_translation_unit, TIMES, &mut root_optimizer);
                 fs::write(
                     "out/dpp/optimizations.txt",
-                    optimizer.optimizations.join("\n"),
+                    root_optimizer.optimizations.join("\n"),
                 )?;
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
@@ -2265,6 +2272,17 @@ pub mod compiler {
             error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
         ) -> Result<BoundTranslationUnit, SyntaxError> {
             SemanticAnalyzer::new(rc::Rc::clone(&error_diag)).analyze(&translation_unit)
+        }
+
+        fn optimize<'a>(
+            translation_unit: BoundTranslationUnit,
+            optimization_count: u32,
+            optimizer: &mut Optimizer,
+        ) -> BoundTranslationUnit {
+            if optimization_count == 0 {
+                return optimizer.optimize(translation_unit);
+            }
+            Self::optimize(translation_unit, optimization_count - 1, optimizer)
         }
 
         fn emit<'a>(
