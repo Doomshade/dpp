@@ -1,6 +1,6 @@
 use crate::parse::analysis::{
     BoundCase, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
-    BoundTranslationUnit, BoundVariable, BoundVariableAssignment,
+    BoundTranslationUnit, BoundVariableAssignment,
 };
 use crate::parse::parser::BinaryOperator;
 use crate::parse::Optimizer;
@@ -149,7 +149,7 @@ impl Optimizer {
                         Some(BoundExpression::Literal(BoundLiteralValue::Pp(0)))
                     }
                     BinaryOperator::Divide => {
-                        println!("Division by 0 detected :(");
+                        eprintln!("Division by 0 detected :(");
                         Some(BoundExpression::Literal(BoundLiteralValue::Pp(0)))
                     }
                     _ => None,
@@ -200,28 +200,10 @@ impl Optimizer {
                             return no_zeroes_expression;
                         }
 
-                        if let BoundExpression::Literal(lhs_value) = &optimized_lhs {
-                            if let BoundLiteralValue::Pp(lhs_value) = lhs_value {
-                                if let BoundExpression::Literal(rhs_value) = &optimized_rhs {
-                                    if let BoundLiteralValue::Pp(rhs_value) = rhs_value {
-                                        return match &op {
-                                            BinOp::Multiply => BoundExpression::Literal(
-                                                BoundLiteralValue::Pp(*lhs_value * *rhs_value),
-                                            ),
-                                            BinOp::Add => BoundExpression::Literal(
-                                                BoundLiteralValue::Pp(*lhs_value + *rhs_value),
-                                            ),
-                                            BinOp::Subtract => BoundExpression::Literal(
-                                                BoundLiteralValue::Pp(*lhs_value - *rhs_value),
-                                            ),
-                                            BinOp::Divide => BoundExpression::Literal(
-                                                BoundLiteralValue::Pp(*lhs_value / *rhs_value),
-                                            ),
-                                            _ => unreachable!(),
-                                        };
-                                    }
-                                }
-                            }
+                        if let Some(value) =
+                            Self::join_constant_values(&optimized_lhs, &op, &optimized_rhs)
+                        {
+                            return value;
                         }
 
                         BoundExpression::Binary {
