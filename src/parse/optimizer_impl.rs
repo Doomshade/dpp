@@ -38,7 +38,7 @@ impl Optimizer {
         let optimized_statement_str = format!("{optimized_statement:?}");
         if statement_str != optimized_statement_str {
             self.optimizations.push(format!(
-                "[INFO] Optimized statement\n   {statement_str}\n-> {optimized_statement_str}"
+                "statement\n   {statement_str}\n-> {optimized_statement_str}"
             ));
         }
 
@@ -96,6 +96,18 @@ impl Optimizer {
             BoundStatement::Switch { expression, cases } => {
                 let expression = self.optimize_expression_with_debug(expression);
                 let cases = self.optimize_cases(&expression, cases);
+                // If after optimizations we have only one case we just return an if to that.
+                if cases.len() == 1 {
+                    let case = cases.into_iter().next().unwrap();
+                    return BoundStatement::If {
+                        expression: BoundExpression::Binary {
+                            lhs: Box::new(expression),
+                            op: BinaryOperator::Equal,
+                            rhs: Box::new(case.expression),
+                        },
+                        statement: Box::new(BoundStatement::Statements(case.statements)),
+                    };
+                }
                 BoundStatement::Switch { expression, cases }
             }
             _ => statement,
@@ -116,7 +128,7 @@ impl Optimizer {
         let optimized_expression_str = format!("{optimized_expression:?}");
         if expression_str != optimized_expression_str {
             self.optimizations.push(format!(
-                "[INFO] Optimized expression\n   {expression_str}\n-> {optimized_expression_str}"
+                "expression\n   {expression_str}\n-> {optimized_expression_str}"
             ));
         }
         optimized_expression
@@ -130,31 +142,63 @@ impl Optimizer {
 
                 use BinaryOperator as BinOp;
                 match &op {
-                    BinOp::Add | BinOp::Subtract | BinOp::Multiply => {
+                    BinOp::Add | BinOp::Subtract | BinOp::Multiply | BinOp::Divide => {
                         // Adding/subtracting 0 makes no sense.
                         if let Some(lhs_zero) = Self::is_zero(&optimized_lhs) {
                             if lhs_zero {
-                                return match &op {
-                                    BinOp::Add | BinOp::Subtract => optimized_rhs,
+                                match &op {
                                     BinOp::Multiply => {
-                                        BoundExpression::Literal(BoundLiteralValue::Pp(0))
+                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
                                     }
-                                    _ => unreachable!(),
+                                    BinOp::Divide => {
+                                        // TODO: Use error diag.
+                                        println!("Division by 0 detected :(");
+                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
+                                    }
+                                    _ => {}
                                 };
                             }
                         }
 
                         if let Some(rhs_zero) = Self::is_zero(&optimized_rhs) {
                             if rhs_zero {
-                                return match &op {
-                                    BinOp::Add | BinOp::Subtract => optimized_lhs,
+                                match &op {
                                     BinOp::Multiply => {
-                                        BoundExpression::Literal(BoundLiteralValue::Pp(0))
+                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
                                     }
-                                    _ => unreachable!(),
+                                    BinOp::Divide => {
+                                        // TODO: Use error diag.
+                                        println!("Division by 0 detected :(");
+                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
+                                    }
+                                    _ => {}
                                 };
                             }
                         }
+                        if let BoundExpression::Literal(lhs_value) = &optimized_lhs {
+                            if let BoundLiteralValue::Pp(lhs_value) = lhs_value {
+                                if let BoundExpression::Literal(rhs_value) = &optimized_rhs {
+                                    if let BoundLiteralValue::Pp(rhs_value) = rhs_value {
+                                        return match &op {
+                                            BinOp::Multiply => BoundExpression::Literal(
+                                                BoundLiteralValue::Pp(*lhs_value * *rhs_value),
+                                            ),
+                                            BinOp::Add => BoundExpression::Literal(
+                                                BoundLiteralValue::Pp(*lhs_value + *rhs_value),
+                                            ),
+                                            BinOp::Subtract => BoundExpression::Literal(
+                                                BoundLiteralValue::Pp(*lhs_value - *rhs_value),
+                                            ),
+                                            BinOp::Divide => BoundExpression::Literal(
+                                                BoundLiteralValue::Pp(*lhs_value / *rhs_value),
+                                            ),
+                                            _ => unreachable!(),
+                                        };
+                                    }
+                                }
+                            }
+                        }
+
                         BoundExpression::Binary {
                             lhs: Box::new(optimized_lhs),
                             op,
@@ -245,15 +289,45 @@ impl Optimizer {
         expression: &BoundExpression,
         mut cases: Vec<BoundCase>,
     ) -> Vec<BoundCase> {
-        // Check if it's a constant.
+        let mut expressions = Vec::new();
+        cases = cases
+            .into_iter()
+            .map(|case| {
+                BoundCase::new(
+                    self.optimize_expression_with_debug(case.expression),
+                    self.optimize_statements(case.statements),
+                )
+            })
+            .filter(|case| {
+                return if !expressions.contains(case.expression()) {
+                    expressions.push(case.expression().clone());
+                    true
+                } else {
+                    false
+                };
+            })
+            .collect::<Vec<BoundCase>>();
+
+        // Check if the switch is a constant and just make it an if statement.
         match expression {
-            BoundExpression::Literal(_) => {}
-            BoundExpression::Unary { .. } => {}
-            BoundExpression::Binary { .. } => {}
-            BoundExpression::Variable(_) => {}
-            BoundExpression::FunctionCall { .. } => {}
+            BoundExpression::Literal(value) => {
+                if let Some(case) = cases.iter().find(|case| match case.expression() {
+                    BoundExpression::Literal(case_value) => value == case_value,
+                    _ => false,
+                }) {
+                    return vec![case.clone()];
+                }
+                cases
+            }
+            _ => cases,
         }
-        vec![]
+    }
+
+    fn optimize_statements(&mut self, mut statements: Vec<BoundStatement>) -> Vec<BoundStatement> {
+        statements
+            .into_iter()
+            .map(|statement| self.optimize_statement(statement))
+            .collect::<Vec<BoundStatement>>()
     }
 
     fn is_zero(expression: &BoundExpression) -> Option<bool> {

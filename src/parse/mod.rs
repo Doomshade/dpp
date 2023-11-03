@@ -3,7 +3,7 @@ use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{BoundTranslationUnit, BoundVariablePosition, SymbolTable};
+use crate::parse::analysis::{BoundTranslationUnit, BoundVariable, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
@@ -64,15 +64,15 @@ pub struct SemanticAnalyzer<'a, 'b> {
     symbol_table: SymbolTable<'a>,
     /// The current loop stack. Used to determine whether "break" or "continue" are out of place.
     loop_stack: usize,
-    assignment_count: collections::HashMap<BoundVariablePosition, usize>,
-    referenced_variables: collections::HashSet<BoundVariablePosition>,
+    assignment_count: collections::HashMap<BoundVariable, usize>,
+    referenced_variables: collections::HashSet<BoundVariable>,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
 }
 
 #[derive(Debug)]
 pub struct Optimizer {
     optimizations: Vec<String>,
-    referenced_variables: collections::HashSet<BoundVariablePosition>,
+    referenced_variables: collections::HashSet<BoundVariable>,
 }
 
 #[derive(Debug)]
@@ -267,10 +267,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn matches_modifier(&self) -> bool {
         if let Some(token) = self.token() {
-            return matches!(
-                token.kind(),
-                TokenKind::ConstKeyword
-            );
+            return matches!(token.kind(), TokenKind::ConstKeyword);
         }
         false
     }
@@ -416,7 +413,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
     }
 
-    fn increment_assignment_at(&mut self, position: BoundVariablePosition) {
+    fn increment_assignment_at(&mut self, position: BoundVariable) {
         let value = self.assignment_count.get(&position).unwrap_or(&0);
         self.assignment_count.insert(position, value + 1);
     }
@@ -447,6 +444,14 @@ impl Optimizer {
 
     pub fn optimize(&mut self, translation_unit: BoundTranslationUnit) -> BoundTranslationUnit {
         self.optimize_translation_unit(translation_unit)
+    }
+
+    pub fn optimizations(&self) -> &Vec<String> {
+        &self.optimizations
+    }
+
+    fn optimizations_mut(&mut self) -> &mut Vec<String> {
+        &mut self.optimizations
     }
 }
 
@@ -596,7 +601,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Operation { operation });
     }
 
-    fn load_variable(&mut self, position: &BoundVariablePosition) {
+    fn load_variable(&mut self, position: &BoundVariable) {
         self.load(position.level(), position.offset());
     }
 
@@ -604,7 +609,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Load { level, offset });
     }
 
-    fn store_variable(&mut self, position: &BoundVariablePosition) {
+    fn store_variable(&mut self, position: &BoundVariable) {
         self.store(position.level(), position.offset());
     }
 
@@ -1396,7 +1401,9 @@ mod analysis {
     use std::fmt::Formatter;
     use std::{collections, fmt};
 
-    use crate::parse::parser::{BinaryOperator, DataType, Expression, Function, Modifier, UnaryOperator, Variable};
+    use crate::parse::parser::{
+        BinaryOperator, DataType, Expression, Function, Modifier, UnaryOperator, Variable,
+    };
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct SymbolTable<'a> {
@@ -1462,13 +1469,13 @@ mod analysis {
         is_main_function: bool,
         stack_frame_size: usize,
         return_size: usize,
-        parameters: Vec<BoundVariablePosition>,
+        parameters: Vec<BoundVariable>,
         pub statements: Vec<BoundStatement>,
     }
 
     #[derive(Clone, PartialEq, Debug)]
     pub struct BoundVariableAssignment {
-        pub position: BoundVariablePosition,
+        pub position: BoundVariable,
         pub value: BoundExpression,
     }
 
@@ -1494,7 +1501,7 @@ mod analysis {
             op: BinaryOperator,
             rhs: Box<BoundExpression>,
         },
-        Variable(BoundVariablePosition),
+        Variable(BoundVariable),
         FunctionCall {
             level: usize,
             identifier: usize,
@@ -1505,9 +1512,11 @@ mod analysis {
     }
 
     #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-    pub struct BoundVariablePosition {
+    pub struct BoundVariable {
         level: usize,
         offset: i32,
+        size: usize,
+        is_const: bool,
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1531,7 +1540,7 @@ mod analysis {
         },
         Expression(BoundExpression),
         For {
-            ident_position: BoundVariablePosition,
+            ident_position: BoundVariable,
             ident_expression: Option<BoundExpression>,
             length_expression: BoundExpression,
             statement: Box<BoundStatement>,
@@ -1560,8 +1569,8 @@ mod analysis {
 
     #[derive(Clone, PartialEq, Debug)]
     pub struct BoundCase {
-        expression: BoundExpression,
-        statements: Vec<BoundStatement>,
+        pub expression: BoundExpression,
+        pub statements: Vec<BoundStatement>,
     }
 
     impl<'a> SymbolTable<'a> {
@@ -1963,7 +1972,7 @@ mod analysis {
             stack_frame_size: usize,
             is_main_function: bool,
             return_size: usize,
-            parameters: Vec<BoundVariablePosition>,
+            parameters: Vec<BoundVariable>,
             statements: Vec<BoundStatement>,
         ) -> Self {
             BoundFunction {
@@ -1985,7 +1994,7 @@ mod analysis {
         pub fn statements(&self) -> &Vec<BoundStatement> {
             &self.statements
         }
-        pub fn parameters(&self) -> &Vec<BoundVariablePosition> {
+        pub fn parameters(&self) -> &Vec<BoundVariable> {
             &self.parameters
         }
         pub fn return_size(&self) -> usize {
@@ -1997,10 +2006,10 @@ mod analysis {
     }
 
     impl BoundVariableAssignment {
-        pub fn new(position: BoundVariablePosition, value: BoundExpression) -> Self {
+        pub fn new(position: BoundVariable, value: BoundExpression) -> Self {
             BoundVariableAssignment { position, value }
         }
-        pub fn position(&self) -> &BoundVariablePosition {
+        pub fn position(&self) -> &BoundVariable {
             &self.position
         }
         pub fn value(&self) -> &BoundExpression {
@@ -2008,9 +2017,14 @@ mod analysis {
         }
     }
 
-    impl BoundVariablePosition {
-        pub fn new(level: usize, offset: i32) -> Self {
-            BoundVariablePosition { level, offset }
+    impl BoundVariable {
+        pub fn new(level: usize, offset: i32, size: usize, is_const: bool) -> Self {
+            BoundVariable {
+                level,
+                offset,
+                size,
+                is_const,
+            }
         }
 
         pub fn level(&self) -> usize {
@@ -2037,7 +2051,7 @@ mod analysis {
         }
     }
 
-    impl fmt::Display for BoundVariablePosition {
+    impl fmt::Display for BoundVariable {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             write!(f, "{} {}", self.level, self.offset)
         }
@@ -2161,7 +2175,6 @@ mod emitter {
 }
 
 pub mod compiler {
-    use std::collections::HashSet;
     use std::io::Write;
     use std::{cell, error, fs, io, process, rc, time};
 
@@ -2173,6 +2186,7 @@ pub mod compiler {
 
     pub struct DppCompiler;
 
+    const OPTIMIZATION_COUNT: u32 = 2;
     impl DppCompiler {
         fn parse_args(bools: &[bool], params: &[&str]) -> Vec<String> {
             if bools.len() != params.len() {
@@ -2211,18 +2225,21 @@ pub mod compiler {
             println!("Parsing program...");
             let start = time::Instant::now();
             {
-                // Lex -> parse -> analyze -> emit.
+                // Lex -> parse -> analyze -> optimize -> emit.
                 let tokens = Self::lex(&file_contents, &error_diag)?;
                 let translation_unit = Self::parse(tokens, &error_diag)?;
                 let bound_translation_unit = Self::analyze(&translation_unit, &error_diag)?;
-                const TIMES: u32 = 1;
-                println!("OPTIMIZING {TIMES} TIMES BECAUSE I CAN");
+                println!("Optimizing {OPTIMIZATION_COUNT} times");
                 let mut root_optimizer = Optimizer::new();
-                let optimized_translation_unit =
-                    Self::optimize(bound_translation_unit, TIMES, &mut root_optimizer);
+                let mut optimized_translation_unit = bound_translation_unit;
+                for _ in 0..OPTIMIZATION_COUNT {
+                    optimized_translation_unit =
+                        root_optimizer.optimize(optimized_translation_unit);
+                }
+                println!("Printed optimizations into \"out/dpp/optimizations.txt\"");
                 fs::write(
                     "out/dpp/optimizations.txt",
-                    root_optimizer.optimizations.join("\n"),
+                    root_optimizer.optimizations.join("\n\n"),
                 )?;
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;

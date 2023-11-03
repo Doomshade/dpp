@@ -2,10 +2,13 @@ use dpp_macros::Pos;
 
 use crate::parse::analysis::{
     BoundCase, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
-    BoundTranslationUnit, BoundVariableAssignment, BoundVariablePosition,
+    BoundTranslationUnit, BoundVariable, BoundVariableAssignment,
 };
 use crate::parse::error_diagnosis::SyntaxError;
-use crate::parse::parser::{Block, Case, DataType, LiteralValue, Modifier, Statement, TranslationUnit, UnaryOperator, Variable};
+use crate::parse::parser::{
+    Block, Case, DataType, LiteralValue, Modifier, Statement, TranslationUnit, UnaryOperator,
+    Variable,
+};
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -129,18 +132,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .parameters()
             .iter()
             .map(|v| {
-                let size = self
+                let variable = self
                     .symbol_table()
                     .function_scope(function.identifier())
                     .unwrap()
                     .variable(v.identifier())
-                    .unwrap()
-                    .size_in_instructions();
+                    .unwrap();
+                let size = variable.size_in_instructions();
                 current_size += size;
-                -(current_size as i32)
+                (
+                    size,
+                    -(current_size as i32),
+                    variable.has_modifier(Modifier::Const),
+                )
             })
-            .map(|offset| BoundVariablePosition::new(0, offset))
-            .collect::<Vec<BoundVariablePosition>>();
+            .map(|(size, offset, is_const)| BoundVariable::new(0, offset, size, is_const))
+            .collect::<Vec<BoundVariable>>();
 
         let bound_statements = self.analyze_block(function.block());
         if function.return_type() != &DataType::Nopp {
@@ -206,7 +213,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let (level, var_decl) = self.symbol_table().variable(variable.identifier());
                     let var_decl = var_decl.unwrap();
                     let offset = var_decl.stack_position();
-                    let position = BoundVariablePosition::new(level, offset as i32);
+                    let position = BoundVariable::new(
+                        level,
+                        offset as i32,
+                        var_decl.size(),
+                        var_decl.has_modifier(Modifier::Const),
+                    );
                     self.increment_assignment_at(position.clone());
                     return Some(BoundVariableAssignment::new(
                         position,
@@ -249,8 +261,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .set_variable_initialized(variable.identifier());
                     let (level, var_decl) = self.symbol_table().variable(variable.identifier());
                     let var_decl = var_decl.unwrap();
-                    let position =
-                        BoundVariablePosition::new(level, var_decl.stack_position() as i32);
+                    let position = BoundVariable::new(
+                        level,
+                        var_decl.stack_position() as i32,
+                        var_decl.size(),
+                        var_decl.has_modifier(Modifier::Const),
+                    );
                     let value = self
                         .analyze_expr(
                             expression,
@@ -402,20 +418,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let (level, var_decl) = self.symbol_table().variable(identifier);
                 if let Some(variable) = var_decl {
-                    if variable.has_modifier(Modifier::Const) {
-                        self.error_diag.borrow_mut().cannot_assign_to_const_variable(
-                            *position,
-                            identifier,
-                        );
+                    let is_const = variable.has_modifier(Modifier::Const);
+                    if is_const {
+                        self.error_diag
+                            .borrow_mut()
+                            .cannot_assign_to_const_variable(*position, identifier);
                     }
                     let data_type = variable.data_type();
                     let expression =
                         self.analyze_expr(expression, Some(data_type), Some(*position));
 
                     let offset = variable.stack_position();
+                    let variable_size = variable.size();
                     self.symbol_table_mut().set_variable_initialized(identifier);
 
-                    let position = BoundVariablePosition::new(level, offset as i32);
+                    let position =
+                        BoundVariable::new(level, offset as i32, variable_size, is_const);
                     self.increment_assignment_at(position.clone());
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         position,
@@ -486,6 +504,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let (level, var_decl) = self.symbol_table().variable(index_variable.identifier());
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();
+                let size = var_decl.size();
+                let is_const = var_decl.has_modifier(Modifier::Const);
 
                 self.loop_stack += 1;
                 let bound_statement = self.analyze_statement(statement);
@@ -493,7 +513,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut().pop_scope();
 
                 BoundStatement::For {
-                    ident_position: BoundVariablePosition::new(level, offset as i32),
+                    ident_position: BoundVariable::new(level, offset as i32, size, is_const),
                     ident_expression: bound_ident_expression.map(|exp| exp.1),
                     length_expression: bound_length_expression.1,
                     statement: Box::new(bound_statement),
@@ -722,7 +742,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // TODO: Check if the variable exists.
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();
-                let position = BoundVariablePosition::new(level, offset as i32);
+                let position = BoundVariable::new(
+                    level,
+                    offset as i32,
+                    var_decl.size(),
+                    var_decl.has_modifier(Modifier::Const),
+                );
 
                 BoundExpression::Variable(position)
             }

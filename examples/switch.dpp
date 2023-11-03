@@ -1,0 +1,19 @@
+FUNc main() -> pp {
+    const pp -> a = 69;
+    if (0 == 0) {}
+    switch(69) {
+        case 420 {
+            bye 420;
+        },
+        case 23 + 46 {
+            bye 6969;
+        },
+        case 69 {
+            bye 69;
+        },
+        case 123 {
+            bye 123;
+        }
+    }
+    bye 0;
+}
