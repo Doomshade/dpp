@@ -2305,6 +2305,9 @@ pub mod compiler {
             optimizer: &mut Optimizer,
         ) -> BoundTranslationUnit {
             if optimization_count == 0 {
+                return translation_unit;
+            }
+            if optimization_count == 1 {
                 return optimizer.optimize(translation_unit);
             }
             Self::optimize(translation_unit, optimization_count - 1, optimizer)
