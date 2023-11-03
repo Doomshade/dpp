@@ -134,6 +134,31 @@ impl Optimizer {
         optimized_expression
     }
 
+    fn remove_zeroes(expression: &BoundExpression, op: &BinaryOperator) -> Option<BoundExpression> {
+        if let Some(is_zero) = match expression {
+            BoundExpression::Literal(value) => match value {
+                BoundLiteralValue::Pp(value) => Some(*value == 0),
+                BoundLiteralValue::Flaccid(a, b) => Some(*a == 0 && *b == 0),
+                _ => None,
+            },
+            _ => None,
+        } {
+            if is_zero {
+                return match op {
+                    BinaryOperator::Multiply => {
+                        Some(BoundExpression::Literal(BoundLiteralValue::Pp(0)))
+                    }
+                    BinaryOperator::Divide => {
+                        println!("Division by 0 detected :(");
+                        Some(BoundExpression::Literal(BoundLiteralValue::Pp(0)))
+                    }
+                    _ => None,
+                };
+            }
+        }
+        None
+    }
+
     fn optimize_expression(&mut self, mut expression: BoundExpression) -> BoundExpression {
         match expression {
             BoundExpression::Binary { lhs, rhs, op } => {
@@ -144,37 +169,16 @@ impl Optimizer {
                 match &op {
                     BinOp::Add | BinOp::Subtract | BinOp::Multiply | BinOp::Divide => {
                         // Adding/subtracting 0 makes no sense.
-                        if let Some(lhs_zero) = Self::is_zero(&optimized_lhs) {
-                            if lhs_zero {
-                                match &op {
-                                    BinOp::Multiply => {
-                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
-                                    }
-                                    BinOp::Divide => {
-                                        // TODO: Use error diag.
-                                        println!("Division by 0 detected :(");
-                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
-                                    }
-                                    _ => {}
-                                };
-                            }
+                        if let Some(no_zeroes_expression) = Self::remove_zeroes(&optimized_lhs, &op)
+                        {
+                            return no_zeroes_expression;
                         }
 
-                        if let Some(rhs_zero) = Self::is_zero(&optimized_rhs) {
-                            if rhs_zero {
-                                match &op {
-                                    BinOp::Multiply => {
-                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
-                                    }
-                                    BinOp::Divide => {
-                                        // TODO: Use error diag.
-                                        println!("Division by 0 detected :(");
-                                        return BoundExpression::Literal(BoundLiteralValue::Pp(0));
-                                    }
-                                    _ => {}
-                                };
-                            }
+                        if let Some(no_zeroes_expression) = Self::remove_zeroes(&optimized_rhs, &op)
+                        {
+                            return no_zeroes_expression;
                         }
+
                         if let BoundExpression::Literal(lhs_value) = &optimized_lhs {
                             if let BoundLiteralValue::Pp(lhs_value) = lhs_value {
                                 if let BoundExpression::Literal(rhs_value) = &optimized_rhs {
@@ -328,17 +332,6 @@ impl Optimizer {
             .into_iter()
             .map(|statement| self.optimize_statement(statement))
             .collect::<Vec<BoundStatement>>()
-    }
-
-    fn is_zero(expression: &BoundExpression) -> Option<bool> {
-        match expression {
-            BoundExpression::Literal(value) => match value {
-                BoundLiteralValue::Pp(value) => Some(*value == 0),
-                BoundLiteralValue::Flaccid(a, b) => Some(*a == 0 && *b == 0),
-                _ => None,
-            },
-            _ => None,
-        }
     }
 
     fn booba_value(expression: &BoundExpression) -> Option<bool> {
