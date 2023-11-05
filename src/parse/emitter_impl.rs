@@ -98,11 +98,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
             }
             BoundStatement::Bye {
                 expression,
-                return_offset,
+                return_type_size,
             } => {
                 if let Some(expression) = expression {
                     self.emit_expression(expression);
-                    self.store(0, -1);
+                    self.store(0, -(*return_type_size as i32), *return_type_size);
                 }
                 self.emit_instruction(Instruction::Return);
             }

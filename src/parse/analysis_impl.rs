@@ -175,7 +175,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             function_id,
             stack_position,
             function.identifier() == "main",
-            function.return_type().size_in_instructions(),
+            function.return_type().size(),
             parameters,
             bound_statements,
         )
@@ -366,19 +366,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .unwrap();
 
                     let return_type = function_descriptor.return_type();
-                    let parameters_size = function_descriptor.parameters_size();
                     let expression = self.analyze_expr(expression, None, None);
                     self.check_data_type(return_type, expression.0.as_ref(), *position);
 
-                    let return_type_size = expression.0.unwrap().size_in_instructions();
+                    let return_type_size = expression.0.unwrap().size();
                     return BoundStatement::Bye {
-                        return_offset: -(return_type_size as i32) - parameters_size as i32,
+                        return_type_size,
                         expression: Some(expression.1),
                     };
                 }
 
                 BoundStatement::Bye {
-                    return_offset: 0,
+                    return_type_size: 0,
                     expression: None,
                 }
             }
@@ -759,7 +758,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let (id, return_type_size, arguments_size);
                 if let Some(function) = self.symbol_table().function(identifier) {
                     id = function.function_id();
-                    return_type_size = function.return_type().size_in_instructions();
+                    return_type_size = function.return_type().size();
                     arguments_size = function.parameters_size()
                 } else {
                     id = 0;

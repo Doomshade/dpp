@@ -610,11 +610,16 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     fn store_variable(&mut self, position: &BoundVariable) {
-        self.store(position.level(), position.offset());
+        self.store(position.level(), position.offset(), position.size());
     }
 
-    fn store(&mut self, level: usize, offset: i32) {
-        self.emit_instruction(Instruction::Store { level, offset });
+    fn store(&mut self, level: usize, offset: i32, size: usize) {
+        for i in 0..size {
+            self.emit_instruction(Instruction::Store {
+                level,
+                offset: offset + i as i32,
+            });
+        }
     }
 
     fn create_function_label(function_ident: usize) -> String {
@@ -1261,22 +1266,14 @@ mod parser {
     impl<'a> DataType<'a> {
         pub fn size(&self) -> usize {
             match self {
-                DataType::Pp => mem::size_of::<i32>(),
-                DataType::Ratio => mem::size_of::<i32>() * 2,
-                DataType::Flaccid => mem::size_of::<i32>() * 2,
-                DataType::P => mem::size_of::<char>(),
-                DataType::Booba => mem::size_of::<bool>(),
+                DataType::Pp => 1,
+                DataType::Ratio => 2,
+                DataType::Flaccid => 1,
+                DataType::P => 1,
+                DataType::Booba => 1,
                 DataType::Nopp => 0,
                 _ => panic!("Not yet implemented {self}"),
             }
-        }
-
-        pub fn size_in_instructions(&self) -> usize {
-            let size = self.size();
-            if size == 0 {
-                return 0;
-            }
-            return ((size - 1) / 4) + 1;
         }
     }
 
@@ -1532,7 +1529,7 @@ mod analysis {
         },
         Bye {
             expression: Option<BoundExpression>,
-            return_offset: i32,
+            return_type_size: usize,
         },
         Print {
             print_function: fn(&str),
@@ -1927,9 +1924,9 @@ mod analysis {
 
         /// The size of parameters in instructions.
         pub fn parameters_size(&self) -> usize {
-            self.parameters().iter().fold(0, |acc, parameter| {
-                acc + parameter.data_type().size_in_instructions()
-            })
+            self.parameters()
+                .iter()
+                .fold(0, |acc, parameter| acc + parameter.data_type().size())
         }
         pub fn function_id(&self) -> usize {
             self.function_id
@@ -2033,6 +2030,12 @@ mod analysis {
         pub fn offset(&self) -> i32 {
             self.offset
         }
+        pub fn size(&self) -> usize {
+            self.size
+        }
+        pub fn is_const(&self) -> bool {
+            self.is_const
+        }
     }
 
     impl BoundCase {
@@ -2053,7 +2056,11 @@ mod analysis {
 
     impl fmt::Display for BoundVariable {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            write!(f, "{} {}", self.level, self.offset)
+            write!(
+                f,
+                "level: {}, offset: {}, size: {}",
+                self.level, self.offset, self.size
+            )
         }
     }
 
