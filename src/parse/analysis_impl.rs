@@ -141,12 +141,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let size = variable.size_in_instructions();
                 current_size += size;
                 (
-                    size,
+                    variable.data_type().clone(),
                     -(current_size as i32),
                     variable.has_modifier(Modifier::Const),
                 )
             })
-            .map(|(size, offset, is_const)| BoundVariable::new(0, offset, size, is_const))
+            .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
             .collect::<Vec<BoundVariable>>();
 
         let bound_statements = self.analyze_block(function.block());
@@ -216,7 +216,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let position = BoundVariable::new(
                         level,
                         offset as i32,
-                        var_decl.size(),
+                        var_decl.data_type().clone(),
                         var_decl.has_modifier(Modifier::Const),
                     );
                     self.increment_assignment_at(position.clone());
@@ -264,7 +264,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let position = BoundVariable::new(
                         level,
                         var_decl.stack_position() as i32,
-                        var_decl.size(),
+                        var_decl.data_type().clone(),
                         var_decl.has_modifier(Modifier::Const),
                     );
                     let value = self
@@ -428,11 +428,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         self.analyze_expr(expression, Some(data_type), Some(*position));
 
                     let offset = variable.stack_position();
-                    let variable_size = variable.size();
+                    let data_type = variable.data_type().clone();
                     self.symbol_table_mut().set_variable_initialized(identifier);
 
-                    let position =
-                        BoundVariable::new(level, offset as i32, variable_size, is_const);
+                    let position = BoundVariable::new(level, offset as i32, data_type, is_const);
                     self.increment_assignment_at(position.clone());
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         position,
@@ -503,8 +502,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let (level, var_decl) = self.symbol_table().variable(index_variable.identifier());
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();
-                let size = var_decl.size();
                 let is_const = var_decl.has_modifier(Modifier::Const);
+                let data_type = var_decl.data_type().clone();
 
                 self.loop_stack += 1;
                 let bound_statement = self.analyze_statement(statement);
@@ -512,7 +511,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut().pop_scope();
 
                 BoundStatement::For {
-                    ident_position: BoundVariable::new(level, offset as i32, size, is_const),
+                    ident_position: BoundVariable::new(level, offset as i32, data_type, is_const),
                     ident_expression: bound_ident_expression.map(|exp| exp.1),
                     length_expression: bound_length_expression.1,
                     statement: Box::new(bound_statement),
@@ -530,7 +529,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_cases(
         &mut self,
         cases: &Vec<Case<'a>>,
-        expected_data_type: Option<&DataType<'a>>,
+        expected_data_type: Option<&DataType>,
     ) -> Vec<BoundCase> {
         cases
             .iter()
@@ -573,7 +572,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `expression`: the expression to analyze
     /// # Returns
     /// Option<DataType> - the data type of the expression if it is valid, None otherwise
-    fn calc_data_type(&self, expr: &Expression<'a>) -> Option<DataType<'a>> {
+    fn calc_data_type(&self, expr: &Expression<'a>) -> Option<DataType> {
         return match expr {
             Expression::Literal { value, .. } => Some(match value {
                 LiteralValue::Pp(_) => DataType::Pp,
@@ -704,9 +703,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_expr(
         &self,
         expression: &Expression<'a>,
-        expected_data_type: Option<&DataType<'a>>,
+        expected_data_type: Option<&DataType>,
         position: Option<(u32, u32)>,
-    ) -> (Option<DataType<'a>>, BoundExpression) {
+    ) -> (Option<DataType>, BoundExpression) {
         let data_type = self.calc_data_type(expression);
         if let Some(expected_data_type) = expected_data_type {
             if let Some(position) = position {
@@ -744,7 +743,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let position = BoundVariable::new(
                     level,
                     offset as i32,
-                    var_decl.size(),
+                    var_decl.data_type().clone(),
                     var_decl.has_modifier(Modifier::Const),
                 );
 

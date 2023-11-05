@@ -382,8 +382,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn check_if_mixed_data_types(
         &self,
-        expected_data_type: &DataType<'a>,
-        got: &DataType<'a>,
+        expected_data_type: &DataType,
+        got: &DataType,
         position: (u32, u32),
     ) {
         if expected_data_type != got {
@@ -395,8 +395,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn check_data_type(
         &self,
-        expected_data_type: &DataType<'a>,
-        got: Option<&DataType<'a>>,
+        expected_data_type: &DataType,
+        got: Option<&DataType>,
         position: (u32, u32),
     ) {
         match got {
@@ -609,8 +609,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Load { level, offset });
     }
 
-    fn store_variable(&mut self, position: &BoundVariable) {
-        self.store(position.level(), position.offset(), position.size());
+    fn store_variable(&mut self, variable: &BoundVariable) {
+        self.store(
+            variable.level(),
+            variable.offset(),
+            variable.data_type().size(),
+        );
     }
 
     fn store(&mut self, level: usize, offset: i32, size: usize) {
@@ -932,7 +936,6 @@ mod lexer {
 
 mod parser {
     use std::fmt;
-    use std::mem;
 
     use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
@@ -948,7 +951,7 @@ mod parser {
     pub struct Function<'a> {
         position: (u32, u32),
         identifier: &'a str,
-        return_type: DataType<'a>,
+        return_type: DataType,
         parameters: Vec<Variable<'a>>,
         block: Block<'a>,
     }
@@ -1040,7 +1043,7 @@ mod parser {
         position: (u32, u32),
         identifier: &'a str,
         modifiers: Vec<Modifier>,
-        data_type: DataType<'a>,
+        data_type: DataType,
         size: usize,
         value: Option<Expression<'a>>,
     }
@@ -1052,8 +1055,8 @@ mod parser {
         block: Box<Block<'a>>,
     }
 
-    #[derive(Debug, Clone)]
-    pub enum DataType<'a> {
+    #[derive(Eq, Hash, Debug, Clone)]
+    pub enum DataType {
         Pp,      // int
         AB,      // ratio
         Flaccid, // float
@@ -1062,7 +1065,7 @@ mod parser {
         Booba,   // bool
         Nopp,    // void
         Ratio,   // ratio
-        Struct { name: &'a str },
+        Struct { name: String },
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1158,7 +1161,7 @@ mod parser {
         pub fn new(
             position: (u32, u32),
             identifier: &'a str,
-            return_type: DataType<'a>,
+            return_type: DataType,
             parameters: Vec<Variable<'a>>,
             block: Block<'a>,
         ) -> Self {
@@ -1174,7 +1177,7 @@ mod parser {
         pub fn identifier(&self) -> &'a str {
             self.identifier
         }
-        pub fn return_type(&self) -> &DataType<'a> {
+        pub fn return_type(&self) -> &DataType {
             &self.return_type
         }
         pub fn block(&self) -> &Block<'a> {
@@ -1205,7 +1208,7 @@ mod parser {
         pub fn new(
             position: (u32, u32),
             identifier: &'a str,
-            data_type: DataType<'a>,
+            data_type: DataType,
             modifiers: Vec<Modifier>,
             value: Option<Expression<'a>>,
         ) -> Self {
@@ -1225,7 +1228,7 @@ mod parser {
         pub fn identifier(&self) -> &'a str {
             self.identifier
         }
-        pub fn data_type(&self) -> &DataType<'a> {
+        pub fn data_type(&self) -> &DataType {
             &self.data_type
         }
         pub fn size(&self) -> usize {
@@ -1263,7 +1266,7 @@ mod parser {
         }
     }
 
-    impl<'a> DataType<'a> {
+    impl DataType {
         pub fn size(&self) -> usize {
             match self {
                 DataType::Pp => 1,
@@ -1353,7 +1356,7 @@ mod parser {
         }
     }
 
-    impl PartialEq for DataType<'_> {
+    impl PartialEq for DataType {
         fn eq(&self, other: &Self) -> bool {
             matches!(
                 (self, other),
@@ -1368,7 +1371,7 @@ mod parser {
         }
     }
 
-    impl fmt::Display for DataType<'_> {
+    impl fmt::Display for DataType {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 DataType::Pp => write!(f, "integer"),
@@ -1437,7 +1440,7 @@ mod analysis {
     #[derive(Clone, PartialEq, Debug)]
     pub struct VariableDescriptor<'a> {
         stack_position: usize,
-        data_type: DataType<'a>,
+        data_type: DataType,
         modifiers: Vec<Modifier>,
         size: usize,
         value: Option<Expression<'a>>,
@@ -1447,7 +1450,7 @@ mod analysis {
 
     #[derive(Clone, PartialEq, Debug)]
     pub struct FunctionDescriptor<'a> {
-        return_type: DataType<'a>,
+        return_type: DataType,
         parameters: Vec<Variable<'a>>,
         function_id: usize,
     }
@@ -1512,7 +1515,7 @@ mod analysis {
     pub struct BoundVariable {
         level: usize,
         offset: i32,
-        size: usize,
+        data_type: DataType,
         is_const: bool,
     }
 
@@ -1895,7 +1898,7 @@ mod analysis {
         pub fn stack_position(&self) -> usize {
             self.stack_position
         }
-        pub fn data_type(&self) -> &DataType<'a> {
+        pub fn data_type(&self) -> &DataType {
             &self.data_type
         }
         pub fn size(&self) -> usize {
@@ -1915,7 +1918,7 @@ mod analysis {
             }
         }
 
-        pub fn return_type(&self) -> &DataType<'a> {
+        pub fn return_type(&self) -> &DataType {
             &self.return_type
         }
         pub fn parameters(&self) -> &Vec<Variable<'a>> {
@@ -2015,11 +2018,11 @@ mod analysis {
     }
 
     impl BoundVariable {
-        pub fn new(level: usize, offset: i32, size: usize, is_const: bool) -> Self {
+        pub fn new(level: usize, offset: i32, data_type: DataType, is_const: bool) -> Self {
             BoundVariable {
                 level,
                 offset,
-                size,
+                data_type,
                 is_const,
             }
         }
@@ -2030,8 +2033,8 @@ mod analysis {
         pub fn offset(&self) -> i32 {
             self.offset
         }
-        pub fn size(&self) -> usize {
-            self.size
+        pub fn data_type(&self) -> &DataType {
+            &self.data_type
         }
         pub fn is_const(&self) -> bool {
             self.is_const
@@ -2058,8 +2061,8 @@ mod analysis {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             write!(
                 f,
-                "level: {}, offset: {}, size: {}",
-                self.level, self.offset, self.size
+                "level: {}, offset: {}, data_type: {}",
+                self.level, self.offset, self.data_type
             )
         }
     }

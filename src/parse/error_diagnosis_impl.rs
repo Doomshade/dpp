@@ -31,8 +31,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         &mut self,
         position: (u32, u32),
         identifier: &str,
-        expected_return_type: &DataType<'a>,
-        got_return_type: &DataType<'a>,
+        expected_return_type: &DataType,
+        got_return_type: &DataType,
     ) {
         self.insert_error_message(
             position,
@@ -194,12 +194,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn mixed_data_types_error(
-        &mut self,
-        position: (u32, u32),
-        lhs: &DataType<'a>,
-        rhs: &DataType<'a>,
-    ) {
+    pub fn mixed_data_types_error(&mut self, position: (u32, u32), lhs: &DataType, rhs: &DataType) {
         self.insert_error_message(
             position,
             format!("Incompatible data types on lhs and rhs - {lhs} and {rhs}.").as_str(),
@@ -209,8 +204,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     pub fn invalid_data_type(
         &mut self,
         position: (u32, u32),
-        expected_data_type: &DataType<'a>,
-        got: &DataType<'a>,
+        expected_data_type: &DataType,
+        got: &DataType,
     ) {
         self.insert_error_message(
             position,

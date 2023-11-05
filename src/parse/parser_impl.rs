@@ -498,7 +498,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    fn _data_type(&mut self) -> Option<DataType<'a>> {
+    fn _data_type(&mut self) -> Option<DataType> {
         let token = self.expect_one_from(&[
             TokenKind::PpKeyword,
             TokenKind::FlaccidKeyword,
