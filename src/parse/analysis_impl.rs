@@ -465,12 +465,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 statement,
                 position,
             } => {
+                // Check if the index variable already exists.
                 if self.symbol_table().local_variable(index_ident).is_some() {
                     self.error_diag
                         .borrow_mut()
                         .variable_already_exists(*position, index_ident);
                 }
 
+                // Check that the index variable is pp or none.
                 let bound_ident_expression;
                 if let Some(ident_expression) = ident_expression {
                     bound_ident_expression = Some(self.analyze_expr(
@@ -482,12 +484,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     bound_ident_expression = None;
                 }
 
+                // Check that the length expression is pp.
                 let bound_length_expression = self.analyze_expr(
                     length_expression,
                     Some(&DataType::Pp),
                     Some(length_expression.position()),
                 );
 
+                // Push a new scope and introduce the index variable.
                 self.symbol_table_mut().push_scope();
                 let index_variable = Variable::new(
                     *position,
@@ -499,14 +503,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut()
                     .push_local_variable(&index_variable, false);
 
+                // Get the variable descriptor of the variable and the metadata.
                 let (level, var_decl) = self.symbol_table().variable(index_variable.identifier());
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();
                 let is_const = var_decl.has_modifier(Modifier::Const);
                 let data_type = var_decl.data_type().clone();
 
+                // Increment the loop stack for break, continue, etc. statements and analyze the
+                // statements.
                 self.loop_stack += 1;
                 let bound_statement = self.analyze_statement(statement);
+
                 self.loop_stack -= 1;
                 self.symbol_table_mut().pop_scope();
 
