@@ -110,6 +110,28 @@ impl Optimizer {
                 }
                 BoundStatement::Switch { expression, cases }
             }
+            BoundStatement::For {
+                ident_expression,
+                ident_position,
+                length_expression,
+                statement,
+            } => {
+                let statement = self.optimize_statement(*statement);
+                // Check if there's any statement at all.
+                if let BoundStatement::Empty = statement {
+                    return BoundStatement::Empty;
+                }
+                let ident_expression =
+                    ident_expression.map(|expr| self.optimize_expression_with_debug(expr));
+                let length_expression = self.optimize_expression_with_debug(length_expression);
+
+                BoundStatement::For {
+                    ident_expression,
+                    ident_position,
+                    length_expression,
+                    statement: Box::new(statement),
+                }
+            }
             _ => statement,
         }
     }

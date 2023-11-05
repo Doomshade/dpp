@@ -7,7 +7,9 @@ FUNc main() -> pp {
         pp -> zza = 12345789;
     }
 
-    for(i to 69){}
+    for(i to 69 + 69){
+        pp -> zz = 0;
+    }
 
     switch(69) {
         case 420 {
