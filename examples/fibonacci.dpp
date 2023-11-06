@@ -1,7 +1,4 @@
-pp -> a = 6969;
-pp -> asd = 0 + a;
-booba -> nok = nom;
-booba -> ok = yem && yem && yem && yem && yem && nok;
+booba -> ok = yem && yem && yem && yem && yem && yem;
 
 #########################
 # booba -> bbb = nom;

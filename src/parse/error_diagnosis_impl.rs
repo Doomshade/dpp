@@ -2,6 +2,7 @@ use crate::parse::error_diagnosis::{ErrorMessage, SyntaxError};
 use crate::parse::ErrorDiagnosis;
 use dpp_macros::Pos;
 use std::collections::{BinaryHeap, HashMap};
+use itertools::Itertools;
 
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::DataType;
@@ -244,7 +245,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             .into_sorted_vec()
             .iter()
             .map(|x| x.message().to_string())
-            .collect();
+            .collect_vec();
 
         Err(SyntaxError::new(vec))
     }

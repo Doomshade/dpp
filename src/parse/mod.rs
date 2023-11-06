@@ -677,7 +677,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
             }
             BoundLiteralValue::P(p) => {
                 emit_literal(self, *p as i32);
-
             }
             BoundLiteralValue::Booba(booba) => {
                 emit_literal(self, *booba as i32);
@@ -687,7 +686,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
             }
         }
     }
-
 }
 
 mod error_diagnosis {
@@ -1071,7 +1069,6 @@ mod parser {
         identifier: &'a str,
         modifiers: Vec<Modifier>,
         data_type: DataType,
-        size: usize,
         value: Option<Expression<'a>>,
     }
 
@@ -1243,7 +1240,6 @@ mod parser {
                 position,
                 identifier,
                 modifiers,
-                size: data_type.size(),
                 data_type,
                 value,
             }
@@ -1258,14 +1254,8 @@ mod parser {
         pub fn data_type(&self) -> &DataType {
             &self.data_type
         }
-        pub fn size(&self) -> usize {
-            self.size
-        }
         pub fn value(&self) -> Option<&Expression<'a>> {
             self.value.as_ref()
-        }
-        pub fn size_in_instructions(&self) -> usize {
-            ((self.size() - 1) / 4) + 1
         }
         pub fn modifiers(&self) -> &Vec<Modifier> {
             &self.modifiers
@@ -1469,7 +1459,6 @@ mod analysis {
         stack_position: usize,
         data_type: DataType,
         modifiers: Vec<Modifier>,
-        size: usize,
         value: Option<Expression<'a>>,
         is_parameter: bool,
         initialized: bool,
@@ -1803,7 +1792,7 @@ mod analysis {
 
         pub fn push_variable(&mut self, variable: &Variable<'a>) {
             let variable_descriptor = VariableDescriptor::new(variable, self.stack_position, false);
-            self.stack_position += variable_descriptor.size_in_instructions();
+            self.stack_position += variable_descriptor.data_type().size();
             self.scope
                 .push_variable_descriptor(variable.identifier(), variable_descriptor);
         }
@@ -1871,7 +1860,7 @@ mod analysis {
         pub fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
             let variable_descriptor =
                 VariableDescriptor::new(variable, self.stack_position, is_parameter);
-            self.stack_position += variable_descriptor.size_in_instructions();
+            self.stack_position += variable_descriptor.data_type().size();
             self.current_scope_mut()
                 .expect("A scope")
                 .push_variable_descriptor(variable.identifier(), variable_descriptor);
@@ -1903,15 +1892,10 @@ mod analysis {
                 stack_position,
                 is_parameter,
                 modifiers: variable.modifiers().clone(),
-                size: variable.size(),
                 data_type: variable.data_type().clone(),
                 value: variable.value().cloned(),
                 initialized: false,
             }
-        }
-
-        pub fn size_in_instructions(&self) -> usize {
-            ((self.size() - 1) / 4) + 1
         }
 
         pub fn set_initialized(&mut self) {
@@ -1927,9 +1911,6 @@ mod analysis {
         }
         pub fn data_type(&self) -> &DataType {
             &self.data_type
-        }
-        pub fn size(&self) -> usize {
-            self.size
         }
         pub fn has_modifier(&self, modifier: Modifier) -> bool {
             self.modifiers.contains(&modifier)
@@ -2438,6 +2419,7 @@ pub mod compiler {
 
     #[cfg(test)]
     mod lexer_tests {
+        use itertools::Itertools;
         use std::cell;
         use std::rc;
 
@@ -2463,10 +2445,7 @@ pub mod compiler {
                 let tokens = result.unwrap();
                 assert_eq!(tokens.len(), token_len);
 
-                let output = tokens
-                    .iter()
-                    .map(|token| token.kind())
-                    .collect::<Vec<TokenKind>>();
+                let output = tokens.iter().map(|token| token.kind()).collect_vec();
                 assert_eq!(output, expected_output);
             }
         }

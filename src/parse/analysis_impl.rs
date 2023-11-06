@@ -1,4 +1,5 @@
 use dpp_macros::Pos;
+use itertools::Itertools;
 
 use crate::parse::analysis::{
     BoundCase, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
@@ -61,14 +62,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .global_statements()
             .iter()
             .filter_map(|statement| self.analyze_global_statement(statement))
-            .collect::<Vec<BoundVariableAssignment>>();
+            .collect_vec();
 
         // Analyze the parsed functions.
         let functions = translation_unit
             .functions()
             .iter()
             .map(|function| self.analyze_function(function))
-            .collect::<Vec<BoundFunction>>();
+            .collect_vec();
 
         // TODO: Check the return type of the main function.
         // |function| {
@@ -136,7 +137,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .unwrap()
                     .variable(v.identifier())
                     .unwrap();
-                let size = variable.size_in_instructions();
+                let size = variable.data_type().size();
                 current_size += size;
                 (
                     variable.data_type().clone(),
@@ -145,7 +146,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 )
             })
             .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
-            .collect::<Vec<BoundVariable>>();
+            .collect_vec();
 
         let bound_statements = self.analyze_block(function.block());
         if function.return_type() != &DataType::Nopp {
@@ -546,7 +547,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.analyze_block(case.block()),
                 )
             })
-            .collect::<Vec<BoundCase>>()
+            .collect_vec()
     }
 
     /// # Summary
@@ -562,7 +563,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .statements()
             .iter()
             .map(|statement| self.analyze_statement(statement))
-            .collect::<Vec<BoundStatement>>();
+            .collect_vec();
         self.symbol_table.pop_scope();
         bound_statements
     }
@@ -631,7 +632,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 self.check_if_mixed_data_types(&lhs_data_type, &rhs_data_type, *position);
                 // TODO: Check whether the binary operator is available for the given data type.
-                use crate::parse::parser::BinaryOperator::{Add, And, Divide, Equal, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Multiply, NotEqual, Or, Subtract};
+                use crate::parse::parser::BinaryOperator::{
+                    Add, And, Divide, Equal, GreaterThan, GreaterThanOrEqual, LessThan,
+                    LessThanOrEqual, Multiply, NotEqual, Or, Subtract,
+                };
                 match op {
                     Add | Subtract | Multiply | Divide => Some(lhs_data_type),
                     NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan
@@ -741,19 +745,24 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 op: op.clone(),
                 rhs: Box::new(self.expr(rhs)),
             },
-            Expression::Identifier { identifier, .. } => {
+            Expression::Identifier {
+                position,
+                identifier,
+            } => {
                 let (level, var_decl) = self.symbol_table().variable(identifier);
-                // TODO: Check if the variable exists.
-                let var_decl = var_decl.unwrap();
-                let offset = var_decl.stack_position();
-                let position = BoundVariable::new(
-                    level,
-                    offset as i32,
-                    var_decl.data_type().clone(),
-                    var_decl.has_modifier(Modifier::Const),
-                );
-
-                BoundExpression::Variable(position)
+                if let Some(var_decl) = var_decl {
+                    BoundExpression::Variable(BoundVariable::new(
+                        level,
+                        var_decl.stack_position() as i32,
+                        var_decl.data_type().clone(),
+                        var_decl.has_modifier(Modifier::Const),
+                    ))
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_not_found(*position, identifier);
+                    BoundExpression::Variable(BoundVariable::new(0, 0, DataType::Pp, true))
+                }
             }
             Expression::FunctionCall {
                 identifier,
@@ -779,13 +788,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     identifier: id,
                     return_type_size,
                     arguments_size,
-                    arguments: arguments
-                        .iter()
-                        .map(|arg| self.expr(arg))
-                        .collect::<Vec<BoundExpression>>(),
+                    arguments: arguments.iter().map(|arg| self.expr(arg)).collect_vec(),
                 }
             }
-            Expression::Invalid { .. } => unreachable!(),
+            Expression::Invalid { .. } => {
+                unreachable!("Should have thrown syntax error after parsing")
+            }
         }
     }
 }

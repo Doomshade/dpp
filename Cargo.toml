@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 syn = "2.0.37"
 quote = "1.0.33"
+itertools = "0.11.0"
 dpp_macros = { path = "dpp_macros" }
 dpp_macros_derive = { path = "dpp_macros/dpp_macros_derive" }
 

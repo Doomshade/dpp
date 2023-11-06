@@ -4,6 +4,7 @@ use crate::parse::analysis::{
 };
 use crate::parse::parser::BinaryOperator;
 use crate::parse::Optimizer;
+use itertools::Itertools;
 
 impl Optimizer {
     pub fn optimize_translation_unit(
@@ -19,7 +20,7 @@ impl Optimizer {
             .functions
             .into_iter()
             .map(|function| self.optimize_function(function))
-            .collect::<Vec<BoundFunction>>();
+            .collect_vec();
         translation_unit
     }
 
@@ -28,7 +29,7 @@ impl Optimizer {
             .statements
             .into_iter()
             .map(|statement| self.optimize_statement_with_debug(statement))
-            .collect::<Vec<BoundStatement>>();
+            .collect_vec();
         function
     }
 
@@ -89,7 +90,7 @@ impl Optimizer {
                         statements
                             .into_iter()
                             .map(|statement| self.optimize_statement(statement))
-                            .collect::<Vec<BoundStatement>>(),
+                            .collect_vec(),
                     )
                 }
             }
@@ -335,7 +336,7 @@ impl Optimizer {
                     false
                 };
             })
-            .collect::<Vec<BoundCase>>();
+            .collect_vec();
 
         // Check if the switch is a constant and just make it an if statement.
         match expression {
@@ -356,7 +357,7 @@ impl Optimizer {
         statements
             .into_iter()
             .map(|statement| self.optimize_statement(statement))
-            .collect::<Vec<BoundStatement>>()
+            .collect_vec()
     }
 
     fn booba_value(expression: &BoundExpression) -> Option<bool> {
