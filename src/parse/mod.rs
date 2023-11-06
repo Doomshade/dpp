@@ -1714,13 +1714,6 @@ mod analysis {
             self.current_function_scope_mut()?.variable_mut(identifier)
         }
 
-        // TODO: This could be done in O(1) but w/e.
-        pub fn function_scope(&self, function_identifier: &str) -> Option<&FunctionScope<'a>> {
-            self.function_scopes
-                .iter()
-                .find(move |func| func.function_identifier == function_identifier)
-        }
-
         fn current_function_scope_mut(&mut self) -> Option<&mut FunctionScope<'a>> {
             self.function_scopes.last_mut()
         }

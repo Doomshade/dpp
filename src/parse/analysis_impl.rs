@@ -131,12 +131,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .parameters()
             .iter()
             .map(|v| {
-                let variable = self
-                    .symbol_table()
-                    .function_scope(function.identifier())
-                    .unwrap()
-                    .variable(v.identifier())
-                    .unwrap();
+                let variable = self.symbol_table().variable(v.identifier()).1.unwrap();
                 let size = variable.data_type().size();
                 current_size += size;
                 (
@@ -161,14 +156,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .missing_return_statement(function.block().position());
             }
         }
-        self.end_function();
-        let function_scope = self
+        let stack_position = self
             .symbol_table()
-            .function_scope(function.identifier())
-            .unwrap();
-        // Shift the stack pointer by activation record + declared variable count.
+            .current_function_scope()
+            .unwrap()
+            .stack_position();
 
-        let stack_position = function_scope.stack_position();
+        self.end_function();
 
         BoundFunction::new(
             function_id,

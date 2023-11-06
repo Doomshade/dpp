@@ -1,35 +1,5 @@
 booba -> ok = yem && yem && yem && yem && yem && yem;
 
-#########################
-# booba -> bbb = nom;
-# booba -> aaa = ((bbb && yem) && yem) && ...;
-#########################
-#
-### Tohle se spatne optimalizuje, protoze:
-#
-#########################
-# booba -> aaa = (((((bbb && yem) && yem) && yem) && yem) && yem) && ...;
-#########################
-#
-### nelze (jde, ale ne jednoduse) optimalizovat promennou bbb & yem -> neoptimalizuje se leva strana -> prava strana zustane stejna
-#
-
-
-#########################
-# booba -> aaa = yem && yem && yem && yem && ... && bbb;
-#########################
-#
-### Tohle se optimalizuje v poradku, protoze:
-#
-#########################
-# booba -> aaa = (((((yem && yem) && yem) && yem) && yem) && yem) && ... && bbb;
-# yem && yem -> yem
-# booba -> aaa = ((((yem && yem) && yem) && yem) && yem) && ... && bbb;
-# yem && yem -> yem
-# booba -> aaa = (((yem && yem) && yem) && yem) && ... && bbb;
-# ...
-#########################
-
 FUNc fibonacci_rec(pp -> num) -> pp {
     if (num < 2) {
         bye num;
@@ -38,6 +8,7 @@ FUNc fibonacci_rec(pp -> num) -> pp {
 }
 
 FUNc fibonacci(pp -> num) -> pp {
+    ok = nom;
     pp -> aa = 0;
     pp -> a = 0;
     pp -> b = 1;
