@@ -134,7 +134,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 if let Some(expression) = ident_expression {
                     self.emit_expression(expression);
                 } else {
-                    self.emit_literal(0);
+                    self.emit_value(&BoundLiteralValue::Pp(0));
                 }
                 self.store_variable(ident_position);
 
@@ -150,7 +150,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
                 // Increment i.
                 self.load_variable(ident_position);
-                self.emit_literal(1);
+                self.emit_value(&BoundLiteralValue::Pp(1));
                 self.emit_operation(OperationType::Add);
                 self.store_variable(ident_position);
                 self.emit_jump(Address::Label(cmp_label.clone()));
@@ -234,24 +234,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// * `expression`: the expression
     fn emit_expression(&mut self, expression: &BoundExpression) {
         match expression {
-            BoundExpression::Literal(value) => match value {
-                BoundLiteralValue::Pp(pp) => self.emit_literal(*pp),
-                BoundLiteralValue::Flaccid(a, b) => {
-                    self.emit_literal(*a);
-                    self.emit_literal(*b);
-                }
-                BoundLiteralValue::AB(a, b) => {
-                    self.emit_literal(*a);
-                    self.emit_literal(*b);
-                }
-                BoundLiteralValue::P(p) => {
-                    self.emit_literal(*p as i32);
-                }
-                BoundLiteralValue::Booba(booba) => {
-                    self.emit_literal(*booba as i32);
-                }
-                BoundLiteralValue::Yarn(yarn) => {}
-            },
+            BoundExpression::Literal(value) => self.emit_value(value),
             BoundExpression::Binary { lhs, rhs, op, .. } => {
                 // Ok so this is a little complicated, but bear with me:
                 // We need to check what kind of binary operator we have.
@@ -298,14 +281,14 @@ impl<'a, 'b> Emitter<'a, 'b> {
                         self.emit_operation(Op::Multiply);
 
                         // Clamp the boolean expression.
-                        self.emit_literal(0);
+                        self.emit_value(&BoundLiteralValue::Pp(0));
                         self.emit_operation(Op::NotEqual);
                     }
                     BinOp::Or => {
                         self.emit_operation(Op::Add);
 
                         // Clamp the boolean expression.
-                        self.emit_literal(0);
+                        self.emit_value(&BoundLiteralValue::Pp(0));
                         self.emit_operation(Op::NotEqual);
                     }
                 };

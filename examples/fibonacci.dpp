@@ -1,5 +1,36 @@
 pp -> asd = 4 + 69 * 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0;
-booba -> ok = yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem && yem;
+booba -> nok = nom;
+booba -> ok = yem && yem && yem && yem && yem && nok;
+
+#########################
+# booba -> bbb = nom;
+# booba -> aaa = bbb && yem && yem && ...;
+#########################
+#
+### Tohle se spatne optimalizuje, protoze:
+#
+#########################
+# booba -> aaa = (((((bbb && yem) && yem) && yem) && yem) && yem) && ...;
+#########################
+#
+### nelze (jde, ale ne jednoduse) optimalizovat promennou bbb & yem -> neoptimalizuje se leva strana -> prava strana zustane stejna
+#
+
+
+#########################
+# booba -> aaa = yem && yem && yem && yem && ... && bbb;
+#########################
+#
+### Tohle se optimalizuje v poradku, protoze:
+#
+#########################
+# booba -> aaa = (((((yem && yem) && yem) && yem) && yem) && yem) && ... && bbb;
+# yem && yem -> yem
+# booba -> aaa = ((((yem && yem) && yem) && yem) && yem) && ... && bbb;
+# yem && yem -> yem
+# booba -> aaa = (((yem && yem) && yem) && yem) && ... && bbb;
+# ...
+#########################
 
 FUNc fibonacci_rec(pp -> num) -> pp {
     if (num < 2) {

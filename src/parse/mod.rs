@@ -3,7 +3,7 @@ use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{BoundTranslationUnit, BoundVariable, SymbolTable};
+use crate::parse::analysis::{BoundLiteralValue, BoundTranslationUnit, BoundVariable, SymbolTable};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
@@ -658,9 +658,36 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Call { level, address });
     }
 
-    fn emit_literal(&mut self, value: i32) {
-        self.emit_instruction(Instruction::Literal { value })
+    fn emit_value(&mut self, value: &BoundLiteralValue) {
+        fn emit_literal(emitter: &mut Emitter<'_, '_>, value: i32) {
+            emitter.emit_instruction(Instruction::Literal { value })
+        }
+
+        match value {
+            BoundLiteralValue::Pp(pp) => {
+                emit_literal(self, *pp);
+            }
+            BoundLiteralValue::Flaccid(a, b) => {
+                emit_literal(self, *a);
+                emit_literal(self, *b);
+            }
+            BoundLiteralValue::AB(a, b) => {
+                emit_literal(self, *a);
+                emit_literal(self, *b);
+            }
+            BoundLiteralValue::P(p) => {
+                emit_literal(self, *p as i32);
+
+            }
+            BoundLiteralValue::Booba(booba) => {
+                emit_literal(self, *booba as i32);
+            }
+            BoundLiteralValue::Yarn(yarn) => {
+                todo!("Not yet implemented");
+            }
+        }
     }
+
 }
 
 mod error_diagnosis {
