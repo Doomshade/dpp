@@ -294,11 +294,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.expect(TokenKind::CloseParen)?;
         let statement = self._stat()?;
 
-        return Some(Statement::While {
+        Some(Statement::While {
             position,
             expression,
             statement: Box::new(statement),
-        });
+        })
     }
 
     fn _do_while(&mut self) -> Option<Statement<'a>> {

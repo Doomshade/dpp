@@ -21,7 +21,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `translation_unit`: the translation unit to analyze
     ///
     /// # Returns
-    /// Result<SymbolTable, SyntaxError> - the symbol table if no errors were found
+    /// Result<SymbolTable, `SyntaxError`> - the symbol table if no errors were found
     pub fn analyze(
         mut self,
         translation_unit: &TranslationUnit<'a>,
@@ -60,9 +60,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         let global_variables = translation_unit
             .global_statements()
             .iter()
-            .map(|statement| self.analyze_global_statement(statement))
-            .filter(|global_stat| global_stat.is_some())
-            .map(|statement| statement.unwrap())
+            .filter_map(|statement| self.analyze_global_statement(statement))
             .collect::<Vec<BoundVariableAssignment>>();
 
         // Analyze the parsed functions.
@@ -90,7 +88,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .iter()
             .find(|function| function.is_main_function())
         {
-            if main_function.parameters().len() != 0 {
+            if !main_function.parameters().is_empty() {
                 self.error_diag.borrow_mut().invalid_number_of_arguments(
                     (0, 0),
                     "main",
@@ -121,7 +119,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     ///
     /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
-        self.begin_function(&function);
+        self.begin_function(function);
         let function_id = self
             .symbol_table()
             .function(function.identifier())
@@ -183,7 +181,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     /// # Summary
     /// Analyzes the global statements. The only global statement that is currently supported is
-    /// a variable declaration. This function differs very slightly from the analyze_statement -
+    /// a variable declaration. This function differs very slightly from the `analyze_statement` -
     /// this function only supports the variable declaration statement and registers the variables
     /// in the global scope instead of the local scope.
     ///
@@ -449,14 +447,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 expression, cases, ..
             } => {
                 let expression = self.analyze_expr(expression, None, None);
-                return if let Some(switch_data_type) = expression.0 {
+                if let Some(switch_data_type) = expression.0 {
                     BoundStatement::Switch {
                         expression: expression.1,
                         cases: self.analyze_cases(cases, Some(&switch_data_type)),
                     }
                 } else {
                     BoundStatement::Empty
-                };
+                }
             }
             Statement::For {
                 index_ident,
@@ -633,7 +631,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 self.check_if_mixed_data_types(&lhs_data_type, &rhs_data_type, *position);
                 // TODO: Check whether the binary operator is available for the given data type.
-                use crate::parse::parser::BinaryOperator::*;
+                use crate::parse::parser::BinaryOperator::{Add, And, Divide, Equal, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Multiply, NotEqual, Or, Subtract};
                 match op {
                     Add | Subtract | Multiply | Divide => Some(lhs_data_type),
                     NotEqual | Equal | GreaterThan | GreaterThanOrEqual | LessThan
@@ -744,7 +742,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 rhs: Box::new(self.expr(rhs)),
             },
             Expression::Identifier { identifier, .. } => {
-                let (level, var_decl) = self.symbol_table().variable(*identifier);
+                let (level, var_decl) = self.symbol_table().variable(identifier);
                 // TODO: Check if the variable exists.
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();

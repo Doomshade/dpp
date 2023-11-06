@@ -45,7 +45,7 @@ impl Optimizer {
         optimized_statement
     }
 
-    fn optimize_statement(&mut self, mut statement: BoundStatement) -> BoundStatement {
+    fn optimize_statement(&mut self, statement: BoundStatement) -> BoundStatement {
         match statement {
             BoundStatement::If {
                 expression,
@@ -202,7 +202,7 @@ impl Optimizer {
         None
     }
 
-    fn optimize_expression(&mut self, mut expression: BoundExpression) -> BoundExpression {
+    fn optimize_expression(&mut self, expression: BoundExpression) -> BoundExpression {
         match expression {
             BoundExpression::Binary { lhs, rhs, op } => {
                 let optimized_lhs = self.optimize_expression(*lhs);
@@ -352,7 +352,7 @@ impl Optimizer {
         }
     }
 
-    fn optimize_statements(&mut self, mut statements: Vec<BoundStatement>) -> Vec<BoundStatement> {
+    fn optimize_statements(&mut self, statements: Vec<BoundStatement>) -> Vec<BoundStatement> {
         statements
             .into_iter()
             .map(|statement| self.optimize_statement(statement))

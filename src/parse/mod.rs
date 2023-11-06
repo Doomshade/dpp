@@ -573,7 +573,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             Address::Label(label) => *self
                 .labels
                 .get(label.as_str())
-                .expect(format!("Did not emit {label}").as_str()),
+                .unwrap_or_else(|| panic!("Did not emit {label}")),
         }
     }
 
@@ -682,7 +682,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             BoundLiteralValue::Booba(booba) => {
                 emit_literal(self, *booba as i32);
             }
-            BoundLiteralValue::Yarn(yarn) => {
+            BoundLiteralValue::Yarn(_yarn) => {
                 todo!("Not yet implemented");
             }
         }
@@ -1359,7 +1359,7 @@ mod parser {
                     format!("Unary expression {}{}", op, operand)
                 }
                 Expression::Binary { .. } => "Binary expression".to_string(),
-                Expression::Identifier { identifier, .. } => identifier.to_string(),
+                Expression::Identifier { identifier, .. } => (*identifier).to_string(),
                 Expression::FunctionCall { identifier, .. } => {
                     format!("Function {}", identifier)
                 }
@@ -2406,7 +2406,7 @@ pub mod compiler {
             translation_unit: &TranslationUnit<'a>,
             error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
         ) -> Result<BoundTranslationUnit, SyntaxError> {
-            SemanticAnalyzer::new(rc::Rc::clone(&error_diag)).analyze(&translation_unit)
+            SemanticAnalyzer::new(rc::Rc::clone(error_diag)).analyze(translation_unit)
         }
 
         fn optimize<'a>(
@@ -2423,12 +2423,12 @@ pub mod compiler {
             Self::optimize(translation_unit, optimization_count - 1, optimizer)
         }
 
-        fn emit<'a>(
+        fn emit(
             output_file: &str,
             translation_unit: BoundTranslationUnit,
-            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
+            error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'_, '_>>>,
         ) -> io::Result<()> {
-            Emitter::new(rc::Rc::clone(&error_diag)).emit_to_writer(
+            Emitter::new(rc::Rc::clone(error_diag)).emit_to_writer(
                 &mut io::BufWriter::new(fs::File::create(output_file)?),
                 translation_unit,
                 false,

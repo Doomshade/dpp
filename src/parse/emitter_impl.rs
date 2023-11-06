@@ -196,13 +196,13 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_jump(Address::Label(end_label.unwrap().to_string()));
             }
             BoundStatement::Statements(statements) => {
-                statements.iter().for_each(|statement| {
+                for statement in statements.iter() {
                     self.emit_statement(statement, start_label.clone(), end_label.clone())
-                });
+                }
             }
             BoundStatement::Switch { expression, cases } => {
                 let switch_end_label = self.create_control_label();
-                cases.iter().for_each(|case| {
+                for case in cases.iter() {
                     let end_case = self.create_control_label();
 
                     // Compare the case statement with the expression.
@@ -217,7 +217,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                         .for_each(|statement| self.emit_statement(statement, None, None));
                     self.emit_jump(Address::Label(switch_end_label.clone()));
                     self.emit_label(end_case.clone());
-                });
+                }
                 self.emit_label(switch_end_label);
             }
             _ => self
