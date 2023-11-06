@@ -189,7 +189,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(&self.tokens[(self.curr_token_index as i32 + offset) as usize])
     }
 
-    fn matches_token_kind(&mut self, token_kind: TokenKind) -> bool {
+    fn matches_token_kind(&self, token_kind: TokenKind) -> bool {
         if let Some(token) = self.token() {
             return token.kind() == token_kind;
         }
@@ -419,12 +419,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
-        let symbol_table_mut = self.symbol_table_mut();
-        symbol_table_mut.push_function_scope(function.identifier());
+        self.symbol_table_mut()
+            .push_function_scope(function.identifier());
         function
             .parameters()
             .iter()
-            .for_each(|parameter| symbol_table_mut.push_variable(parameter, true));
+            .for_each(|parameter| self.symbol_table_mut().push_variable(parameter, true));
     }
 
     fn end_function(&mut self) {
@@ -1575,7 +1575,7 @@ mod analysis {
             let function_descriptor = FunctionDescriptor::new(function, self.current_function_id);
             self.current_function_id += 1;
             self.current_scope_mut()
-                .push_function_descriptor(function.identifier(), function_descriptor);
+                .push_function(function.identifier(), function_descriptor);
         }
 
         pub fn current_function_mut(&mut self) -> Option<&mut FunctionDescriptor<'a>> {
@@ -1583,36 +1583,32 @@ mod analysis {
                 .iter_mut()
                 .rev()
                 .find(|scope| scope.function_identifier != self.current_function_identifier)?
-                .get_function_descriptor_mut(self.current_function_identifier?)
+                .function_mut(self.current_function_identifier?)
         }
 
         pub fn current_function(&self) -> Option<&FunctionDescriptor<'a>> {
-            self.scopes
-                .iter()
-                .rev()
-                .find(|scope| scope.function_identifier != self.current_function_identifier)?
-                .get_function_descriptor(self.current_function_identifier?)
+            self.function(self.current_function_identifier?)
         }
 
         pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
             self.scopes
                 .iter()
                 .rev()
-                .find(|scope| scope.function_identifier == Some(identifier))?
-                .get_function_descriptor(identifier)
+                .find(|scope| scope.has_function(identifier))?
+                .function(identifier)
         }
 
         pub fn variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor<'a>>) {
             let mut level = 0;
+            let mut cur = self.current_scope().function_identifier;
             for scope in self.scopes.iter().rev() {
-                if let Some(variable) = scope.get_variable_descriptor(identifier) {
-                    return (level, Some(variable));
-                }
-
-                // If we move out of function scope we need to increment the level.
-                if scope.function_identifier.is_some() {
+                if cur != scope.function_identifier {
                     level += 1;
                 }
+                if let Some(variable) = scope.variable(identifier) {
+                    return (level, Some(variable));
+                }
+                cur = scope.function_identifier;
             }
 
             // Variable does not exist.
@@ -1624,16 +1620,15 @@ mod analysis {
             identifier: &str,
         ) -> (usize, Option<&mut VariableDescriptor<'a>>) {
             let mut level = 0;
-            for scope in self.scopes.iter_mut() {
-                let has_function_identifier = scope.function_identifier.is_some();
-                if let Some(variable) = scope.get_variable_descriptor_mut(identifier) {
-                    return (level, Some(variable));
-                }
-
-                // If we move out of function scope we need to increment the level.
-                if has_function_identifier {
+            let mut cur = self.current_scope().function_identifier;
+            for scope in self.scopes.iter_mut().rev() {
+                if cur != scope.function_identifier {
                     level += 1;
                 }
+                if let Some(_) = scope.variable(identifier) {
+                    return (level, scope.variable_mut(identifier));
+                }
+                cur = scope.function_identifier;
             }
 
             // Variable does not exist.
@@ -1687,36 +1682,15 @@ mod analysis {
             }
         }
 
-        fn push_variable_descriptor(
-            &mut self,
-            identifier: &'a str,
-            variable_descriptor: VariableDescriptor<'a>,
-        ) {
-            self.variables.insert(identifier, variable_descriptor);
+        pub fn variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
+            self.variables.get(identifier)
         }
 
-        pub fn get_variable_descriptor(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
-            if let Some(variable) = self.variables.get(identifier) {
-                return Some(variable);
-            }
-            None
+        pub fn variable_mut(&mut self, identifier: &str) -> Option<&mut VariableDescriptor<'a>> {
+            self.variables.get_mut(identifier)
         }
 
-        pub fn get_variable_descriptor_mut(
-            &mut self,
-            identifier: &str,
-        ) -> Option<&mut VariableDescriptor<'a>> {
-            if let Some(variable) = self.variables.get_mut(identifier) {
-                return Some(variable);
-            }
-            None
-        }
-
-        pub fn last_variable_descriptor(&self) -> Option<&VariableDescriptor<'a>> {
-            self.variables.values().last()
-        }
-
-        fn push_function_descriptor(
+        fn push_function(
             &mut self,
             identifier: &'a str,
             function_descriptor: FunctionDescriptor<'a>,
@@ -1724,14 +1698,11 @@ mod analysis {
             self.functions.insert(identifier, function_descriptor);
         }
 
-        pub fn get_function_descriptor(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
+        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
             self.functions.get(identifier)
         }
 
-        pub fn get_function_descriptor_mut(
-            &mut self,
-            identifier: &str,
-        ) -> Option<&mut FunctionDescriptor<'a>> {
+        pub fn function_mut(&mut self, identifier: &str) -> Option<&mut FunctionDescriptor<'a>> {
             self.functions.get_mut(identifier)
         }
 
@@ -1739,7 +1710,7 @@ mod analysis {
             self.functions.contains_key(identifier)
         }
 
-        pub fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
+        fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
             let variable_descriptor =
                 VariableDescriptor::new(variable, self.stack_position, is_parameter);
             self.stack_position += variable.data_type().size();
@@ -2190,6 +2161,7 @@ pub mod compiler {
                     "out/dpp/optimizations.txt",
                     root_optimizer.optimizations.join("\n\n"),
                 )?;
+                dbg!(&optimized_translation_unit);
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
             }

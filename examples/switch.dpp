@@ -1,7 +1,7 @@
 pp -> b = 420;
 
 FUNc main() -> pp {
-    const pp -> a = 0 + 0 + 0 + 0 + 1 + 4 + 5 + b;
+    const pp -> a = 0 + 456 + 0 + 0 + 1 + 4 + 5 + b;
     if (0 == 1) {
         pp -> zz = 12345789;
         pp -> zza = 12345789;
@@ -25,5 +25,5 @@ FUNc main() -> pp {
             bye 123;
         }
     }
-    bye 0;
+    bye 69;
 }

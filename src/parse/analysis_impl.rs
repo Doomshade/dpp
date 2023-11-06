@@ -128,13 +128,21 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
         self.begin_function(function);
-        let function_id = self.symbol_table().next_function_id() - 1;
+        let function_id = self
+            .symbol_table()
+            .current_function()
+            .unwrap()
+            .function_id();
         let mut current_size = 0;
         let parameters = function
             .parameters()
             .iter()
-            .map(|v| {
-                let variable = self.symbol_table().variable(v.identifier()).1.unwrap();
+            .map(|parameter| {
+                let variable = self
+                    .symbol_table()
+                    .variable(parameter.identifier())
+                    .1
+                    .unwrap();
                 let size = variable.data_type().size();
                 current_size += size;
                 (
@@ -157,7 +165,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 } else {
                     self.error_diag
                         .borrow_mut()
-                        .missing_return_statement(statement.position());
+                        .missing_return_statement(function.position());
                 }
             } else {
                 self.error_diag
@@ -222,7 +230,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         var_decl.data_type().clone(),
                         var_decl.has_modifier(Modifier::Const),
                     );
-                    self.increment_assignment_at(position.clone());
                     return Some(BoundVariableAssignment::new(
                         position,
                         self.analyze_expr(
@@ -279,7 +286,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         )
                         .1;
 
-                    self.increment_assignment_at(position.clone());
                     return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         position, value,
                     ));
@@ -364,8 +370,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let return_type = function_descriptor.return_type();
                     let expression = self.analyze_expr(expression, None, None);
                     self.check_data_type(return_type, expression.0.as_ref(), *position);
-
-                    let return_type_size = expression.0.unwrap().size();
+                    let return_type_size = expression.0.map_or(0, |data_type| data_type.size());
                     return BoundStatement::Bye {
                         return_type_size,
                         expression: Some(expression.1),
@@ -428,7 +433,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.symbol_table_mut().set_variable_initialized(identifier);
 
                     let position = BoundVariable::new(level, offset as i32, data_type, is_const);
-                    self.increment_assignment_at(position.clone());
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         position,
                         expression.1,
@@ -642,70 +646,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     | LessThanOrEqual | And | Or => Some(DataType::Booba),
                 }
             }
-            Expression::Identifier {
-                identifier,
-                position,
-            } => {
-                let (_, var_decl) = self.symbol_table().variable(identifier);
-                return if let Some(variable) = var_decl {
-                    if variable.is_initialized() {
-                        Some(variable.data_type().clone())
-                    } else {
-                        self.error_diag
-                            .borrow_mut()
-                            .variable_not_initialized(*position, identifier);
-                        Some(variable.data_type().clone())
-                    }
-                } else {
-                    self.error_diag
-                        .borrow_mut()
-                        .variable_not_found(*position, identifier);
-                    None
-                };
-            }
-            Expression::FunctionCall {
-                identifier,
-                arguments,
-                position,
-            } => {
-                return if let Some(function) = self.symbol_table().function(identifier) {
-                    if function.parameters().len() != arguments.len() {
-                        // Check the argument count.
-                        self.error_diag.borrow_mut().invalid_number_of_arguments(
-                            *position,
-                            identifier,
-                            function.parameters().len(),
-                            arguments.len(),
-                        );
-                    } else {
-                        // Check the argument data type.
-                        if let Some(mismatched_arg) = arguments
-                            .iter()
-                            .zip(function.parameters().iter().map(|var| var.data_type()))
-                            .find(|(a, b)| {
-                                if let Some(expr) = self.calc_data_type(a) {
-                                    expr != **b
-                                } else {
-                                    false
-                                }
-                            })
-                        {
-                            let got = self.calc_data_type(mismatched_arg.0)?;
-                            self.error_diag.borrow_mut().invalid_data_type(
-                                mismatched_arg.0.position(),
-                                mismatched_arg.1,
-                                &got,
-                            )
-                        }
-                    }
-                    Some(function.return_type().clone())
-                } else {
-                    self.error_diag
-                        .borrow_mut()
-                        .function_does_not_exist(*position, identifier);
-                    None
-                };
-            }
+            Expression::Identifier { identifier, .. } => self
+                .symbol_table()
+                .variable(identifier)
+                .1
+                .map(|variable| variable.data_type().clone()),
+            Expression::FunctionCall { identifier, .. } => self
+                .symbol_table()
+                .function(identifier)
+                .map(|function| function.return_type().clone()),
             _ => None,
         };
     }
@@ -750,12 +699,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 identifier,
             } => {
                 let (level, var_decl) = self.symbol_table().variable(identifier);
-                if let Some(var_decl) = var_decl {
+                if let Some(variable) = var_decl {
+                    if !variable.is_initialized() {
+                        self.error_diag
+                            .borrow_mut()
+                            .variable_not_initialized(*position, identifier);
+                    }
+
                     BoundExpression::Variable(BoundVariable::new(
                         level,
-                        var_decl.stack_position() as i32,
-                        var_decl.data_type().clone(),
-                        var_decl.has_modifier(Modifier::Const),
+                        variable.stack_position() as i32,
+                        variable.data_type().clone(),
+                        variable.has_modifier(Modifier::Const),
                     ))
                 } else {
                     self.error_diag

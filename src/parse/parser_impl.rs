@@ -118,7 +118,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         let return_type = self._data_type()?;
         self.expect(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement<'a>>::new();
-        while !self.matches_token_kind(TokenKind::CloseBrace) {
+        while !self.matches_token_kind(TokenKind::CloseBrace)
+            && !self.matches_token_kind(TokenKind::Eof)
+        {
             if let Some(statement) = self._stat() {
                 statements.push(statement);
             }
@@ -151,7 +153,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         parameters.push(parameter);
 
         let mut invalid_params = false;
-        while !self.matches_token_kind(TokenKind::CloseParen) {
+        while !self.matches_token_kind(TokenKind::CloseParen)
+            && !self.matches_token_kind(TokenKind::Eof)
+        {
             if invalid_params {
                 self.add_error("parameter");
                 self.consume_token();
@@ -185,7 +189,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.expect(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement<'a>>::new();
 
-        while !self.matches_token_kind(TokenKind::CloseBrace) {
+        while !self.matches_token_kind(TokenKind::CloseBrace)
+            && !self.matches_token_kind(TokenKind::Eof)
+        {
             if let Some(statement) = self._stat() {
                 statements.push(statement);
             }
@@ -767,7 +773,9 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let arg = self._expr()?;
         args.push(arg);
-        while !self.matches_token_kind(TokenKind::CloseParen) {
+        while !self.matches_token_kind(TokenKind::CloseParen)
+            && !self.matches_token_kind(TokenKind::Eof)
+        {
             self.expect(TokenKind::Comma)?;
             args.push(self._expr()?);
         }
