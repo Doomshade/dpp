@@ -419,12 +419,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
-        let symbol_table = self.symbol_table_mut();
-        symbol_table.push_scope(Some(function.identifier()));
+        let symbol_table_mut = self.symbol_table_mut();
+        symbol_table_mut.push_function_scope(function.identifier());
         function
             .parameters()
             .iter()
-            .for_each(|parameter| symbol_table.push_variable(parameter, true));
+            .for_each(|parameter| symbol_table_mut.push_variable(parameter, true));
     }
 
     fn end_function(&mut self) {
@@ -976,7 +976,7 @@ mod parser {
         identifier: &'a str,
         return_type: DataType,
         parameters: Vec<Variable<'a>>,
-        block: Block<'a>,
+        statements: Vec<Statement<'a>>,
     }
 
     #[derive(Clone, Debug, Pos)]
@@ -1185,14 +1185,14 @@ mod parser {
             identifier: &'a str,
             return_type: DataType,
             parameters: Vec<Variable<'a>>,
-            block: Block<'a>,
+            statements: Vec<Statement<'a>>,
         ) -> Self {
             Function {
                 position,
                 identifier,
                 return_type,
                 parameters,
-                block,
+                statements,
             }
         }
 
@@ -1202,8 +1202,8 @@ mod parser {
         pub fn return_type(&self) -> &DataType {
             &self.return_type
         }
-        pub fn block(&self) -> &Block<'a> {
-            &self.block
+        pub fn statements(&self) -> &Vec<Statement<'a>> {
+            &self.statements
         }
         pub fn parameters(&self) -> &Vec<Variable<'a>> {
             &self.parameters
@@ -1370,7 +1370,7 @@ mod parser {
 
 mod analysis {
     use std::fmt::Formatter;
-    use std::{collections, fmt, ops};
+    use std::{cmp, collections, fmt, ops};
 
     use crate::parse::parser::{
         BinaryOperator, DataType, Expression, Function, Modifier, UnaryOperator, Variable,
@@ -1380,10 +1380,10 @@ mod analysis {
     pub struct SymbolTable<'a> {
         /// Current stack of function scopes.
         scopes: Vec<Scope<'a>>,
-        /// The identifier of this function scope (i.e. the function identifier).
-        function_identifier: Option<&'a str>,
+        /// The identifier of the current function scope.
+        current_function_identifier: Option<&'a str>,
         /// The current function ID.
-        function_id: usize,
+        current_function_id: usize,
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1413,6 +1413,7 @@ mod analysis {
         return_type: DataType,
         parameters: Vec<Variable<'a>>,
         function_id: usize,
+        stack_frame_size: usize,
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1536,9 +1537,9 @@ mod analysis {
     impl<'a> SymbolTable<'a> {
         pub fn new() -> Self {
             Self {
-                scopes: vec![Scope::new(None)],
-                function_identifier: None,
-                function_id: 0,
+                scopes: vec![Scope::new(None, Scope::ACTIVATION_RECORD_SIZE)],
+                current_function_identifier: None,
+                current_function_id: 0,
             }
         }
 
@@ -1564,18 +1565,33 @@ mod analysis {
         pub fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
             self.current_scope_mut()
                 .push_variable(variable, is_parameter);
+            let stack_position = self.current_scope().stack_position;
+            if let Some(function) = self.current_function_mut() {
+                function.update_stack_frame_size(stack_position);
+            }
         }
 
         pub fn push_function(&mut self, function: &Function<'a>) {
-            let function_descriptor = FunctionDescriptor::new(function, self.function_id);
-            self.function_id += 1;
+            let function_descriptor = FunctionDescriptor::new(function, self.current_function_id);
+            self.current_function_id += 1;
             self.current_scope_mut()
                 .push_function_descriptor(function.identifier(), function_descriptor);
         }
 
+        pub fn current_function_mut(&mut self) -> Option<&mut FunctionDescriptor<'a>> {
+            self.scopes
+                .iter_mut()
+                .rev()
+                .find(|scope| scope.function_identifier != self.current_function_identifier)?
+                .get_function_descriptor_mut(self.current_function_identifier?)
+        }
+
         pub fn current_function(&self) -> Option<&FunctionDescriptor<'a>> {
-            self.current_scope()
-                .get_function_descriptor(self.function_identifier?)
+            self.scopes
+                .iter()
+                .rev()
+                .find(|scope| scope.function_identifier != self.current_function_identifier)?
+                .get_function_descriptor(self.current_function_identifier?)
         }
 
         pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
@@ -1624,26 +1640,49 @@ mod analysis {
             (0, None)
         }
 
-        pub fn push_scope(&mut self, function_identifier: Option<&'a str>) {
-            self.scopes.push(Scope::new(function_identifier));
+        pub fn push_scope(&mut self) {
+            self.push_scope_internal(
+                self.current_function_identifier,
+                self.scopes.last().expect("A scope").stack_position(),
+            );
+        }
+
+        pub fn push_function_scope(&mut self, function_identifier: &'a str) {
+            self.push_scope_internal(Some(function_identifier), Scope::ACTIVATION_RECORD_SIZE);
+        }
+
+        fn push_scope_internal(
+            &mut self,
+            function_identifier: Option<&'a str>,
+            stack_position: usize,
+        ) {
+            self.scopes
+                .push(Scope::new(function_identifier, stack_position));
             if let Some(function_identifier) = function_identifier {
-                self.function_identifier = Some(function_identifier);
+                self.current_function_identifier = Some(function_identifier);
             }
         }
 
         pub fn pop_scope(&mut self) {
             self.scopes.pop();
+            self.current_function_identifier = self.current_scope().function_identifier;
+        }
+        pub fn next_function_id(&self) -> usize {
+            self.current_function_id
+        }
+        pub fn current_function_identifier(&self) -> Option<&'a str> {
+            self.current_function_identifier
         }
     }
 
     impl<'a> Scope<'a> {
         pub const ACTIVATION_RECORD_SIZE: usize = 3;
 
-        pub fn new(function_identifier: Option<&'a str>) -> Self {
+        pub fn new(function_identifier: Option<&'a str>, stack_position: usize) -> Self {
             Self {
                 variables: collections::HashMap::new(),
                 functions: collections::HashMap::new(),
-                stack_position: Self::ACTIVATION_RECORD_SIZE,
+                stack_position,
                 function_identifier,
             }
         }
@@ -1687,6 +1726,13 @@ mod analysis {
 
         pub fn get_function_descriptor(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
             self.functions.get(identifier)
+        }
+
+        pub fn get_function_descriptor_mut(
+            &mut self,
+            identifier: &str,
+        ) -> Option<&mut FunctionDescriptor<'a>> {
+            self.functions.get_mut(identifier)
         }
 
         pub fn has_function(&self, identifier: &str) -> bool {
@@ -1744,7 +1790,12 @@ mod analysis {
                 return_type: function.return_type().clone(),
                 parameters: function.parameters().clone(),
                 function_id,
+                stack_frame_size: Scope::ACTIVATION_RECORD_SIZE,
             }
+        }
+
+        pub fn update_stack_frame_size(&mut self, stack_frame_size: usize) {
+            self.stack_frame_size = cmp::max(self.stack_frame_size, stack_frame_size);
         }
 
         pub fn return_type(&self) -> &DataType {
@@ -1762,6 +1813,9 @@ mod analysis {
         }
         pub fn function_id(&self) -> usize {
             self.function_id
+        }
+        pub fn stack_frame_size(&self) -> usize {
+            self.stack_frame_size
         }
     }
 
@@ -1804,7 +1858,7 @@ mod analysis {
             parameters: Vec<BoundVariable>,
             statements: Vec<BoundStatement>,
         ) -> Self {
-            BoundFunction {
+            Self {
                 identifier,
                 stack_frame_size,
                 is_main_function,

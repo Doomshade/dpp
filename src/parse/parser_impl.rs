@@ -110,19 +110,27 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn _function(&mut self) -> Option<Function<'a>> {
         let position = self.position;
+
         self.expect(TokenKind::FUNcKeyword)?;
         let identifier = self.expect(TokenKind::Identifier)?;
         let parameters = self._params()?;
         self.expect(TokenKind::Arrow)?;
         let return_type = self._data_type()?;
-        let block = self._block()?;
+        self.expect(TokenKind::OpenBrace)?;
+        let mut statements = Vec::<Statement<'a>>::new();
+        while !self.matches_token_kind(TokenKind::CloseBrace) {
+            if let Some(statement) = self._stat() {
+                statements.push(statement);
+            }
+        }
+        self.expect(TokenKind::CloseBrace)?;
 
         Some(Function::new(
             position,
             identifier,
             return_type,
             parameters,
-            block,
+            statements,
         ))
     }
 

@@ -20,13 +20,13 @@
 
         <transl-unit> ::= \{ ( <function> | <var-decl> ) \}
 
-        <function> ::= `FUNc' <ident> <params> `->' <data-type> <block>
+        <function> ::= `FUNc' <ident> <params> `->' <data-type> `{'  \{ <stat> \} `}'
 
         <params> ::= `(' [ <param> \{ `,' <param> \} ] `)'
 
         <param> ::= <modifiers> <data-type> `->' <ident>
 
-        <block> ::= `{' \{ <stat> \} `}'
+        <block> ::= `{'  \{ <stat> \} `}'
 
         <stat> ::= <if>
         \alt <for>

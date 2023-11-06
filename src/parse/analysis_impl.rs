@@ -113,9 +113,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         BoundTranslationUnit::new(
             functions,
             main_function_identifier,
-            self.symbol_table()
-                .current_scope()
-                .stack_position(),
+            self.symbol_table().current_scope().stack_position(),
             global_variables,
         )
     }
@@ -130,11 +128,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
         self.begin_function(function);
-        let function_id = self
-            .symbol_table()
-            .current_function()
-            .unwrap()
-            .function_id();
+        let function_id = self.symbol_table().next_function_id() - 1;
         let mut current_size = 0;
         let parameters = function
             .parameters()
@@ -152,23 +146,30 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
             .collect_vec();
 
-        let bound_statements = self.analyze_block(function.block());
+        let bound_statements = self.analyze_statements(function.statements());
         if function.return_type() != &DataType::Nopp {
             // If it's anything other than Nopp, then we require the function to have
             // a return statement at the very end.
-            let last_statement = function.block().statements().last();
-            if let Some(Statement::Bye { .. }) = last_statement {
-                // Do nothing.
+            let last_statement = function.statements().last();
+            if let Some(statement) = last_statement {
+                if let Statement::Bye { .. } = statement {
+                    // Do nothing.
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .missing_return_statement(statement.position());
+                }
             } else {
                 self.error_diag
                     .borrow_mut()
-                    .missing_return_statement(function.block().position());
+                    .missing_return_statement(function.position());
             }
         }
         let stack_position = self
             .symbol_table()
-            .current_scope()
-            .stack_position();
+            .current_function()
+            .unwrap()
+            .stack_frame_size();
 
         self.end_function();
 
@@ -358,8 +359,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 if let Some(expression) = expression {
-                    let function_descriptor =
-                        self.symbol_table().current_function().unwrap();
+                    let function_descriptor = self.symbol_table().current_function().unwrap();
 
                     let return_type = function_descriptor.return_type();
                     let expression = self.analyze_expr(expression, None, None);
@@ -488,7 +488,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 );
 
                 // Push a new scope and introduce the index variable.
-                self.symbol_table_mut().push_scope(None);
+                self.symbol_table_mut().push_scope();
                 let index_variable = Variable::new(
                     *position,
                     index_ident,
@@ -555,14 +555,17 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     ///
     /// * `block`: the block to analyze
     fn analyze_block(&mut self, block: &Block<'a>) -> Vec<BoundStatement> {
-        self.symbol_table.push_scope(None);
-        let bound_statements = block
-            .statements()
-            .iter()
-            .map(|statement| self.analyze_statement(statement))
-            .collect_vec();
+        self.symbol_table.push_scope();
+        let bound_statements = self.analyze_statements(block.statements());
         self.symbol_table.pop_scope();
         bound_statements
+    }
+
+    fn analyze_statements(&mut self, statements: &Vec<Statement<'a>>) -> Vec<BoundStatement> {
+        statements
+            .iter()
+            .map(|statement| self.analyze_statement(statement))
+            .collect_vec()
     }
 
     /// # Summary
