@@ -48,8 +48,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
     /// * `function`: the function
     fn emit_function(&mut self, function: &BoundFunction) {
         self.emit_label(Self::create_function_label(function.identifier()));
-
-        // Shift the stack pointer by activation record + declared variable count.
         self.create_stack_frame(function.stack_frame_size());
         // We expect the arguments to be loaded on stack by the callee, no need to load them.
 
@@ -153,11 +151,12 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_value(&BoundLiteralValue::Pp(1));
                 self.emit_operation(OperationType::Add);
                 self.store_variable(ident_position);
+
                 self.emit_jump(Address::Label(cmp_label.clone()));
                 self.emit_label(end.clone());
             }
 
-            BoundStatement::Empty { .. } => {
+            BoundStatement::Empty => {
                 // Emit nothing I guess :)
             }
             BoundStatement::If {
@@ -184,14 +183,16 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_jmc(Address::Label(else_block_label.clone()));
                 self.emit_statement(statement, start_label.clone(), end_label.clone());
                 self.emit_jump(Address::Label(end_if.clone()));
+
                 self.emit_label(else_block_label);
                 self.emit_statement(else_statement, start_label, end_label);
+
                 self.emit_label(end_if);
             }
-            BoundStatement::Continue { .. } => {
+            BoundStatement::Continue => {
                 self.emit_jump(Address::Label(start_label.unwrap().to_string()));
             }
-            BoundStatement::Break { .. } => {
+            BoundStatement::Break => {
                 self.emit_jump(Address::Label(end_label.unwrap().to_string()));
             }
             BoundStatement::Statements(statements) => {

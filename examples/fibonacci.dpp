@@ -1,10 +1,11 @@
-pp -> asd = 4 + 69 * 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0 + 0;
+pp -> a = 6969;
+pp -> asd = 0 + a;
 booba -> nok = nom;
 booba -> ok = yem && yem && yem && yem && yem && nok;
 
 #########################
 # booba -> bbb = nom;
-# booba -> aaa = bbb && yem && yem && ...;
+# booba -> aaa = ((bbb && yem) && yem) && ...;
 #########################
 #
 ### Tohle se spatne optimalizuje, protoze:
