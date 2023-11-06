@@ -47,13 +47,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         translation_unit.functions().iter().for_each(|function| {
             if self
                 .symbol_table()
-                .has_global_function(function.identifier())
+                .function(function.identifier())
+                .is_some()
             {
                 self.error_diag
                     .borrow_mut()
                     .function_already_exists(function.position(), function.identifier());
             } else {
-                self.symbol_table_mut().push_global_function(function);
+                self.symbol_table_mut().push_function(function);
             }
         });
 
@@ -103,10 +104,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             self.error_diag.borrow_mut().no_main_method_found_error();
         }
 
+        assert_eq!(
+            self.symbol_table.current_scope_depth(),
+            1,
+            "There should only be the global scope."
+        );
+
         BoundTranslationUnit::new(
             functions,
             main_function_identifier,
-            self.symbol_table().global_scope().stack_position(),
+            self.symbol_table()
+                .current_scope()
+                .stack_position(),
             global_variables,
         )
     }
@@ -123,7 +132,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.begin_function(function);
         let function_id = self
             .symbol_table()
-            .function(function.identifier())
+            .current_function()
             .unwrap()
             .function_id();
         let mut current_size = 0;
@@ -158,8 +167,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
         let stack_position = self
             .symbol_table()
-            .current_function_scope()
-            .unwrap()
+            .current_scope()
             .stack_position();
 
         self.end_function();
@@ -191,7 +199,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::VariableDeclaration { variable, .. } => {
                 if self
                     .symbol_table()
-                    .global_variable(variable.identifier())
+                    .variable(variable.identifier())
+                    .1
                     .is_some()
                 {
                     self.error_diag
@@ -199,7 +208,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .variable_already_exists(variable.position(), variable.identifier());
                 }
 
-                self.symbol_table_mut().push_global_variable(variable);
+                self.symbol_table_mut().push_variable(variable, false);
                 if let Some(expression) = variable.value() {
                     self.symbol_table_mut()
                         .set_variable_initialized(variable.identifier());
@@ -240,7 +249,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Statement::VariableDeclaration { variable, .. } => {
                 if self
                     .symbol_table()
-                    .local_variable(variable.identifier())
+                    .variable(variable.identifier())
+                    .1
                     .is_some()
                 {
                     self.error_diag
@@ -248,7 +258,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .variable_already_exists(variable.position(), variable.identifier());
                 }
 
-                self.symbol_table_mut().push_local_variable(variable, false);
+                self.symbol_table_mut().push_variable(variable, false);
                 if let Some(expression) = variable.value() {
                     self.symbol_table_mut()
                         .set_variable_initialized(variable.identifier());
@@ -291,18 +301,18 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         Some(expression.position()),
                     )
                     .1;
-                self.loop_stack += 1;
+                self.loop_depth += 1;
                 let bound_statement = self.analyze_statement(statement);
-                self.loop_stack -= 1;
+                self.loop_depth -= 1;
                 BoundStatement::While {
                     expression,
                     statement: Box::new(bound_statement),
                 }
             }
             Statement::Loop { statement, .. } => {
-                self.loop_stack += 1;
+                self.loop_depth += 1;
                 let statement = self.analyze_statement(statement);
-                self.loop_stack -= 1;
+                self.loop_depth -= 1;
                 BoundStatement::Loop {
                     statement: Box::new(statement),
                 }
@@ -315,16 +325,16 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let expression = self
                     .analyze_expr(expression, Some(&DataType::Booba), Some(*position))
                     .1;
-                self.loop_stack += 1;
+                self.loop_depth += 1;
                 let statement = self.analyze_statement(statement);
-                self.loop_stack -= 1;
+                self.loop_depth -= 1;
                 BoundStatement::DoWhile {
                     expression,
                     statement: Box::new(statement),
                 }
             }
             Statement::Continue { position } => {
-                if self.loop_stack == 0 {
+                if self.loop_depth == 0 {
                     self.error_diag
                         .borrow_mut()
                         .invalid_continue_placement(*position);
@@ -332,7 +342,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 BoundStatement::Continue
             }
             Statement::Break { position } => {
-                if self.loop_stack == 0 {
+                if self.loop_depth == 0 {
                     self.error_diag
                         .borrow_mut()
                         .invalid_break_placement(*position);
@@ -348,15 +358,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 if let Some(expression) = expression {
-                    let function_descriptor = self
-                        .symbol_table()
-                        .function(
-                            self.symbol_table()
-                                .current_function_scope()
-                                .unwrap()
-                                .function_identifier(),
-                        )
-                        .unwrap();
+                    let function_descriptor =
+                        self.symbol_table().current_function().unwrap();
 
                     let return_type = function_descriptor.return_type();
                     let expression = self.analyze_expr(expression, None, None);
@@ -459,7 +462,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 // Check if the index variable already exists.
-                if self.symbol_table().local_variable(index_ident).is_some() {
+                if self.symbol_table().variable(index_ident).1.is_some() {
                     self.error_diag
                         .borrow_mut()
                         .variable_already_exists(*position, index_ident);
@@ -485,7 +488,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 );
 
                 // Push a new scope and introduce the index variable.
-                self.symbol_table_mut().push_scope();
+                self.symbol_table_mut().push_scope(None);
                 let index_variable = Variable::new(
                     *position,
                     index_ident,
@@ -494,7 +497,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     ident_expression.clone(),
                 );
                 self.symbol_table_mut()
-                    .push_local_variable(&index_variable, false);
+                    .push_variable(&index_variable, false);
 
                 // Get the variable descriptor of the variable and the metadata.
                 let (level, var_decl) = self.symbol_table().variable(index_variable.identifier());
@@ -505,10 +508,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 // Increment the loop stack for break, continue, etc. statements and analyze the
                 // statements.
-                self.loop_stack += 1;
+                self.loop_depth += 1;
                 let bound_statement = self.analyze_statement(statement);
 
-                self.loop_stack -= 1;
+                self.loop_depth -= 1;
                 self.symbol_table_mut().pop_scope();
 
                 BoundStatement::For {
@@ -552,7 +555,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     ///
     /// * `block`: the block to analyze
     fn analyze_block(&mut self, block: &Block<'a>) -> Vec<BoundStatement> {
-        self.symbol_table.push_scope();
+        self.symbol_table.push_scope(None);
         let bound_statements = block
             .statements()
             .iter()

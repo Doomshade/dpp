@@ -63,7 +63,7 @@ pub struct SemanticAnalyzer<'a, 'b> {
     /// The symbol table.
     symbol_table: SymbolTable<'a>,
     /// The current loop stack. Used to determine whether "break" or "continue" are out of place.
-    loop_stack: usize,
+    loop_depth: usize,
     assignment_count: collections::HashMap<BoundVariable, usize>,
     referenced_variables: collections::HashSet<BoundVariable>,
     error_diag: rc::Rc<cell::RefCell<ErrorDiagnosis<'a, 'b>>>,
@@ -366,7 +366,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         Self {
             symbol_table: SymbolTable::new(),
             error_diag,
-            loop_stack: 0,
+            loop_depth: 0,
             assignment_count: collections::HashMap::new(),
             referenced_variables: collections::HashSet::new(),
         }
@@ -419,14 +419,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
-        self.loop_stack = 0;
-        let ref_mut = self.symbol_table_mut();
-        ref_mut.push_function(function.clone());
-        ref_mut.push_scope();
+        let symbol_table = self.symbol_table_mut();
+        symbol_table.push_scope(Some(function.identifier()));
         function
             .parameters()
             .iter()
-            .for_each(|parameter| ref_mut.push_local_variable(parameter, true));
+            .for_each(|parameter| symbol_table.push_variable(parameter, true));
     }
 
     fn end_function(&mut self) {
@@ -1297,50 +1295,6 @@ mod parser {
         }
     }
 
-    // impl PosMacro for Statement<'_> {
-    //     fn row(&self) -> u32 {
-    //         match self {
-    //             Statement::VariableDeclaration { position, .. } => position.0,
-    //             Statement::If { position, .. } => position.0,
-    //             Statement::IfElse { position, .. } => position.0,
-    //             Statement::Bye { position, .. } => position.0,
-    //             Statement::Print { position, .. } => position.0,
-    //             Statement::Block { position, .. } => position.0,
-    //             Statement::Expression { position, .. } => position.0,
-    //             Statement::Empty { position, .. } => position.0,
-    //             Statement::For { position, .. } => position.0,
-    //             Statement::While { position, .. } => position.0,
-    //             Statement::DoWhile { position, .. } => position.0,
-    //             Statement::Loop { position, .. } => position.0,
-    //             Statement::Break { position, .. } => position.0,
-    //             Statement::Continue { position, .. } => position.0,
-    //             Statement::Switch { position, .. } => position.0,
-    //             Statement::Assignment { position, .. } => position.0,
-    //         }
-    //     }
-    //
-    //     fn col(&self) -> u32 {
-    //         match self {
-    //             Statement::VariableDeclaration { position, .. } => position.1,
-    //             Statement::If { position, .. } => position.1,
-    //             Statement::IfElse { position, .. } => position.1,
-    //             Statement::Bye { position, .. } => position.1,
-    //             Statement::Print { position, .. } => position.1,
-    //             Statement::Block { position, .. } => position.1,
-    //             Statement::Expression { position, .. } => position.1,
-    //             Statement::Empty { position, .. } => position.1,
-    //             Statement::For { position, .. } => position.1,
-    //             Statement::While { position, .. } => position.1,
-    //             Statement::DoWhile { position, .. } => position.1,
-    //             Statement::Loop { position, .. } => position.1,
-    //             Statement::Break { position, .. } => position.1,
-    //             Statement::Continue { position, .. } => position.1,
-    //             Statement::Switch { position, .. } => position.1,
-    //             Statement::Assignment { position, .. } => position.1,
-    //         }
-    //     }
-    // }
-
     impl fmt::Display for Expression<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let formatted = match self {
@@ -1424,34 +1378,24 @@ mod analysis {
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct SymbolTable<'a> {
-        /// The global scope holding global variables and function identifiers.
-        global_scope: GlobalScope<'a>,
         /// Current stack of function scopes.
-        function_scopes: Vec<FunctionScope<'a>>,
+        scopes: Vec<Scope<'a>>,
+        /// The identifier of this function scope (i.e. the function identifier).
+        function_identifier: Option<&'a str>,
+        /// The current function ID.
+        function_id: usize,
     }
 
-    #[derive(Clone, Debug, Default, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     pub struct Scope<'a> {
         /// Variable symbol table.
         variables: collections::HashMap<&'a str, VariableDescriptor<'a>>,
         /// Function symbol table.
         functions: collections::HashMap<&'a str, FunctionDescriptor<'a>>,
-    }
-
-    #[derive(Clone, PartialEq, Debug)]
-    pub struct GlobalScope<'a> {
-        scope: Scope<'a>,
+        // The current stack position of the scope.
         stack_position: usize,
-    }
-
-    #[derive(Clone, PartialEq, Debug)]
-    pub struct FunctionScope<'a> {
-        // This is a stack of scopes that is popped once the scope is ended.
-        scopes: Vec<Scope<'a>>,
         /// The identifier of this function scope (i.e. the function identifier).
-        function_identifier: &'a str,
-        /// The stack position.
-        stack_position: usize,
+        function_identifier: Option<&'a str>,
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1591,9 +1535,10 @@ mod analysis {
 
     impl<'a> SymbolTable<'a> {
         pub fn new() -> Self {
-            SymbolTable {
-                global_scope: GlobalScope::new(),
-                function_scopes: Vec::new(),
+            Self {
+                scopes: vec![Scope::new(None)],
+                function_identifier: None,
+                function_id: 0,
             }
         }
 
@@ -1604,126 +1549,104 @@ mod analysis {
             }
         }
 
-        pub fn current_function_scope(&self) -> Option<&FunctionScope<'a>> {
-            self.function_scopes.last()
+        pub fn current_scope(&self) -> &Scope<'a> {
+            self.scopes.last().expect("A scope")
         }
 
-        pub fn push_global_variable(&mut self, variable: &Variable<'a>) {
-            self.global_scope.push_variable(variable);
+        pub fn current_scope_mut(&mut self) -> &mut Scope<'a> {
+            self.scopes.last_mut().expect("A scope")
         }
 
-        pub fn push_local_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
-            self.current_function_scope_mut()
-                .expect("A function scope")
+        pub fn current_scope_depth(&self) -> usize {
+            self.scopes.len()
+        }
+
+        pub fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
+            self.current_scope_mut()
                 .push_variable(variable, is_parameter);
         }
 
-        pub fn has_global_function(&self, identifier: &str) -> bool {
-            self.global_scope.has_function(identifier)
+        pub fn push_function(&mut self, function: &Function<'a>) {
+            let function_descriptor = FunctionDescriptor::new(function, self.function_id);
+            self.function_id += 1;
+            self.current_scope_mut()
+                .push_function_descriptor(function.identifier(), function_descriptor);
         }
 
-        pub fn push_global_function(&mut self, function: &Function<'a>) {
-            let function_id = self.global_scope.scope.functions.len();
-            self.global_scope.push_function(function, function_id);
-            assert!(self.global_scope.scope.functions.len() > function_id);
-        }
-
-        fn push_function_scope(&mut self, function_identifier: &'a str) {
-            self.function_scopes
-                .push(FunctionScope::new(function_identifier))
+        pub fn current_function(&self) -> Option<&FunctionDescriptor<'a>> {
+            self.current_scope()
+                .get_function_descriptor(self.function_identifier?)
         }
 
         pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
-            self.global_scope.get_function_descriptor(identifier)
-        }
-
-        pub fn push_scope(&mut self) {
-            self.current_function_scope_mut()
-                .expect("To be inside function scope")
-                .push_scope();
-        }
-
-        pub fn pop_scope(&mut self) {
-            self.current_function_scope_mut()
-                .expect("To be inside function scope")
-                .pop_scope();
-        }
-
-        fn variable_mut(
-            &mut self,
-            identifier: &str,
-        ) -> (usize, Option<&mut VariableDescriptor<'a>>) {
-            // If we aren't in a function scope we are in the global scope
-            // -> the global variable is in level 0.
-            if self.current_function_scope().is_none() {
-                return (0, self.global_scope.get_variable_descriptor_mut(identifier));
-            }
-
-            // If we are in function scope we need to check if the variable
-            // is a local variable or a global variable.
-            // TODO: This is utterly retarded. We have to lookup the variable TWICE because
-            // the borrow checker is an asshole.
-            if self.local_variable(identifier).is_some() {
-                return (0, self.local_variable_mut(identifier));
-            }
-            (1, self.global_variable_mut(identifier))
+            self.scopes
+                .iter()
+                .rev()
+                .find(|scope| scope.function_identifier == Some(identifier))?
+                .get_function_descriptor(identifier)
         }
 
         pub fn variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor<'a>>) {
-            // If we aren't in a function scope we are in the global scope
-            // -> the global variable is in level 0.
-            if self.current_function_scope().is_none() {
-                return (0, self.global_scope.get_variable_descriptor(identifier));
+            let mut level = 0;
+            for scope in self.scopes.iter().rev() {
+                if let Some(variable) = scope.get_variable_descriptor(identifier) {
+                    return (level, Some(variable));
+                }
+
+                // If we move out of function scope we need to increment the level.
+                if scope.function_identifier.is_some() {
+                    level += 1;
+                }
             }
 
-            // If we are in function scope we need to check if the variable
-            // is a local variable or a global variable.
+            // Variable does not exist.
+            (0, None)
+        }
 
-            // Check for local variable first.
-            if let Some(local_variable) = self.local_variable(identifier) {
-                return (0, Some(local_variable));
+        pub fn variable_mut(
+            &mut self,
+            identifier: &str,
+        ) -> (usize, Option<&mut VariableDescriptor<'a>>) {
+            let mut level = 0;
+            for scope in self.scopes.iter_mut() {
+                let has_function_identifier = scope.function_identifier.is_some();
+                if let Some(variable) = scope.get_variable_descriptor_mut(identifier) {
+                    return (level, Some(variable));
+                }
+
+                // If we move out of function scope we need to increment the level.
+                if has_function_identifier {
+                    level += 1;
+                }
             }
 
-            // Then global variable.
-            (1, self.global_variable(identifier))
+            // Variable does not exist.
+            (0, None)
         }
 
-        pub fn push_function(&mut self, function: Function<'a>) {
-            self.push_function_scope(function.identifier());
+        pub fn push_scope(&mut self, function_identifier: Option<&'a str>) {
+            self.scopes.push(Scope::new(function_identifier));
+            if let Some(function_identifier) = function_identifier {
+                self.function_identifier = Some(function_identifier);
+            }
         }
 
-        pub fn global_variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
-            self.global_scope.get_variable_descriptor(identifier)
-        }
-
-        pub fn global_variable_mut(
-            &mut self,
-            identifier: &str,
-        ) -> Option<&mut VariableDescriptor<'a>> {
-            self.global_scope.get_variable_descriptor_mut(identifier)
-        }
-
-        pub fn local_variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
-            self.current_function_scope()?.variable(identifier)
-        }
-
-        pub fn local_variable_mut(
-            &mut self,
-            identifier: &str,
-        ) -> Option<&mut VariableDescriptor<'a>> {
-            self.current_function_scope_mut()?.variable_mut(identifier)
-        }
-
-        fn current_function_scope_mut(&mut self) -> Option<&mut FunctionScope<'a>> {
-            self.function_scopes.last_mut()
-        }
-        pub fn global_scope(&self) -> &GlobalScope<'a> {
-            &self.global_scope
+        pub fn pop_scope(&mut self) {
+            self.scopes.pop();
         }
     }
 
     impl<'a> Scope<'a> {
         pub const ACTIVATION_RECORD_SIZE: usize = 3;
+
+        pub fn new(function_identifier: Option<&'a str>) -> Self {
+            Self {
+                variables: collections::HashMap::new(),
+                functions: collections::HashMap::new(),
+                stack_position: Self::ACTIVATION_RECORD_SIZE,
+                function_identifier,
+            }
+        }
 
         fn push_variable_descriptor(
             &mut self,
@@ -1769,111 +1692,16 @@ mod analysis {
         pub fn has_function(&self, identifier: &str) -> bool {
             self.functions.contains_key(identifier)
         }
-    }
-
-    impl<'a> GlobalScope<'a> {
-        pub fn new() -> Self {
-            // TODO: Need to offset this because we need the first
-            // thing on the stack to be "1" because we call
-            // main and then it fucking has to read the first thing
-            // on the stack.
-            GlobalScope {
-                scope: Scope::default(),
-                stack_position: Scope::ACTIVATION_RECORD_SIZE,
-            }
-        }
-
-        pub fn push_variable(&mut self, variable: &Variable<'a>) {
-            let variable_descriptor = VariableDescriptor::new(variable, self.stack_position, false);
-            self.stack_position += variable_descriptor.data_type().size();
-            self.scope
-                .push_variable_descriptor(variable.identifier(), variable_descriptor);
-        }
-
-        pub fn get_variable_descriptor(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
-            self.scope.get_variable_descriptor(identifier)
-        }
-
-        pub fn get_variable_descriptor_mut(
-            &mut self,
-            identifier: &str,
-        ) -> Option<&mut VariableDescriptor<'a>> {
-            self.scope.get_variable_descriptor_mut(identifier)
-        }
-
-        pub fn push_function(&mut self, function: &Function<'a>, function_id: usize) {
-            let function_descriptor = FunctionDescriptor::new(function, function_id);
-            self.scope
-                .push_function_descriptor(function.identifier(), function_descriptor);
-        }
-
-        pub fn get_function_descriptor(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
-            self.scope.get_function_descriptor(identifier)
-        }
-
-        pub fn has_function(&self, identifier: &str) -> bool {
-            self.scope.has_function(identifier)
-        }
-        pub fn stack_position(&self) -> usize {
-            self.stack_position
-        }
-    }
-
-    impl<'a> FunctionScope<'a> {
-        pub fn new(function_identifier: &'a str) -> Self {
-            FunctionScope {
-                scopes: Vec::new(),
-                function_identifier,
-                stack_position: Scope::ACTIVATION_RECORD_SIZE,
-            }
-        }
-
-        pub fn variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
-            for scope in self.scopes.iter().rev() {
-                if let Some(variable) = scope.get_variable_descriptor(identifier) {
-                    return Some(variable);
-                }
-            }
-            None
-        }
-
-        pub fn variable_mut(&mut self, identifier: &str) -> Option<&mut VariableDescriptor<'a>> {
-            for scope in self.scopes.iter_mut().rev() {
-                if let Some(variable) = scope.get_variable_descriptor_mut(identifier) {
-                    return Some(variable);
-                }
-            }
-            None
-        }
-
-        pub fn function_identifier(&self) -> &'a str {
-            self.function_identifier
-        }
 
         pub fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
             let variable_descriptor =
                 VariableDescriptor::new(variable, self.stack_position, is_parameter);
-            self.stack_position += variable_descriptor.data_type().size();
-            self.current_scope_mut()
-                .expect("A scope")
-                .push_variable_descriptor(variable.identifier(), variable_descriptor);
+            self.stack_position += variable.data_type().size();
+
+            self.variables
+                .insert(variable.identifier(), variable_descriptor);
         }
 
-        pub fn push_scope(&mut self) {
-            self.scopes.push(Scope::default());
-        }
-
-        pub fn current_scope(&self) -> Option<&Scope<'a>> {
-            self.scopes.last()
-        }
-
-        fn current_scope_mut(&mut self) -> Option<&mut Scope<'a>> {
-            self.scopes.last_mut()
-        }
-
-        pub fn pop_scope(&mut self) {
-            self.scopes.pop();
-        }
         pub fn stack_position(&self) -> usize {
             self.stack_position
         }
