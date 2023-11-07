@@ -124,24 +124,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         )
     }
 
-    fn to_bound_parameters(&self, parameters: &Vec<Variable<'a>>) -> Vec<BoundVariable> {
-        let mut current_size = 0;
-        parameters
-            .iter()
-            .map(|parameter| {
-                let data_type = self.to_bound_data_type(parameter.data_type());
-                let size = data_type.size();
-                current_size += size;
-                (
-                    data_type,
-                    -(current_size as i32),
-                    parameter.has_modifier(Modifier::Const),
-                )
-            })
-            .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
-            .collect_vec()
-    }
-
     /// # Summary
     /// Analyzes the function. Pushes the function to the function stack, registers it as
     /// the currently analyzed function. Then analyzes the block and checks whether the last

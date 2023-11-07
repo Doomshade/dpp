@@ -1,5 +1,6 @@
-use std::{cell, collections, fs, io, rc};
+use itertools::Itertools;
 use std::io::Write;
+use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
 
@@ -9,7 +10,7 @@ use crate::parse::analysis::{
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
-use crate::parse::parser::{Block, DataType, Expression, Function, Variable};
+use crate::parse::parser::{Block, DataType, Expression, Function, Modifier, Variable};
 
 pub mod analysis_impl;
 pub mod emitter_impl;
@@ -382,8 +383,26 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         &self.symbol_table
     }
 
-    pub fn to_bound_data_type(&self, data_type: &DataType) -> BoundDataType {
+    fn to_bound_data_type(&self, data_type: &DataType) -> BoundDataType {
         BoundDataType::from((data_type, self.symbol_table()))
+    }
+
+    fn to_bound_parameters(&self, parameters: &Vec<Variable<'a>>) -> Vec<BoundVariable> {
+        let mut current_size = 0;
+        parameters
+            .iter()
+            .map(|parameter| {
+                let data_type = self.to_bound_data_type(parameter.data_type());
+                let size = data_type.size();
+                current_size += size;
+                (
+                    data_type,
+                    -(current_size as i32),
+                    parameter.has_modifier(Modifier::Const),
+                )
+            })
+            .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
+            .collect_vec()
     }
 
     fn check_if_mixed_data_types(
@@ -1453,9 +1472,7 @@ mod parser {
 mod analysis {
     use std::{cmp, collections, fmt, ops};
 
-    use crate::parse::parser::{
-        BinaryOperator, DataType, Modifier, UnaryOperator,
-    };
+    use crate::parse::parser::{BinaryOperator, DataType, Modifier, UnaryOperator};
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct SymbolTable<'a> {
@@ -1744,10 +1761,8 @@ mod analysis {
             parameters: Vec<BoundVariable>,
         ) {
             let id = self.next_id();
-            self.current_scope_mut().push_function(
-                ident,
-                FunctionDescriptor::new(id, return_type, parameters),
-            );
+            self.current_scope_mut()
+                .push_function(ident, FunctionDescriptor::new(id, return_type, parameters));
         }
 
         pub fn current_function_mut(&mut self) -> Option<&mut FunctionDescriptor> {
@@ -2316,14 +2331,14 @@ mod emitter {
 }
 
 pub mod compiler {
-    use std::{cell, error, fs, io, process, rc, time};
     use std::io::Write;
+    use std::{cell, error, fs, io, process, rc, time};
 
-    use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Optimizer, Parser, SemanticAnalyzer};
     use crate::parse::analysis::BoundTranslationUnit;
     use crate::parse::error_diagnosis::SyntaxError;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
+    use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Optimizer, Parser, SemanticAnalyzer};
 
     pub struct DppCompiler;
 
@@ -2493,8 +2508,8 @@ pub mod compiler {
 
         use TokenKind as TK;
 
-        use crate::parse::{ErrorDiagnosis, Lexer};
         use crate::parse::lexer::{LiteralKind, TokenKind};
+        use crate::parse::{ErrorDiagnosis, Lexer};
 
         fn test_generic_lex(
             input: &str,
