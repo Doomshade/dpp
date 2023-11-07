@@ -416,6 +416,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "break" => TokenKind::BreakKeyword,
             "continue" => TokenKind::ContinueKeyword,
             "switch" => TokenKind::SwitchKeyword,
+            "struct" => TokenKind::StructKeyword,
             "case" => TokenKind::CaseKeyword,
             "yarn" => TokenKind::YarnKeyword,
             _ => TokenKind::Identifier,

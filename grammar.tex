@@ -18,7 +18,7 @@
 
     \begin{grammar}
 
-        <transl-unit> ::= \{ ( <function> | <var-decl> ) \}
+        <transl-unit> ::= \{ ( <function> | <var-decl> | <struct-decl> ) \}
 
         <function> ::= `FUNc' <ident> <params> `->' <data-type> `{'  \{ <stat> \} `}'
 
@@ -86,11 +86,13 @@
         \alt `yarn' // string
         \alt `ab' // ratio
         \alt `flaccid' // float
-        \alt `struct' // record
+        \alt `struct' <ident> // record
 
         <modifiers> ::= \{ <modifier> \}
 
         <modifier> ::= `const'
+
+        <struct-decl> ::= `struct' <ident> `{' \{ <modifiers> <data-type> `->' <ident> `,' \} `}'
 
         <expr> ::= <equ>
 
@@ -109,7 +111,7 @@
         \alt <number>
         \alt <string>
         \alt `(' <expr> `)'
-        \alt <ident> [ `(' [ <args> ] `)' ]
+        \alt <ident> [ ( `(' [ <args> ] `)' | `{' \{ <ident> `=' <expr> `,' \} `}') ] // function call or struct definition
 
         <args> ::= <expr> \{ `,' <expr> \}
     \end{grammar}

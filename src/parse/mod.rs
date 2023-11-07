@@ -832,6 +832,7 @@ mod lexer {
         ContinueKeyword,    // continue
         CaseKeyword,        // case
         SwitchKeyword,      // switch
+        StructKeyword,      // struct / record
         PipePipe,           // ||
         AmpersandAmpersand, // &&
         ConstKeyword,
@@ -935,6 +936,7 @@ mod lexer {
                 Self::BreakKeyword => "\"break\"",
                 Self::ContinueKeyword => "\"continue\"",
                 Self::SwitchKeyword => "\"switch\"",
+                Self::StructKeyword => "\"struct\"",
                 Self::CaseKeyword => "\"case\"",
                 Self::Literal(literal_kind) => {
                     return write!(f, "{literal_kind}");
@@ -968,6 +970,7 @@ mod parser {
         position: (u32, u32),
         functions: Vec<Function<'a>>,
         global_statements: Vec<Statement<'a>>,
+        struct_declarations: Vec<Struct>,
     }
 
     #[derive(Clone, Debug, Pos)]
@@ -1087,7 +1090,7 @@ mod parser {
         Booba,   // bool
         Nopp,    // void
         Ratio,   // ratio
-        Struct { name: String },
+        Struct(String),
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1096,7 +1099,17 @@ mod parser {
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub struct Struct {}
+    pub struct Struct {
+        fields: Vec<StructField>,
+        ident: String,
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct StructField {
+        modifiers: Vec<Modifier>,
+        data_type: DataType,
+        ident: String,
+    }
 
     #[derive(Clone, Debug, PartialEq)]
     pub enum LiteralValue<'a> {
@@ -1135,6 +1148,11 @@ mod parser {
             identifier: &'a str,
             arguments: Vec<Expression<'a>>,
         },
+        StructDefinition {
+            position: (u32, u32),
+            identifier: &'a str,
+            definitions: Vec<(&'a str, Expression<'a>)>,
+        },
         Invalid {
             position: (u32, u32),
         },
@@ -1163,11 +1181,13 @@ mod parser {
     }
 
     impl<'a> TranslationUnit<'a> {
-        pub fn new(functions: Vec<Function<'a>>, global_statements: Vec<Statement<'a>>) -> Self {
+        pub fn new(functions: Vec<Function<'a>>, global_statements: Vec<Statement<'a>>,
+                   struct_declarations: Vec<Struct>) -> Self {
             TranslationUnit {
                 position: (1, 1),
                 functions,
                 global_statements,
+                struct_declarations,
             }
         }
 
@@ -1295,6 +1315,25 @@ mod parser {
         }
     }
 
+    impl Struct {
+        pub fn new(ident: &str, fields: Vec<StructField>) -> Self {
+            Self {
+                ident: String::from(ident),
+                fields,
+            }
+        }
+    }
+
+    impl StructField {
+        pub fn new(modifiers: Vec<Modifier>, data_type: DataType, ident: &str) -> Self {
+            Self {
+                modifiers,
+                data_type,
+                ident: String::from(ident),
+            }
+        }
+    }
+
     impl fmt::Display for Expression<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let formatted = match self {
@@ -1305,9 +1344,10 @@ mod parser {
                 Expression::Binary { .. } => "Binary expression".to_string(),
                 Expression::Identifier { identifier, .. } => (*identifier).to_string(),
                 Expression::FunctionCall { identifier, .. } => {
-                    format!("Function {}", identifier)
+                    format!("Function {identifier}")
                 }
                 Expression::Invalid { .. } => "Invalid expression".to_string(),
+                Expression::StructDefinition { identifier, ..} => format!("Struct {identifier}"),
             };
             write!(f, "{}", formatted)?;
             Ok(())
@@ -1352,7 +1392,7 @@ mod parser {
                 DataType::Booba => write!(f, "booba"),
                 DataType::Nopp => write!(f, "nopp"),
                 DataType::Ratio => write!(f, "ratio"),
-                DataType::Struct { name } => write!(f, "struct {name}"),
+                DataType::Struct(name) => write!(f, "struct {name}"),
                 DataType::AB => write!(f, "ratio"),
             }
         }
@@ -1396,6 +1436,12 @@ mod analysis {
         stack_position: usize,
         /// The identifier of this function scope (i.e. the function identifier).
         function_identifier: Option<&'a str>,
+    }
+    #[derive(Clone, PartialEq, Debug)]
+    pub struct StructDescriptor {
+        stack_position: usize,
+        data_type: DataType,
+
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1479,6 +1525,21 @@ mod analysis {
         data_type: DataType,
         is_const: bool,
     }
+
+
+    #[derive(PartialEq, Eq, Hash, Debug, Clone)]
+    pub enum BoundDataType {
+        Pp,      // int
+        AB,      // ratio
+        Flaccid, // float
+        P,       // char
+        Yarn,    // string
+        Booba,   // bool
+        Nopp,    // void
+        Ratio,   // ratio
+        Struct(String, usize),
+    }
+
 
     #[derive(Clone, PartialEq, Debug)]
     pub enum BoundStatement {

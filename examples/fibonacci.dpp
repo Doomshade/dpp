@@ -1,3 +1,9 @@
+struct TEST {
+    pp -> a,
+    pp -> b,
+    pp -> c,
+}
+
 booba -> ok = yem && yem && yem && yem && yem && yem;
 
 FUNc fibonacci_rec(pp -> num) -> pp {
@@ -8,6 +14,15 @@ FUNc fibonacci_rec(pp -> num) -> pp {
 }
 
 FUNc fibonacci(pp -> num) -> pp {
+    # struct TEST -> ok = TEST {
+    #     a = 69,
+    #     b = 420,
+    #     c = 6969,
+    # };
+    # ok.a = 6969;
+    # ok.b = 420420;
+    # ok.c = 69696969;
+
     pp -> aa = 0;
     pp -> a = 0;
     ok = nom;

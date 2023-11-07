@@ -2,7 +2,7 @@
 //! recursive descent parser. The grammar is defined in `grammar.pdf`. The parser is
 //! implemented using the following rules:
 //! ```
-//! translation_unit -> (function | var_decl)*
+//! translation_unit -> (function | var_decl | struct-decl)*
 //! function -> "func" identifier "(" params ")" "->" data_type block
 //! params -> (param ("," param)*)?
 //! param -> identifier ":" data_type
@@ -42,8 +42,8 @@
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::{LiteralKind, TokenKind};
 use crate::parse::parser::{
-    BinaryOperator, Case, DataType, LiteralValue, Modifier, Statement, TranslationUnit,
-    UnaryOperator,
+    BinaryOperator, Case, DataType, LiteralValue, Modifier, Statement, Struct, StructField,
+    TranslationUnit, UnaryOperator,
 };
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
@@ -78,6 +78,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _transl_unit(&mut self) -> TranslationUnit<'a> {
         let mut functions = Vec::<Function<'a>>::new();
         let mut variable_declarations = Vec::<Statement<'a>>::new();
+        let mut struct_declarations = Vec::<Struct>::new();
         loop {
             if self.matches_token_kind(TokenKind::FUNcKeyword) {
                 if let Some(function) = self._function() {
@@ -86,6 +87,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else if self.matches_data_type() || self.matches_modifier() {
                 if let Some(var_decl) = self._var_decl() {
                     variable_declarations.push(var_decl);
+                }
+            } else if self.matches_token_kind(TokenKind::StructKeyword) {
+                if let Some(struct_decl) = self._struct_decl() {
+                    struct_declarations.push(struct_decl);
                 }
             } else if self.curr_token_index == self.tokens.len() {
                 // We reached the end!
@@ -105,7 +110,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 panic!("Something unexpected happened :( (compiler error)")
             }
         }
-        TranslationUnit::new(functions, variable_declarations)
+        TranslationUnit::new(functions, variable_declarations, struct_declarations)
     }
 
     fn _function(&mut self) -> Option<Function<'a>> {
@@ -226,9 +231,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // if present, then it's assignment. If not, it's expression.
                 if matches!(
                     self.token_offset(1)?.kind(),
-                    TokenKind::Equal |
-                    TokenKind::PlusEqual |
-                    TokenKind::MinusEqual
+                    TokenKind::Equal | TokenKind::PlusEqual | TokenKind::MinusEqual
                 ) {
                     self._assign()
                 } else {
@@ -242,6 +245,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::ABKeyword
             | TokenKind::BoobaKeyword
             | TokenKind::YarnKeyword
+            | TokenKind::StructKeyword
             | TokenKind::ConstKeyword => self._var_decl(),
             _ => {
                 self.error_diag.borrow_mut().unexpected_token_error(token);
@@ -545,16 +549,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
+    const DATA_TYPE_TOKEN_KINDS: [TokenKind; 8] = [
+        TokenKind::PpKeyword,
+        TokenKind::FlaccidKeyword,
+        TokenKind::ABKeyword,
+        TokenKind::PKeyword,
+        TokenKind::NoppKeyword,
+        TokenKind::BoobaKeyword,
+        TokenKind::YarnKeyword,
+        TokenKind::StructKeyword,
+    ];
+
     fn _data_type(&mut self) -> Option<DataType> {
-        let token = self.expect_one_from(&[
-            TokenKind::PpKeyword,
-            TokenKind::FlaccidKeyword,
-            TokenKind::ABKeyword,
-            TokenKind::PKeyword,
-            TokenKind::NoppKeyword,
-            TokenKind::BoobaKeyword,
-            TokenKind::YarnKeyword,
-        ])?;
+        let token = self.expect_one_from(&Self::DATA_TYPE_TOKEN_KINDS)?;
 
         match token.1 {
             TokenKind::PpKeyword => Some(DataType::Pp),
@@ -564,6 +571,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::NoppKeyword => Some(DataType::Nopp),
             TokenKind::BoobaKeyword => Some(DataType::Booba),
             TokenKind::YarnKeyword => Some(DataType::Yarn),
+            TokenKind::StructKeyword => {
+                let struct_ident = self.expect(TokenKind::Identifier)?;
+                Some(DataType::Struct(String::from(struct_ident)))
+            }
             _ => None,
         }
     }
@@ -582,6 +593,26 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::ConstKeyword => Some(Modifier::Const),
             _ => None,
         }
+    }
+
+    fn _struct_decl(&mut self) -> Option<Struct> {
+        self.expect(TokenKind::StructKeyword)?;
+        let ident = self.expect(TokenKind::Identifier)?;
+        self.expect(TokenKind::OpenBrace);
+
+        let mut struct_fields = Vec::new();
+        while !self.matches_token_kind(TokenKind::CloseBrace)
+            && !self.matches_token_kind(TokenKind::Eof)
+        {
+            let modifiers = self._modifiers();
+            let data_type = self._data_type()?;
+            self.expect(TokenKind::Arrow)?;
+            let field_ident = self.expect(TokenKind::Identifier)?;
+            self.expect(TokenKind::Comma)?;
+            struct_fields.push(StructField::new(modifiers, data_type, field_ident))
+        }
+        self.expect(TokenKind::CloseBrace);
+        Some(Struct::new(ident, struct_fields))
     }
 
     fn _expr(&mut self) -> Option<Expression<'a>> {
@@ -724,6 +755,25 @@ impl<'a, 'b> Parser<'a, 'b> {
                             position,
                             identifier,
                             arguments,
+                        })
+                    }
+                    TokenKind::OpenBrace => {
+                        self.expect(TokenKind::OpenBrace)?;
+                        let mut definitions = Vec::new();
+                        while !self.matches_token_kind(TokenKind::CloseBrace)
+                            && !self.matches_token_kind(TokenKind::Eof)
+                        {
+                            let field_ident = self.expect(TokenKind::Identifier)?;
+                            self.expect(TokenKind::Equal);
+                            let field_expr = self._expr()?;
+                            self.expect(TokenKind::Comma);
+                            definitions.push((field_ident, field_expr));
+                        }
+                        self.expect(TokenKind::CloseBrace)?;
+                        Some(Expression::StructDefinition {
+                            position,
+                            identifier,
+                            definitions,
                         })
                     }
                     _ => Some(Expression::Identifier {

@@ -655,6 +655,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 .symbol_table()
                 .function(identifier)
                 .map(|function| function.return_type().clone()),
+            Expression::StructDefinition { identifier, ..} => None,
+            // TODO: Add structs to symbol table.
             _ => None,
         };
     }
@@ -748,6 +750,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
             Expression::Invalid { .. } => {
                 unreachable!("Should have thrown syntax error after parsing")
+            }
+            Expression::StructDefinition { .. } => {
+                todo!("Struct definition not yet implemented")
             }
         }
     }
