@@ -3,7 +3,9 @@ use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
 
-use crate::parse::analysis::{BoundLiteralValue, BoundTranslationUnit, BoundVariable, SymbolTable};
+use crate::parse::analysis::{
+    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable, SymbolTable,
+};
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
 use crate::parse::lexer::{Token, TokenKind};
@@ -380,10 +382,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         &self.symbol_table
     }
 
+    pub fn to_bound_data_type(&self, data_type: &DataType) -> BoundDataType {
+        BoundDataType::from((data_type, self.symbol_table()))
+    }
+
     fn check_if_mixed_data_types(
         &self,
-        expected_data_type: &DataType,
-        got: &DataType,
+        expected_data_type: &BoundDataType,
+        got: &BoundDataType,
         position: (u32, u32),
     ) {
         if expected_data_type != got {
@@ -395,8 +401,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
     fn check_data_type(
         &self,
-        expected_data_type: &DataType,
-        got: Option<&DataType>,
+        expected_data_type: &BoundDataType,
+        got: Option<&BoundDataType>,
         position: (u32, u32),
     ) {
         match got {
@@ -421,10 +427,15 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn begin_function(&mut self, function: &Function<'a>) {
         self.symbol_table_mut()
             .push_function_scope(function.identifier());
-        function
-            .parameters()
-            .iter()
-            .for_each(|parameter| self.symbol_table_mut().push_variable(parameter, true));
+        function.parameters().iter().for_each(|parameter| {
+            let data_type = self.to_bound_data_type(parameter.data_type());
+            self.symbol_table_mut().declare_variable(
+                parameter.modifiers().clone(),
+                data_type,
+                parameter.identifier(),
+                true,
+            )
+        });
     }
 
     fn end_function(&mut self) {
@@ -682,6 +693,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
             BoundLiteralValue::Yarn(_yarn) => {
                 todo!("Not yet implemented");
             }
+            BoundLiteralValue::Struct(_, _) => {
+                todo!("Not yet implemented");
+            }
         }
     }
 }
@@ -751,8 +765,9 @@ mod error_diagnosis {
 mod lexer {
     use std::fmt;
 
-    use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
+
+    use dpp_macros::Pos;
 
     #[derive(Debug, Pos)]
     pub struct Token<'a> {
@@ -962,8 +977,9 @@ mod lexer {
 mod parser {
     use std::fmt;
 
-    use dpp_macros::Pos;
     use dpp_macros_derive::Pos;
+
+    use dpp_macros::Pos;
 
     #[derive(Clone, Debug, Pos)]
     pub struct TranslationUnit<'a> {
@@ -1119,6 +1135,7 @@ mod parser {
         P(char),
         Booba(bool),
         Yarn(&'a str),
+        Struct(&'a str, Vec<StructField>),
     }
 
     #[derive(Clone, Debug, Pos, PartialEq)]
@@ -1181,8 +1198,11 @@ mod parser {
     }
 
     impl<'a> TranslationUnit<'a> {
-        pub fn new(functions: Vec<Function<'a>>, global_statements: Vec<Statement<'a>>,
-                   struct_declarations: Vec<Struct>) -> Self {
+        pub fn new(
+            functions: Vec<Function<'a>>,
+            global_statements: Vec<Statement<'a>>,
+            struct_declarations: Vec<Struct>,
+        ) -> Self {
             TranslationUnit {
                 position: (1, 1),
                 functions,
@@ -1278,6 +1298,9 @@ mod parser {
         pub fn modifiers(&self) -> &Vec<Modifier> {
             &self.modifiers
         }
+        pub fn has_modifier(&self, modifier: Modifier) -> bool {
+            self.modifiers.contains(&modifier)
+        }
     }
 
     impl<'a> Case<'a> {
@@ -1310,6 +1333,7 @@ mod parser {
                 DataType::P => 1,
                 DataType::Booba => 1,
                 DataType::Nopp => 0,
+                DataType::Struct(name) => 6969,
                 _ => panic!("Not yet implemented {self}"),
             }
         }
@@ -1322,6 +1346,13 @@ mod parser {
                 fields,
             }
         }
+
+        pub fn fields(&self) -> &Vec<StructField> {
+            &self.fields
+        }
+        pub fn ident(&self) -> &str {
+            &self.ident
+        }
     }
 
     impl StructField {
@@ -1331,6 +1362,16 @@ mod parser {
                 data_type,
                 ident: String::from(ident),
             }
+        }
+
+        pub fn modifiers(&self) -> &Vec<Modifier> {
+            &self.modifiers
+        }
+        pub fn data_type(&self) -> &DataType {
+            &self.data_type
+        }
+        pub fn ident(&self) -> &str {
+            &self.ident
         }
     }
 
@@ -1347,7 +1388,7 @@ mod parser {
                     format!("Function {identifier}")
                 }
                 Expression::Invalid { .. } => "Invalid expression".to_string(),
-                Expression::StructDefinition { identifier, ..} => format!("Struct {identifier}"),
+                Expression::StructDefinition { identifier, .. } => format!("Struct {identifier}"),
             };
             write!(f, "{}", formatted)?;
             Ok(())
@@ -1363,6 +1404,7 @@ mod parser {
                 LiteralValue::P(p) => write!(f, "{p}"),
                 LiteralValue::Booba(booba) => write!(f, "{booba}"),
                 LiteralValue::Yarn(yarn) => write!(f, "{yarn}"),
+                LiteralValue::Struct(name, fields) => write!(f, "{name} {{ {fields:?} }}"),
             }
         }
     }
@@ -1409,56 +1451,64 @@ mod parser {
 }
 
 mod analysis {
-    use std::fmt::Formatter;
+    use std::fmt::{Display, Formatter};
     use std::{cmp, collections, fmt, ops};
 
     use crate::parse::parser::{
-        BinaryOperator, DataType, Expression, Function, Modifier, UnaryOperator, Variable,
+        BinaryOperator, DataType, Function, Modifier, UnaryOperator, Variable,
     };
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct SymbolTable<'a> {
         /// Current stack of function scopes.
         scopes: Vec<Scope<'a>>,
-        /// The identifier of the current function scope.
-        current_function_identifier: Option<&'a str>,
-        /// The current function ID.
-        current_function_id: usize,
+        /// The global ID counter.
+        guid_counter: usize,
+        /// The context that contains the current function id etc.
+        context: Context<'a>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, Default)]
+    pub struct Context<'a> {
+        current_function: Option<&'a str>,
+        current_variable_id: Option<usize>,
+        current_struct_id: Option<usize>,
     }
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct Scope<'a> {
         /// Variable symbol table.
-        variables: collections::HashMap<&'a str, VariableDescriptor<'a>>,
+        variables: collections::HashMap<&'a str, VariableDescriptor>,
         /// Function symbol table.
-        functions: collections::HashMap<&'a str, FunctionDescriptor<'a>>,
-        // The current stack position of the scope.
+        functions: collections::HashMap<&'a str, FunctionDescriptor>,
+        /// The current stack position of the scope.
         stack_position: usize,
         /// The identifier of this function scope (i.e. the function identifier).
         function_identifier: Option<&'a str>,
     }
+
     #[derive(Clone, PartialEq, Debug)]
     pub struct StructDescriptor {
         stack_position: usize,
-        data_type: DataType,
-
+        data_type: BoundDataType,
     }
 
     #[derive(Clone, PartialEq, Debug)]
-    pub struct VariableDescriptor<'a> {
+    pub struct VariableDescriptor {
+        variable_id: usize,
         stack_position: usize,
-        data_type: DataType,
+        data_type: BoundDataType,
         modifiers: Vec<Modifier>,
-        value: Option<Expression<'a>>,
+        value: Option<BoundExpression>,
         is_parameter: bool,
         initialized: bool,
     }
 
     #[derive(Clone, PartialEq, Debug)]
-    pub struct FunctionDescriptor<'a> {
-        return_type: DataType,
-        parameters: Vec<Variable<'a>>,
-        function_id: usize,
+    pub struct FunctionDescriptor {
+        id: usize,
+        return_type: BoundDataType,
+        parameters: Vec<BoundVariable>,
         stack_frame_size: usize,
     }
 
@@ -1467,7 +1517,7 @@ mod analysis {
         pub functions: Vec<BoundFunction>,
         main_function_identifier: usize,
         global_stack_frame_size: usize,
-        pub global_variable_assignments: Vec<BoundVariableAssignment>,
+        pub global_variable_assignments: Vec<BoundStatement>,
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1494,6 +1544,34 @@ mod analysis {
         P(char),
         Booba(bool),
         Yarn(String),
+        Struct(String, Vec<BoundStructField>),
+    }
+
+    #[derive(Clone, PartialEq, Debug)]
+    pub struct BoundStructField {
+        modifiers: Vec<Modifier>,
+        data_type: BoundDataType,
+        ident: String,
+    }
+
+    impl BoundStructField {
+        pub fn new(modifiers: Vec<Modifier>, data_type: BoundDataType, ident: String) -> Self {
+            Self {
+                modifiers,
+                data_type,
+                ident,
+            }
+        }
+
+        pub fn modifiers(&self) -> &Vec<Modifier> {
+            &self.modifiers
+        }
+        pub fn data_type(&self) -> &BoundDataType {
+            &self.data_type
+        }
+        pub fn ident(&self) -> &str {
+            &self.ident
+        }
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1522,10 +1600,9 @@ mod analysis {
     pub struct BoundVariable {
         level: usize,
         offset: i32,
-        data_type: DataType,
+        data_type: BoundDataType,
         is_const: bool,
     }
-
 
     #[derive(PartialEq, Eq, Hash, Debug, Clone)]
     pub enum BoundDataType {
@@ -1540,6 +1617,21 @@ mod analysis {
         Struct(String, usize),
     }
 
+    impl Display for BoundDataType {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            match self {
+                BoundDataType::Pp => write!(f, "integer"),
+                BoundDataType::Flaccid => write!(f, "flaccid"),
+                BoundDataType::P => write!(f, "p"),
+                BoundDataType::Yarn => write!(f, "yarn"),
+                BoundDataType::Booba => write!(f, "booba"),
+                BoundDataType::Nopp => write!(f, "nopp"),
+                BoundDataType::Ratio => write!(f, "ratio"),
+                BoundDataType::Struct(name, _) => write!(f, "struct {name}"),
+                BoundDataType::AB => write!(f, "ratio"),
+            }
+        }
+    }
 
     #[derive(Clone, PartialEq, Debug)]
     pub enum BoundStatement {
@@ -1595,16 +1687,38 @@ mod analysis {
         pub statements: Vec<BoundStatement>,
     }
 
+    impl BoundDataType {
+        pub fn size(&self) -> usize {
+            match self {
+                BoundDataType::Pp => 1,
+                BoundDataType::AB => 2,
+                BoundDataType::Flaccid => 1,
+                BoundDataType::P => 1,
+                BoundDataType::Yarn => todo!("Yarn not yet implemented"),
+                BoundDataType::Booba => 1,
+                BoundDataType::Nopp => 0,
+                BoundDataType::Ratio => 2,
+                BoundDataType::Struct(_, size) => *size,
+            }
+        }
+    }
+
     impl<'a> SymbolTable<'a> {
         pub fn new() -> Self {
             Self {
                 scopes: vec![Scope::new(None, Scope::ACTIVATION_RECORD_SIZE)],
-                current_function_identifier: None,
-                current_function_id: 0,
+                context: Context::default(),
+                guid_counter: 0,
             }
         }
 
-        pub fn set_variable_initialized(&mut self, identifier: &str) {
+        pub fn next_id(&mut self) -> usize {
+            let current_id = self.guid_counter;
+            self.guid_counter += 1;
+            current_id
+        }
+
+        pub fn initialize_variable(&mut self, identifier: &str) {
             let (_, variable_descriptor) = self.variable_mut(identifier);
             if let Some(variable_descriptor) = variable_descriptor {
                 variable_descriptor.set_initialized();
@@ -1623,35 +1737,53 @@ mod analysis {
             self.scopes.len()
         }
 
-        pub fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
-            self.current_scope_mut()
-                .push_variable(variable, is_parameter);
+        pub fn declare_variable(
+            &mut self,
+            modifiers: Vec<Modifier>,
+            data_type: BoundDataType,
+            ident: &'a str,
+            is_parameter: bool,
+        ) {
+            let id = self.next_id();
+            self.current_scope_mut().declare_variable(
+                id,
+                modifiers,
+                data_type,
+                ident,
+                is_parameter,
+            );
             let stack_position = self.current_scope().stack_position;
             if let Some(function) = self.current_function_mut() {
                 function.update_stack_frame_size(stack_position);
             }
         }
 
-        pub fn push_function(&mut self, function: &Function<'a>) {
-            let function_descriptor = FunctionDescriptor::new(function, self.current_function_id);
-            self.current_function_id += 1;
-            self.current_scope_mut()
-                .push_function(function.identifier(), function_descriptor);
+        pub fn declare_function(
+            &mut self,
+            return_type: BoundDataType,
+            ident: &'a str,
+            parameters: Vec<BoundVariable>,
+        ) {
+            let id = self.next_id();
+            self.current_scope_mut().push_function(
+                ident,
+                FunctionDescriptor::new(id, return_type, parameters),
+            );
         }
 
-        pub fn current_function_mut(&mut self) -> Option<&mut FunctionDescriptor<'a>> {
+        pub fn current_function_mut(&mut self) -> Option<&mut FunctionDescriptor> {
             self.scopes
                 .iter_mut()
                 .rev()
-                .find(|scope| scope.function_identifier != self.current_function_identifier)?
-                .function_mut(self.current_function_identifier?)
+                .find(|scope| scope.function_identifier != self.context.current_function)?
+                .function_mut(self.context.current_function?)
         }
 
-        pub fn current_function(&self) -> Option<&FunctionDescriptor<'a>> {
-            self.function(self.current_function_identifier?)
+        pub fn current_function(&self) -> Option<&FunctionDescriptor> {
+            self.function(self.context.current_function?)
         }
 
-        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
+        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor> {
             self.scopes
                 .iter()
                 .rev()
@@ -1659,7 +1791,7 @@ mod analysis {
                 .function(identifier)
         }
 
-        pub fn variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor<'a>>) {
+        pub fn variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor>) {
             let mut level = 0;
             let mut cur = self.current_scope().function_identifier;
             for scope in self.scopes.iter().rev() {
@@ -1679,7 +1811,7 @@ mod analysis {
         pub fn variable_mut(
             &mut self,
             identifier: &str,
-        ) -> (usize, Option<&mut VariableDescriptor<'a>>) {
+        ) -> (usize, Option<&mut VariableDescriptor>) {
             let mut level = 0;
             let mut cur = self.current_scope().function_identifier;
             for scope in self.scopes.iter_mut().rev() {
@@ -1698,7 +1830,7 @@ mod analysis {
 
         pub fn push_scope(&mut self) {
             self.push_scope_internal(
-                self.current_function_identifier,
+                self.context.current_function,
                 self.scopes.last().expect("A scope").stack_position(),
             );
         }
@@ -1715,19 +1847,17 @@ mod analysis {
             self.scopes
                 .push(Scope::new(function_identifier, stack_position));
             if let Some(function_identifier) = function_identifier {
-                self.current_function_identifier = Some(function_identifier);
+                self.context.current_function = Some(function_identifier);
             }
         }
 
         pub fn pop_scope(&mut self) {
             self.scopes.pop();
-            self.current_function_identifier = self.current_scope().function_identifier;
+            self.context.current_function = self.current_scope().function_identifier;
         }
-        pub fn next_function_id(&self) -> usize {
-            self.current_function_id
-        }
+
         pub fn current_function_identifier(&self) -> Option<&'a str> {
-            self.current_function_identifier
+            self.context.current_function
         }
     }
 
@@ -1743,27 +1873,23 @@ mod analysis {
             }
         }
 
-        pub fn variable(&self, identifier: &str) -> Option<&VariableDescriptor<'a>> {
+        pub fn variable(&self, identifier: &str) -> Option<&VariableDescriptor> {
             self.variables.get(identifier)
         }
 
-        pub fn variable_mut(&mut self, identifier: &str) -> Option<&mut VariableDescriptor<'a>> {
+        pub fn variable_mut(&mut self, identifier: &str) -> Option<&mut VariableDescriptor> {
             self.variables.get_mut(identifier)
         }
 
-        fn push_function(
-            &mut self,
-            identifier: &'a str,
-            function_descriptor: FunctionDescriptor<'a>,
-        ) {
+        fn push_function(&mut self, identifier: &'a str, function_descriptor: FunctionDescriptor) {
             self.functions.insert(identifier, function_descriptor);
         }
 
-        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor<'a>> {
+        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor> {
             self.functions.get(identifier)
         }
 
-        pub fn function_mut(&mut self, identifier: &str) -> Option<&mut FunctionDescriptor<'a>> {
+        pub fn function_mut(&mut self, identifier: &str) -> Option<&mut FunctionDescriptor> {
             self.functions.get_mut(identifier)
         }
 
@@ -1771,13 +1897,23 @@ mod analysis {
             self.functions.contains_key(identifier)
         }
 
-        fn push_variable(&mut self, variable: &Variable<'a>, is_parameter: bool) {
-            let variable_descriptor =
-                VariableDescriptor::new(variable, self.stack_position, is_parameter);
-            self.stack_position += variable.data_type().size();
-
-            self.variables
-                .insert(variable.identifier(), variable_descriptor);
+        fn declare_variable(
+            &mut self,
+            id: usize,
+            modifiers: Vec<Modifier>,
+            data_type: BoundDataType,
+            ident: &'a str,
+            is_parameter: bool,
+        ) {
+            let variable_descriptor = VariableDescriptor::new(
+                id,
+                self.stack_position,
+                modifiers,
+                data_type,
+                is_parameter,
+            );
+            self.stack_position += variable_descriptor.data_type().size();
+            self.variables.insert(ident, variable_descriptor);
         }
 
         pub fn stack_position(&self) -> usize {
@@ -1785,14 +1921,21 @@ mod analysis {
         }
     }
 
-    impl<'a> VariableDescriptor<'a> {
-        pub fn new(variable: &Variable<'a>, stack_position: usize, is_parameter: bool) -> Self {
-            VariableDescriptor {
+    impl VariableDescriptor {
+        pub fn new(
+            id: usize,
+            stack_position: usize,
+            modifiers: Vec<Modifier>,
+            data_type: BoundDataType,
+            is_parameter: bool,
+        ) -> Self {
+            Self {
+                variable_id: id,
                 stack_position,
+                data_type,
+                modifiers,
+                value: None,
                 is_parameter,
-                modifiers: variable.modifiers().clone(),
-                data_type: variable.data_type().clone(),
-                value: variable.value().cloned(),
                 initialized: false,
             }
         }
@@ -1808,7 +1951,7 @@ mod analysis {
         pub fn stack_position(&self) -> usize {
             self.stack_position
         }
-        pub fn data_type(&self) -> &DataType {
+        pub fn data_type(&self) -> &BoundDataType {
             &self.data_type
         }
         pub fn has_modifier(&self, modifier: Modifier) -> bool {
@@ -1816,13 +1959,31 @@ mod analysis {
         }
     }
 
-    impl<'a> FunctionDescriptor<'a> {
-        pub fn new(function: &Function<'a>, function_id: usize) -> Self {
+    impl<'a> From<(&DataType, &SymbolTable<'a>)> for BoundDataType {
+        fn from(value: (&DataType, &SymbolTable<'a>)) -> Self {
+            match value.0 {
+                DataType::Pp => BoundDataType::Pp,
+                DataType::AB => BoundDataType::AB,
+                DataType::Flaccid => BoundDataType::Flaccid,
+                DataType::P => BoundDataType::P,
+                DataType::Yarn => BoundDataType::Yarn,
+                DataType::Booba => BoundDataType::Booba,
+                DataType::Nopp => BoundDataType::Nopp,
+                DataType::Ratio => BoundDataType::Ratio,
+                DataType::Struct(name) => {
+                    todo!("Cannot convert to bound struct yet ({name})")
+                }
+            }
+        }
+    }
+
+    impl FunctionDescriptor {
+        pub fn new(id: usize, return_type: BoundDataType, parameters: Vec<BoundVariable>) -> Self {
             FunctionDescriptor {
-                return_type: function.return_type().clone(),
-                parameters: function.parameters().clone(),
-                function_id,
-                stack_frame_size: Scope::ACTIVATION_RECORD_SIZE,
+                id,
+                return_type,
+                parameters,
+                stack_frame_size: 0,
             }
         }
 
@@ -1830,10 +1991,10 @@ mod analysis {
             self.stack_frame_size = cmp::max(self.stack_frame_size, stack_frame_size);
         }
 
-        pub fn return_type(&self) -> &DataType {
+        pub fn return_type(&self) -> &BoundDataType {
             &self.return_type
         }
-        pub fn parameters(&self) -> &Vec<Variable<'a>> {
+        pub fn parameters(&self) -> &Vec<BoundVariable> {
             &self.parameters
         }
 
@@ -1843,8 +2004,8 @@ mod analysis {
                 .iter()
                 .fold(0, |acc, parameter| acc + parameter.data_type().size())
         }
-        pub fn function_id(&self) -> usize {
-            self.function_id
+        pub fn id(&self) -> usize {
+            self.id
         }
         pub fn stack_frame_size(&self) -> usize {
             self.stack_frame_size
@@ -1856,7 +2017,7 @@ mod analysis {
             functions: Vec<BoundFunction>,
             main_function_identifier: usize,
             global_stack_frame_size: usize,
-            global_variable_assignments: Vec<BoundVariableAssignment>,
+            global_variable_assignments: Vec<BoundStatement>,
         ) -> Self {
             BoundTranslationUnit {
                 functions,
@@ -1872,7 +2033,7 @@ mod analysis {
         pub fn global_stack_frame_size(&self) -> usize {
             self.global_stack_frame_size
         }
-        pub fn global_variable_assignments(&self) -> &Vec<BoundVariableAssignment> {
+        pub fn global_variable_assignments(&self) -> &Vec<BoundStatement> {
             &self.global_variable_assignments
         }
 
@@ -1933,7 +2094,7 @@ mod analysis {
     }
 
     impl BoundVariable {
-        pub fn new(level: usize, offset: i32, data_type: DataType, is_const: bool) -> Self {
+        pub fn new(level: usize, offset: i32, data_type: BoundDataType, is_const: bool) -> Self {
             BoundVariable {
                 level,
                 offset,
@@ -1948,7 +2109,7 @@ mod analysis {
         pub fn offset(&self) -> i32 {
             self.offset
         }
-        pub fn data_type(&self) -> &DataType {
+        pub fn data_type(&self) -> &BoundDataType {
             &self.data_type
         }
         pub fn is_const(&self) -> bool {
@@ -2326,9 +2487,10 @@ pub mod compiler {
 
     #[cfg(test)]
     mod lexer_tests {
-        use itertools::Itertools;
         use std::cell;
         use std::rc;
+
+        use itertools::Itertools;
 
         use TokenKind as TK;
 

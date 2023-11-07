@@ -30,7 +30,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
         translation_unit
             .global_variable_assignments()
             .iter()
-            .for_each(|stmt| self.emit_variable_assignment(stmt));
+            .for_each(|stmt| self.emit_statement(stmt, None, None));
     }
 
     fn emit_functions(&mut self, translation_unit: &BoundTranslationUnit) {

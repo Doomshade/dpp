@@ -14,8 +14,8 @@ impl Optimizer {
         translation_unit.global_variable_assignments = translation_unit
             .global_variable_assignments
             .into_iter()
-            .map(|assignment| self.optimize_assignment(assignment))
-            .collect::<Vec<BoundVariableAssignment>>();
+            .map(|assignment| self.optimize_statement(assignment))
+            .collect_vec();
         translation_unit.functions = translation_unit
             .functions
             .into_iter()

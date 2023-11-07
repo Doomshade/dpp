@@ -3,6 +3,7 @@ use crate::parse::ErrorDiagnosis;
 use dpp_macros::Pos;
 use std::collections::{BinaryHeap, HashMap};
 use itertools::Itertools;
+use crate::parse::analysis::BoundDataType;
 
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::DataType;
@@ -195,7 +196,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn mixed_data_types_error(&mut self, position: (u32, u32), lhs: &DataType, rhs: &DataType) {
+    pub fn mixed_data_types_error(&mut self, position: (u32, u32), lhs: &BoundDataType, rhs: &BoundDataType) {
         self.insert_error_message(
             position,
             format!("Incompatible data types on lhs and rhs - {lhs} and {rhs}.").as_str(),
@@ -205,8 +206,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     pub fn invalid_data_type(
         &mut self,
         position: (u32, u32),
-        expected_data_type: &DataType,
-        got: &DataType,
+        expected_data_type: &BoundDataType,
+        got: &BoundDataType,
     ) {
         self.insert_error_message(
             position,
