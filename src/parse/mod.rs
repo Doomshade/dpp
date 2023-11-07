@@ -1333,7 +1333,7 @@ mod parser {
                 DataType::P => 1,
                 DataType::Booba => 1,
                 DataType::Nopp => 0,
-                DataType::Struct(name) => 6969,
+                DataType::Struct(_name) => 6969,
                 _ => panic!("Not yet implemented {self}"),
             }
         }
@@ -1797,7 +1797,7 @@ mod analysis {
                 if cur != scope.function_identifier {
                     level += 1;
                 }
-                if let Some(_) = scope.variable(identifier) {
+                if scope.variable(identifier).is_some() {
                     return (level, scope.variable_mut(identifier));
                 }
                 cur = scope.function_identifier;

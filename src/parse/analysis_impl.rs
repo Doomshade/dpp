@@ -618,7 +618,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     fields
                         .iter()
                         .map(|field| self.to_bound_data_type(field.data_type()).size())
-                        .fold(0, |acc, x| acc + x),
+                        .sum(),
                 ),
             }),
             Expression::Unary {
@@ -683,7 +683,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 .symbol_table()
                 .function(identifier)
                 .map(|function| function.return_type().clone()),
-            Expression::StructDefinition { identifier, .. } => None,
+            Expression::StructDefinition {  .. } => None,
             // TODO: Add structs to symbol table.
             _ => None,
         };
