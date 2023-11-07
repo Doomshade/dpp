@@ -71,7 +71,7 @@
 
         <empty> ::= `;'
 
-        <assign> ::= <ident> `=' <expr> `;'
+        <assign> ::= <ident> ( `=' | `+=' | `-=' ) <expr> `;'
 
         <var-decl> ::= <modifiers> <data-type> `->' <ident> [ `=' <expr> ] `;'
 

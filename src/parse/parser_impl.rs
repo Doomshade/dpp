@@ -224,7 +224,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::Identifier => {
                 // Identifier can also be an expression. Need to look ahead,
                 // if present, then it's assignment. If not, it's expression.
-                if self.token_offset(1)?.kind() == TokenKind::Equal {
+                if matches!(
+                    self.token_offset(1)?.kind(),
+                    TokenKind::Equal |
+                    TokenKind::PlusEqual |
+                    TokenKind::MinusEqual
+                ) {
                     self._assign()
                 } else {
                     self._expr_stat()
@@ -452,13 +457,41 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _assign(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
         let identifier = self.expect(TokenKind::Identifier)?;
-        self.expect(TokenKind::Equal)?;
+        let assign_tok = self
+            .expect_one_from(&[
+                TokenKind::Equal,
+                TokenKind::PlusEqual,
+                TokenKind::MinusEqual,
+            ])?
+            .1;
         let expression = self._expr()?;
         self.expect(TokenKind::Semicolon)?;
+        let assign_expr = match assign_tok {
+            TokenKind::Equal => expression,
+            TokenKind::MinusEqual => Expression::Binary {
+                position,
+                lhs: Box::new(Expression::Identifier {
+                    identifier,
+                    position,
+                }),
+                op: BinaryOperator::Subtract,
+                rhs: Box::new(expression),
+            },
+            TokenKind::PlusEqual => Expression::Binary {
+                position,
+                lhs: Box::new(Expression::Identifier {
+                    identifier,
+                    position,
+                }),
+                op: BinaryOperator::Add,
+                rhs: Box::new(expression),
+            },
+            _ => unreachable!(),
+        };
         Some(Statement::Assignment {
             position,
             identifier,
-            expression,
+            expression: assign_expr,
         })
     }
 

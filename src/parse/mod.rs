@@ -2161,7 +2161,6 @@ pub mod compiler {
                     "out/dpp/optimizations.txt",
                     root_optimizer.optimizations.join("\n\n"),
                 )?;
-                dbg!(&optimized_translation_unit);
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;
                 error_diag.borrow_mut().check_errors()?;
             }
