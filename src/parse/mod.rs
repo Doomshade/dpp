@@ -1,5 +1,5 @@
-use std::io::Write;
 use std::{cell, collections, fs, io, rc};
+use std::io::Write;
 
 use dpp_macros::Pos;
 
@@ -1451,11 +1451,10 @@ mod parser {
 }
 
 mod analysis {
-    use std::fmt::{Display, Formatter};
     use std::{cmp, collections, fmt, ops};
 
     use crate::parse::parser::{
-        BinaryOperator, DataType, Function, Modifier, UnaryOperator, Variable,
+        BinaryOperator, DataType, Modifier, UnaryOperator,
     };
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1475,7 +1474,7 @@ mod analysis {
         current_struct_id: Option<usize>,
     }
 
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     pub struct Scope<'a> {
         /// Variable symbol table.
         variables: collections::HashMap<&'a str, VariableDescriptor>,
@@ -1554,26 +1553,6 @@ mod analysis {
         ident: String,
     }
 
-    impl BoundStructField {
-        pub fn new(modifiers: Vec<Modifier>, data_type: BoundDataType, ident: String) -> Self {
-            Self {
-                modifiers,
-                data_type,
-                ident,
-            }
-        }
-
-        pub fn modifiers(&self) -> &Vec<Modifier> {
-            &self.modifiers
-        }
-        pub fn data_type(&self) -> &BoundDataType {
-            &self.data_type
-        }
-        pub fn ident(&self) -> &str {
-            &self.ident
-        }
-    }
-
     #[derive(Clone, PartialEq, Debug)]
     pub enum BoundExpression {
         Literal(BoundLiteralValue),
@@ -1617,8 +1596,8 @@ mod analysis {
         Struct(String, usize),
     }
 
-    impl Display for BoundDataType {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    impl fmt::Display for BoundDataType {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 BoundDataType::Pp => write!(f, "integer"),
                 BoundDataType::Flaccid => write!(f, "flaccid"),
@@ -2134,7 +2113,7 @@ mod analysis {
     }
 
     impl fmt::Display for BoundVariable {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(
                 f,
                 "level: {}, offset: {}, data_type: {}",
@@ -2196,6 +2175,26 @@ mod analysis {
                 },
                 _ => panic!("Undefined operation"),
             }
+        }
+    }
+
+    impl BoundStructField {
+        pub fn new(modifiers: Vec<Modifier>, data_type: BoundDataType, ident: String) -> Self {
+            Self {
+                modifiers,
+                data_type,
+                ident,
+            }
+        }
+
+        pub fn modifiers(&self) -> &Vec<Modifier> {
+            &self.modifiers
+        }
+        pub fn data_type(&self) -> &BoundDataType {
+            &self.data_type
+        }
+        pub fn ident(&self) -> &str {
+            &self.ident
         }
     }
 }
@@ -2317,14 +2316,14 @@ mod emitter {
 }
 
 pub mod compiler {
-    use std::io::Write;
     use std::{cell, error, fs, io, process, rc, time};
+    use std::io::Write;
 
+    use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Optimizer, Parser, SemanticAnalyzer};
     use crate::parse::analysis::BoundTranslationUnit;
     use crate::parse::error_diagnosis::SyntaxError;
     use crate::parse::lexer::Token;
     use crate::parse::parser::TranslationUnit;
-    use crate::parse::{Emitter, ErrorDiagnosis, Lexer, Optimizer, Parser, SemanticAnalyzer};
 
     pub struct DppCompiler;
 
@@ -2494,8 +2493,8 @@ pub mod compiler {
 
         use TokenKind as TK;
 
-        use crate::parse::lexer::{LiteralKind, TokenKind};
         use crate::parse::{ErrorDiagnosis, Lexer};
+        use crate::parse::lexer::{LiteralKind, TokenKind};
 
         fn test_generic_lex(
             input: &str,
