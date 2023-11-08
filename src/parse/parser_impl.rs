@@ -611,7 +611,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.expect(TokenKind::Arrow)?;
             let field_ident = self.expect(TokenKind::Identifier)?;
             self.expect(TokenKind::Comma)?;
-            struct_fields.push(StructField::new(position, modifiers, data_type, field_ident))
+            struct_fields.push(StructField::new(
+                position,
+                modifiers,
+                data_type,
+                field_ident,
+            ))
         }
         self.expect(TokenKind::CloseBrace);
         Some(Struct::new(position, ident, struct_fields))
@@ -772,7 +777,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                             definitions.push((field_ident, field_expr));
                         }
                         self.expect(TokenKind::CloseBrace)?;
-                        Some(Expression::StructDefinition {
+                        Some(Expression::Struct {
                             position,
                             identifier,
                             definitions,

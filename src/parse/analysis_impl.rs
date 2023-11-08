@@ -24,7 +24,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// Result<SymbolTable, `SyntaxError`> - the symbol table if no errors were found
     pub fn analyze(
         mut self,
-        translation_unit: &TranslationUnit<'a>,
+        translation_unit: &'a TranslationUnit<'a>,
     ) -> Result<BoundTranslationUnit, SyntaxError> {
         let bound_transl_unit = self.analyze_translation_unit(translation_unit);
         self.error_diag.borrow().check_errors()?;
@@ -40,22 +40,46 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `translation_unit`: the translation unit to analyze
     fn analyze_translation_unit(
         &mut self,
-        translation_unit: &TranslationUnit<'a>,
+        translation_unit: &'a TranslationUnit<'a>,
     ) -> BoundTranslationUnit {
         // Register the global functions.
+        translation_unit
+            .struct_declarations()
+            .iter()
+            .for_each(|a_struct| {
+                let maybe_struct = self.symbol_table().find_struct_definition(a_struct.ident());
+                if maybe_struct.0 == 0 && maybe_struct.1.is_some() {
+                    self.error_diag
+                        .borrow_mut()
+                        .struct_already_exists(a_struct.position(), a_struct.ident());
+                } else {
+                    let vec = a_struct
+                        .fields()
+                        .iter()
+                        .map(|field| {
+                            (
+                                String::from(field.ident()),
+                                self.to_bound_data_type(field.data_type(), field.position()),
+                            )
+                        })
+                        .collect_vec();
+                    self.symbol_table_mut().define_struct(a_struct.ident(), vec);
+                }
+            });
         translation_unit.functions().iter().for_each(|function| {
             if self
                 .symbol_table()
-                .find_function(function.identifier())
+                .find_function_definition(function.identifier())
                 .is_some()
             {
                 self.error_diag
                     .borrow_mut()
                     .function_already_exists(function.position(), function.identifier());
             } else {
-                let return_type = self.to_bound_data_type(function.return_type(), function.position());
+                let return_type =
+                    self.to_bound_data_type(function.return_type(), function.position());
                 let parameters = self.to_bound_parameters(function.parameters());
-                self.symbol_table_mut().declare_function(
+                self.symbol_table_mut().define_function(
                     return_type,
                     function.identifier(),
                     parameters,
@@ -133,11 +157,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
         self.begin_function(function);
-        let function_id = self
-            .symbol_table()
-            .current_function()
-            .unwrap()
-            .id();
+        let function_id = self.symbol_table().current_function().unwrap().id();
         let parameters = self.to_bound_parameters(function.parameters());
         let bound_statements = self.analyze_statements(function.statements());
         if function.return_type() != &DataType::Nopp {
@@ -170,7 +190,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             function_id,
             stack_position,
             function.identifier() == "main",
-            self.to_bound_data_type(function.return_type(), function.position()).size(),
+            self.to_bound_data_type(function.return_type(), function.position())
+                .size(),
             parameters,
             bound_statements,
         )
@@ -185,17 +206,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     fn analyze_statement(&mut self, statement: &Statement<'a>) -> BoundStatement {
         match &statement {
             Statement::VariableDeclaration { variable, .. } => {
-                if self
-                    .symbol_table()
-                    .find_variable(variable.identifier())
-                    .1
-                    .is_some()
-                {
+                if self.is_variable_in_scope(variable.identifier()) {
                     self.error_diag
                         .borrow_mut()
                         .variable_already_exists(variable.position(), variable.identifier());
                 }
-
                 let data_type = self.to_bound_data_type(variable.data_type(), variable.position());
                 self.declare_variable(
                     variable.position(),
@@ -207,7 +222,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 if let Some(expression) = variable.value() {
                     self.symbol_table_mut()
                         .initialize_variable(variable.identifier());
-                    let (level, var_decl) = self.symbol_table().find_variable(variable.identifier());
+                    let (level, var_decl) = self
+                        .symbol_table()
+                        .find_variable_declaration(variable.identifier());
                     let var_decl = var_decl.unwrap();
                     let position = BoundVariable::new(
                         level,
@@ -215,13 +232,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         var_decl.data_type().clone(),
                         var_decl.has_modifier(Modifier::Const),
                     );
-                    let data_type = self.to_bound_data_type(variable.data_type(), variable.position());
+                    let data_type =
+                        self.to_bound_data_type(variable.data_type(), variable.position());
                     let value = self
-                        .analyze_expr(
-                            expression,
-                            Some(&data_type),
-                            Some(variable.position()),
-                        )
+                        .analyze_expr(expression, Some(&data_type), Some(variable.position()))
                         .1;
 
                     return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
@@ -354,7 +368,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 expression,
                 position,
             } => {
-                let (level, var_decl) = self.symbol_table().find_variable(identifier);
+                let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
                 if let Some(variable) = var_decl {
                     let is_const = variable.has_modifier(Modifier::Const);
                     if is_const {
@@ -408,13 +422,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 // Declare the variable as pp.
                 let data_type = self.to_bound_data_type(&DataType::Pp, *position);
-                self.declare_variable(
-                    *position,
-                    Vec::new(),
-                    data_type.clone(),
-                    index_ident,
-                    false,
-                );
+                self.declare_variable(*position, Vec::new(), data_type.clone(), index_ident, false);
 
                 // Mark the variable as initialized immediately. We initialize it later on.
                 self.symbol_table_mut().initialize_variable(index_ident);
@@ -439,7 +447,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 );
 
                 // Get the descriptor of the variable and some metadata.
-                let (level, var_decl) = self.symbol_table().find_variable(index_ident);
+                let (level, var_decl) = self.symbol_table().find_variable_declaration(index_ident);
                 let var_decl = var_decl.unwrap();
                 let offset = var_decl.stack_position();
                 let is_const = var_decl.has_modifier(Modifier::Const);
@@ -530,7 +538,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     String::from(*name),
                     fields
                         .iter()
-                        .map(|field| self.to_bound_data_type(field.data_type(), field.position()).size())
+                        .map(|field| {
+                            self.to_bound_data_type(field.data_type(), field.position())
+                                .size()
+                        })
                         .sum(),
                 ),
             }),
@@ -589,14 +600,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
             Expression::Identifier { identifier, .. } => self
                 .symbol_table()
-                .find_variable(identifier)
+                .find_variable_declaration(identifier)
                 .1
                 .map(|variable| variable.data_type().clone()),
             Expression::FunctionCall { identifier, .. } => self
                 .symbol_table()
-                .find_function(identifier)
+                .find_function_definition(identifier)
                 .map(|function| function.return_type().clone()),
-            Expression::StructDefinition {  .. } => None,
+            Expression::Struct { .. } => None,
             // TODO: Add structs to symbol table.
             _ => None,
         };
@@ -654,7 +665,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
                 identifier,
             } => {
-                let (level, var_decl) = self.symbol_table().find_variable(identifier);
+                let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
                 if let Some(variable) = var_decl {
                     if !variable.is_initialized() {
                         self.error_diag
@@ -681,7 +692,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
             } => {
                 let (id, return_type_size, arguments_size);
-                if let Some(function) = self.symbol_table().find_function(identifier) {
+                if let Some(function) = self.symbol_table().find_function_definition(identifier) {
                     id = function.id();
                     return_type_size = function.return_type().size();
                     arguments_size = function.parameters_size()
@@ -705,13 +716,23 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Expression::Invalid { .. } => {
                 unreachable!("Should have thrown syntax error after parsing")
             }
-            Expression::StructDefinition { position, definitions, identifier } => {
+            Expression::Struct {
+                position,
+                definitions,
+                identifier,
+            } => {
                 self.error_diag.borrow_mut().not_implemented(
-                    expression.position(),
-                    "Struct definition not implemented",
+                    *position,
+                    format!(
+                        "Struct definition analysis not implemented\
+                     - struct \"{identifier}\" and \"{definitions:?}\""
+                    )
+                    .as_str(),
                 );
-                BoundExpression::Literal(BoundLiteralValue::Struct(String::from(*identifier),
-                                                                   Vec::new()))
+                BoundExpression::Literal(BoundLiteralValue::Struct(
+                    String::from(*identifier),
+                    Vec::new(),
+                ))
             }
         }
     }

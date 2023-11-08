@@ -1,9 +1,9 @@
+use crate::parse::analysis::BoundDataType;
 use crate::parse::error_diagnosis::{ErrorMessage, SyntaxError};
 use crate::parse::ErrorDiagnosis;
 use dpp_macros::Pos;
-use std::collections::{BinaryHeap, HashMap};
 use itertools::Itertools;
-use crate::parse::analysis::BoundDataType;
+use std::collections::{BinaryHeap, HashMap};
 
 use crate::parse::lexer::{Token, TokenKind};
 use crate::parse::parser::DataType;
@@ -100,6 +100,13 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
+    pub fn struct_already_exists(&mut self, position: (u32, u32), struct_name: &'a str) {
+        self.insert_error_message(
+            position,
+            format!("Struct with name \"{struct_name}\" already exists.").as_str(),
+        );
+    }
+
     pub fn invalid_number(&mut self, position: (u32, u32)) {
         self.insert_error_message(position, "Invalid number.");
     }
@@ -133,10 +140,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     }
 
     pub fn unknown_data_type(&mut self, position: (u32, u32), reason: &str) {
-        self.insert_error_message(
-            position,
-            format!("Unknown data type: {reason}").as_str(),
-        );
+        self.insert_error_message(position, format!("Unknown data type: {reason}").as_str());
     }
 
     pub fn expected_one_of_token_error(
@@ -203,7 +207,12 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn mixed_data_types_error(&mut self, position: (u32, u32), lhs: &BoundDataType, rhs: &BoundDataType) {
+    pub fn mixed_data_types_error(
+        &mut self,
+        position: (u32, u32),
+        lhs: &BoundDataType,
+        rhs: &BoundDataType,
+    ) {
         self.insert_error_message(
             position,
             format!("Incompatible data types on lhs and rhs - {lhs} and {rhs}.").as_str(),

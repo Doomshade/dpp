@@ -5,7 +5,7 @@ use std::{cell, collections, fs, io, rc};
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundDataType, BoundDataTypeError, BoundLiteralValue, BoundTranslationUnit, BoundVariable,
+    BoundDataType, BoundExpression, BoundLiteralValue, BoundTranslationUnit, BoundVariable,
     SymbolTable,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
@@ -376,6 +376,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
     }
 
+    fn is_variable_in_scope(&self, ident: &'a str) -> bool {
+        let maybe_variable = self.symbol_table().find_variable_declaration(ident);
+        maybe_variable.0 == 0 && maybe_variable.1.is_some()
+    }
+
     pub fn declare_variable(
         &mut self,
         position: (u32, u32),
@@ -384,7 +389,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         ident: &'a str,
         is_parameter: bool,
     ) {
-        if self.symbol_table().find_variable(ident).1.is_some() {
+        if self.is_variable_in_scope(ident) {
             self.error_diag
                 .borrow_mut()
                 .variable_already_exists(position, ident);
@@ -1214,9 +1219,10 @@ mod parser {
             identifier: &'a str,
             arguments: Vec<Expression<'a>>,
         },
-        StructDefinition {
+        Struct {
             position: (u32, u32),
             identifier: &'a str,
+            // Identifier + expression.
             definitions: Vec<(&'a str, Expression<'a>)>,
         },
         Invalid {
@@ -1265,6 +1271,13 @@ mod parser {
         }
         pub fn global_statements(&self) -> &Vec<Statement<'a>> {
             &self.global_statements
+        }
+
+        pub fn position(&self) -> (u32, u32) {
+            self.position
+        }
+        pub fn struct_declarations(&self) -> &Vec<Struct<'a>> {
+            &self.struct_declarations
         }
     }
 
@@ -1429,7 +1442,7 @@ mod parser {
                     format!("Function {identifier}")
                 }
                 Expression::Invalid { .. } => "Invalid expression".to_string(),
-                Expression::StructDefinition { identifier, .. } => format!("Struct {identifier}"),
+                Expression::Struct { identifier, .. } => format!("Struct {identifier}"),
             };
             write!(f, "{}", formatted)?;
             Ok(())
@@ -1515,10 +1528,12 @@ mod analysis {
 
     #[derive(Clone, PartialEq, Debug)]
     pub struct Scope<'a> {
-        /// Variable symbol table.
-        variables: collections::HashMap<&'a str, VariableDescriptor>,
-        /// Function symbol table.
-        functions: collections::HashMap<&'a str, FunctionDescriptor>,
+        /// Variable declaration symbol table.
+        variable_declarations: collections::HashMap<&'a str, VariableDeclarationDescriptor>,
+        /// Function definition symbol table.
+        function_definitions: collections::HashMap<&'a str, FunctionDefinitionDescriptor>,
+        /// Struct definition symbol table.
+        struct_definitions: collections::HashMap<&'a str, StructDefinitionDescriptor>,
         /// The current stack position of the scope.
         stack_position: usize,
         /// The identifier of this function scope (i.e. the function identifier).
@@ -1526,14 +1541,20 @@ mod analysis {
     }
 
     #[derive(Clone, PartialEq, Debug)]
-    pub struct StructDescriptor {
-        stack_position: usize,
-        data_type: BoundDataType,
+    pub struct StructDefinitionDescriptor {
+        id: usize,
+        fields: Vec<(String, BoundDataType)>,
     }
 
     #[derive(Clone, PartialEq, Debug)]
-    pub struct VariableDescriptor {
-        variable_id: usize,
+    pub struct StructDeclarationDescriptor {
+        id: usize,
+        fields: Vec<(String, BoundExpression)>,
+    }
+
+    #[derive(Clone, PartialEq, Debug)]
+    pub struct VariableDeclarationDescriptor {
+        id: usize,
         stack_position: usize,
         data_type: BoundDataType,
         modifiers: Vec<Modifier>,
@@ -1543,7 +1564,7 @@ mod analysis {
     }
 
     #[derive(Clone, PartialEq, Debug)]
-    pub struct FunctionDescriptor {
+    pub struct FunctionDefinitionDescriptor {
         id: usize,
         return_type: BoundDataType,
         parameters: Vec<BoundVariable>,
@@ -1612,7 +1633,7 @@ mod analysis {
             arguments_size: usize,
             arguments: Vec<BoundExpression>,
         },
-        StructDefinition {
+        Struct {
             identifier: usize,
             definitions: Vec<(usize, BoundExpression)>,
         },
@@ -1780,7 +1801,12 @@ mod analysis {
             }
         }
 
-        pub fn declare_function(
+        pub fn define_struct(&mut self, ident: &'a str, fields: Vec<(String, BoundDataType)>) {
+            let id = self.next_id();
+            self.current_scope_mut().define_struct(ident, id, fields);
+        }
+
+        pub fn define_function(
             &mut self,
             return_type: BoundDataType,
             ident: &'a str,
@@ -1788,41 +1814,60 @@ mod analysis {
         ) {
             let id = self.next_id();
             self.current_scope_mut()
-                .push_function(ident, FunctionDescriptor::new(id, return_type, parameters));
+                .define_function(ident, id, return_type, parameters);
         }
 
-        pub fn current_function_mut(&mut self) -> Option<&mut FunctionDescriptor> {
+        pub fn current_function_mut(&mut self) -> Option<&mut FunctionDefinitionDescriptor> {
             self.scopes
                 .iter_mut()
                 .rev()
                 .find(|scope| scope.function_identifier != self.context.current_function)?
-                .function_mut(self.context.current_function?)
+                .get_function_mut(self.context.current_function?)
         }
 
-        pub fn current_function(&self) -> Option<&FunctionDescriptor> {
-            self.find_function(self.context.current_function?)
+        pub fn current_function(&self) -> Option<&FunctionDefinitionDescriptor> {
+            self.find_function_definition(self.context.current_function?)
         }
 
-        pub fn find_struct(&self, identifier: &str) -> Option<&StructDescriptor> {
-            None
+        pub fn find_struct_definition(
+            &self,
+            identifier: &str,
+        ) -> (usize, Option<&StructDefinitionDescriptor>) {
+            self.find_in_scope(identifier, |scope, ident| {
+                scope.get_struct_definition(ident)
+            })
         }
 
-        pub fn find_function(&self, identifier: &str) -> Option<&FunctionDescriptor> {
+        pub fn find_function_definition(
+            &self,
+            identifier: &str,
+        ) -> Option<&FunctionDefinitionDescriptor> {
             self.scopes
                 .iter()
                 .rev()
                 .find(|scope| scope.has_function(identifier))?
-                .function(identifier)
+                .get_function(identifier)
         }
 
-        pub fn find_variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor>) {
+        pub fn find_variable_declaration(
+            &self,
+            identifier: &str,
+        ) -> (usize, Option<&VariableDeclarationDescriptor>) {
+            self.find_in_scope(identifier, |scope, ident| scope.get_variable(ident))
+        }
+
+        fn find_in_scope<'b: 'a, T>(
+            &'b self,
+            identifier: &str,
+            getter: fn(&'a Scope, &str) -> Option<&'b T>,
+        ) -> (usize, Option<&'b T>) {
             let mut level = 0;
             let mut cur = self.current_scope().function_identifier;
             for scope in self.scopes.iter().rev() {
                 if cur != scope.function_identifier {
                     level += 1;
                 }
-                if let Some(variable) = scope.variable(identifier) {
+                if let Some(variable) = getter(scope, identifier) {
                     return (level, Some(variable));
                 }
                 cur = scope.function_identifier;
@@ -1835,15 +1880,15 @@ mod analysis {
         pub fn find_variable_mut(
             &mut self,
             identifier: &str,
-        ) -> (usize, Option<&mut VariableDescriptor>) {
+        ) -> (usize, Option<&mut VariableDeclarationDescriptor>) {
             let mut level = 0;
             let mut cur = self.current_scope().function_identifier;
             for scope in self.scopes.iter_mut().rev() {
                 if cur != scope.function_identifier {
                     level += 1;
                 }
-                if scope.variable(identifier).is_some() {
-                    return (level, scope.variable_mut(identifier));
+                if scope.get_variable(identifier).is_some() {
+                    return (level, scope.get_variable_mut(identifier));
                 }
                 cur = scope.function_identifier;
             }
@@ -1890,35 +1935,61 @@ mod analysis {
 
         pub fn new(function_identifier: Option<&'a str>, stack_position: usize) -> Self {
             Self {
-                variables: collections::HashMap::new(),
-                functions: collections::HashMap::new(),
+                variable_declarations: collections::HashMap::new(),
+                function_definitions: collections::HashMap::new(),
+                struct_definitions: collections::HashMap::new(),
                 stack_position,
                 function_identifier,
             }
         }
 
-        pub fn variable(&self, identifier: &str) -> Option<&VariableDescriptor> {
-            self.variables.get(identifier)
+        fn define_struct(
+            &mut self,
+            identifier: &'a str,
+            id: usize,
+            fields: Vec<(String, BoundDataType)>,
+        ) {
+            self.struct_definitions
+                .insert(identifier, StructDefinitionDescriptor::new(id, fields));
         }
 
-        pub fn variable_mut(&mut self, identifier: &str) -> Option<&mut VariableDescriptor> {
-            self.variables.get_mut(identifier)
+        fn get_struct_definition(&self, identifier: &str) -> Option<&StructDefinitionDescriptor> {
+            self.struct_definitions.get(identifier)
         }
 
-        fn push_function(&mut self, identifier: &'a str, function_descriptor: FunctionDescriptor) {
-            self.functions.insert(identifier, function_descriptor);
+        fn get_struct_definition_mut(
+            &mut self,
+            identifier: &str,
+        ) -> Option<&mut StructDefinitionDescriptor> {
+            self.struct_definitions.get_mut(identifier)
         }
 
-        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor> {
-            self.functions.get(identifier)
+        fn define_function(
+            &mut self,
+            identifier: &'a str,
+            id: usize,
+            return_type: BoundDataType,
+            parameters: Vec<BoundVariable>,
+        ) {
+            self.function_definitions.insert(
+                identifier,
+                FunctionDefinitionDescriptor::new(id, return_type, parameters),
+            );
         }
 
-        pub fn function_mut(&mut self, identifier: &str) -> Option<&mut FunctionDescriptor> {
-            self.functions.get_mut(identifier)
+        pub fn get_function(&self, identifier: &str) -> Option<&FunctionDefinitionDescriptor> {
+            self.function_definitions.get(identifier)
+        }
+
+        pub fn get_function_mut(
+            &mut self,
+            identifier: &str,
+        ) -> Option<&mut FunctionDefinitionDescriptor> {
+            self.function_definitions.get_mut(identifier)
         }
 
         pub fn has_function(&self, identifier: &str) -> bool {
-            self.functions.contains_key(identifier)
+            self.function_definitions.contains_key(identifier)
         }
 
         fn declare_variable(
@@ -1929,7 +2000,7 @@ mod analysis {
             ident: &'a str,
             is_parameter: bool,
         ) {
-            let variable_descriptor = VariableDescriptor::new(
+            let variable_descriptor = VariableDeclarationDescriptor::new(
                 id,
                 self.stack_position,
                 modifiers,
@@ -1937,7 +2008,19 @@ mod analysis {
                 is_parameter,
             );
             self.stack_position += variable_descriptor.data_type().size();
-            self.variables.insert(ident, variable_descriptor);
+            self.variable_declarations
+                .insert(ident, variable_descriptor);
+        }
+
+        pub fn get_variable(&self, identifier: &str) -> Option<&VariableDeclarationDescriptor> {
+            self.variable_declarations.get(identifier)
+        }
+
+        pub fn get_variable_mut(
+            &mut self,
+            identifier: &str,
+        ) -> Option<&mut VariableDeclarationDescriptor> {
+            self.variable_declarations.get_mut(identifier)
         }
 
         pub fn stack_position(&self) -> usize {
@@ -1945,7 +2028,32 @@ mod analysis {
         }
     }
 
-    impl VariableDescriptor {
+    impl StructDefinitionDescriptor {
+        pub fn new(id: usize, fields: Vec<(String, BoundDataType)>) -> Self {
+            Self { id, fields }
+        }
+
+        pub fn id(&self) -> usize {
+            self.id
+        }
+        pub fn fields(&self) -> &Vec<(String, BoundDataType)> {
+            &self.fields
+        }
+        pub fn size(&self) -> usize {
+            self.fields()
+                .iter()
+                .map(|(_, data_type)| data_type.size())
+                .sum()
+        }
+    }
+
+    impl StructDeclarationDescriptor {
+        pub fn new(id: usize, fields: Vec<(String, BoundExpression)>) -> Self {
+            Self { id, fields }
+        }
+    }
+
+    impl VariableDeclarationDescriptor {
         pub fn new(
             id: usize,
             stack_position: usize,
@@ -1954,7 +2062,7 @@ mod analysis {
             is_parameter: bool,
         ) -> Self {
             Self {
-                variable_id: id,
+                id,
                 stack_position,
                 data_type,
                 modifiers,
@@ -2001,8 +2109,8 @@ mod analysis {
                 DataType::Nopp => Ok(BoundDataType::Nopp),
                 DataType::Ratio => Ok(BoundDataType::Ratio),
                 DataType::Struct(name) => {
-                    if let Some(a_struct) = value.1.find_struct(name) {
-                        return Ok(a_struct.data_type.clone());
+                    if let Some(a_struct) = value.1.find_struct_definition(name).1 {
+                        return Ok(BoundDataType::Struct(name.clone(), a_struct.size()));
                     }
                     Err(BoundDataTypeError {
                         reason: format!("Unknown struct {name}"),
@@ -2013,9 +2121,9 @@ mod analysis {
         }
     }
 
-    impl FunctionDescriptor {
+    impl FunctionDefinitionDescriptor {
         pub fn new(id: usize, return_type: BoundDataType, parameters: Vec<BoundVariable>) -> Self {
-            FunctionDescriptor {
+            FunctionDefinitionDescriptor {
                 id,
                 return_type,
                 parameters,
@@ -2508,7 +2616,7 @@ pub mod compiler {
         }
 
         fn analyze<'a>(
-            translation_unit: &TranslationUnit<'a>,
+            translation_unit: &'a TranslationUnit<'a>,
             error_diag: &rc::Rc<cell::RefCell<ErrorDiagnosis<'a, '_>>>,
         ) -> Result<BoundTranslationUnit, SyntaxError> {
             SemanticAnalyzer::new(rc::Rc::clone(error_diag)).analyze(translation_unit)
