@@ -5,7 +5,8 @@ use std::{cell, collections, fs, io, rc};
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable, SymbolTable,
+    BoundDataType, BoundDataTypeError, BoundLiteralValue, BoundTranslationUnit, BoundVariable,
+    SymbolTable,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
@@ -375,6 +376,23 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         }
     }
 
+    pub fn declare_variable(
+        &mut self,
+        position: (u32, u32),
+        modifiers: Vec<Modifier>,
+        data_type: BoundDataType,
+        ident: &'a str,
+        is_parameter: bool,
+    ) {
+        if self.symbol_table().find_variable(ident).1.is_some() {
+            self.error_diag
+                .borrow_mut()
+                .variable_already_exists(position, ident);
+        }
+        self.symbol_table_mut()
+            .declare_variable(modifiers, data_type, ident, is_parameter)
+    }
+
     fn symbol_table_mut(&mut self) -> &mut SymbolTable<'a> {
         &mut self.symbol_table
     }
@@ -383,8 +401,16 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         &self.symbol_table
     }
 
-    fn to_bound_data_type(&self, data_type: &DataType) -> BoundDataType {
-        BoundDataType::from((data_type, self.symbol_table()))
+    fn to_bound_data_type(&self, data_type: &DataType, position: (u32, u32)) -> BoundDataType {
+        match BoundDataType::try_from((data_type, self.symbol_table())) {
+            Ok(data_type) => data_type,
+            Err(err) => {
+                self.error_diag
+                    .borrow_mut()
+                    .unknown_data_type(position, &err.reason);
+                err.dummy_data_type
+            }
+        }
     }
 
     fn to_bound_parameters(&self, parameters: &Vec<Variable<'a>>) -> Vec<BoundVariable> {
@@ -392,7 +418,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         parameters
             .iter()
             .map(|parameter| {
-                let data_type = self.to_bound_data_type(parameter.data_type());
+                let data_type =
+                    self.to_bound_data_type(parameter.data_type(), parameter.position());
                 let size = data_type.size();
                 current_size += size;
                 (
@@ -447,8 +474,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
         self.symbol_table_mut()
             .push_function_scope(function.identifier());
         function.parameters().iter().for_each(|parameter| {
-            let data_type = self.to_bound_data_type(parameter.data_type());
-            self.symbol_table_mut().declare_variable(
+            let data_type = self.to_bound_data_type(parameter.data_type(), parameter.position());
+            self.declare_variable(
+                parameter.position(),
                 parameter.modifiers().clone(),
                 data_type,
                 parameter.identifier(),
@@ -1005,7 +1033,7 @@ mod parser {
         position: (u32, u32),
         functions: Vec<Function<'a>>,
         global_statements: Vec<Statement<'a>>,
-        struct_declarations: Vec<Struct>,
+        struct_declarations: Vec<Struct<'a>>,
     }
 
     #[derive(Clone, Debug, Pos)]
@@ -1133,17 +1161,19 @@ mod parser {
         Const,
     }
 
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct Struct {
-        fields: Vec<StructField>,
-        ident: String,
+    #[derive(Clone, Debug, PartialEq, Pos)]
+    pub struct Struct<'a> {
+        position: (u32, u32),
+        fields: Vec<StructField<'a>>,
+        ident: &'a str,
     }
 
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct StructField {
+    #[derive(Clone, Debug, PartialEq, Pos)]
+    pub struct StructField<'a> {
+        position: (u32, u32),
         modifiers: Vec<Modifier>,
         data_type: DataType,
-        ident: String,
+        ident: &'a str,
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1154,7 +1184,7 @@ mod parser {
         P(char),
         Booba(bool),
         Yarn(&'a str),
-        Struct(&'a str, Vec<StructField>),
+        Struct(&'a str, Vec<StructField<'a>>),
     }
 
     #[derive(Clone, Debug, Pos, PartialEq)]
@@ -1220,7 +1250,7 @@ mod parser {
         pub fn new(
             functions: Vec<Function<'a>>,
             global_statements: Vec<Statement<'a>>,
-            struct_declarations: Vec<Struct>,
+            struct_declarations: Vec<Struct<'a>>,
         ) -> Self {
             TranslationUnit {
                 position: (1, 1),
@@ -1343,25 +1373,11 @@ mod parser {
         }
     }
 
-    impl DataType {
-        pub fn size(&self) -> usize {
-            match self {
-                DataType::Pp => 1,
-                DataType::Ratio => 2,
-                DataType::Flaccid => 1,
-                DataType::P => 1,
-                DataType::Booba => 1,
-                DataType::Nopp => 0,
-                DataType::Struct(_name) => 6969,
-                _ => panic!("Not yet implemented {self}"),
-            }
-        }
-    }
-
-    impl Struct {
-        pub fn new(ident: &str, fields: Vec<StructField>) -> Self {
+    impl<'a> Struct<'a> {
+        pub fn new(position: (u32, u32), ident: &'a str, fields: Vec<StructField<'a>>) -> Self {
             Self {
-                ident: String::from(ident),
+                position,
+                ident,
                 fields,
             }
         }
@@ -1374,12 +1390,18 @@ mod parser {
         }
     }
 
-    impl StructField {
-        pub fn new(modifiers: Vec<Modifier>, data_type: DataType, ident: &str) -> Self {
+    impl<'a> StructField<'a> {
+        pub fn new(
+            position: (u32, u32),
+            modifiers: Vec<Modifier>,
+            data_type: DataType,
+            ident: &'a str,
+        ) -> Self {
             Self {
+                position,
                 modifiers,
                 data_type,
-                ident: String::from(ident),
+                ident,
             }
         }
 
@@ -1590,6 +1612,10 @@ mod analysis {
             arguments_size: usize,
             arguments: Vec<BoundExpression>,
         },
+        StructDefinition {
+            identifier: usize,
+            definitions: Vec<(usize, BoundExpression)>,
+        },
     }
 
     #[derive(Eq, PartialEq, Hash, Clone, Debug)]
@@ -1715,7 +1741,7 @@ mod analysis {
         }
 
         pub fn initialize_variable(&mut self, identifier: &str) {
-            let (_, variable_descriptor) = self.variable_mut(identifier);
+            let (_, variable_descriptor) = self.find_variable_mut(identifier);
             if let Some(variable_descriptor) = variable_descriptor {
                 variable_descriptor.set_initialized();
             }
@@ -1774,10 +1800,14 @@ mod analysis {
         }
 
         pub fn current_function(&self) -> Option<&FunctionDescriptor> {
-            self.function(self.context.current_function?)
+            self.find_function(self.context.current_function?)
         }
 
-        pub fn function(&self, identifier: &str) -> Option<&FunctionDescriptor> {
+        pub fn find_struct(&self, identifier: &str) -> Option<&StructDescriptor> {
+            None
+        }
+
+        pub fn find_function(&self, identifier: &str) -> Option<&FunctionDescriptor> {
             self.scopes
                 .iter()
                 .rev()
@@ -1785,7 +1815,7 @@ mod analysis {
                 .function(identifier)
         }
 
-        pub fn variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor>) {
+        pub fn find_variable(&self, identifier: &str) -> (usize, Option<&VariableDescriptor>) {
             let mut level = 0;
             let mut cur = self.current_scope().function_identifier;
             for scope in self.scopes.iter().rev() {
@@ -1802,7 +1832,7 @@ mod analysis {
             (0, None)
         }
 
-        pub fn variable_mut(
+        pub fn find_variable_mut(
             &mut self,
             identifier: &str,
         ) -> (usize, Option<&mut VariableDescriptor>) {
@@ -1953,19 +1983,31 @@ mod analysis {
         }
     }
 
-    impl<'a> From<(&DataType, &SymbolTable<'a>)> for BoundDataType {
-        fn from(value: (&DataType, &SymbolTable<'a>)) -> Self {
+    #[derive(Debug)]
+    pub struct BoundDataTypeError {
+        pub reason: String,
+        pub dummy_data_type: BoundDataType,
+    }
+    impl<'a> TryFrom<(&DataType, &SymbolTable<'a>)> for BoundDataType {
+        type Error = BoundDataTypeError;
+        fn try_from(value: (&DataType, &SymbolTable<'a>)) -> Result<Self, Self::Error> {
             match value.0 {
-                DataType::Pp => BoundDataType::Pp,
-                DataType::AB => BoundDataType::AB,
-                DataType::Flaccid => BoundDataType::Flaccid,
-                DataType::P => BoundDataType::P,
-                DataType::Yarn => BoundDataType::Yarn,
-                DataType::Booba => BoundDataType::Booba,
-                DataType::Nopp => BoundDataType::Nopp,
-                DataType::Ratio => BoundDataType::Ratio,
+                DataType::Pp => Ok(BoundDataType::Pp),
+                DataType::AB => Ok(BoundDataType::AB),
+                DataType::Flaccid => Ok(BoundDataType::Flaccid),
+                DataType::P => Ok(BoundDataType::P),
+                DataType::Yarn => Ok(BoundDataType::Yarn),
+                DataType::Booba => Ok(BoundDataType::Booba),
+                DataType::Nopp => Ok(BoundDataType::Nopp),
+                DataType::Ratio => Ok(BoundDataType::Ratio),
                 DataType::Struct(name) => {
-                    todo!("Cannot convert to bound struct yet ({name})")
+                    if let Some(a_struct) = value.1.find_struct(name) {
+                        return Ok(a_struct.data_type.clone());
+                    }
+                    Err(BoundDataTypeError {
+                        reason: format!("Unknown struct {name}"),
+                        dummy_data_type: BoundDataType::Struct(name.clone(), 0),
+                    })
                 }
             }
         }
@@ -2494,7 +2536,7 @@ pub mod compiler {
             Emitter::new(rc::Rc::clone(error_diag)).emit_to_writer(
                 &mut io::BufWriter::new(fs::File::create(output_file)?),
                 translation_unit,
-                false,
+                true,
             )
         }
     }

@@ -595,7 +595,8 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn _struct_decl(&mut self) -> Option<Struct> {
+    fn _struct_decl(&mut self) -> Option<Struct<'a>> {
+        let position = self.position;
         self.expect(TokenKind::StructKeyword)?;
         let ident = self.expect(TokenKind::Identifier)?;
         self.expect(TokenKind::OpenBrace);
@@ -604,15 +605,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         while !self.matches_token_kind(TokenKind::CloseBrace)
             && !self.matches_token_kind(TokenKind::Eof)
         {
+            let position = self.position;
             let modifiers = self._modifiers();
             let data_type = self._data_type()?;
             self.expect(TokenKind::Arrow)?;
             let field_ident = self.expect(TokenKind::Identifier)?;
             self.expect(TokenKind::Comma)?;
-            struct_fields.push(StructField::new(modifiers, data_type, field_ident))
+            struct_fields.push(StructField::new(position, modifiers, data_type, field_ident))
         }
         self.expect(TokenKind::CloseBrace);
-        Some(Struct::new(ident, struct_fields))
+        Some(Struct::new(position, ident, struct_fields))
     }
 
     fn _expr(&mut self) -> Option<Expression<'a>> {

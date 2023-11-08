@@ -23,6 +23,10 @@ FUNc fibonacci(pp -> num) -> pp {
     # ok.b = 420420;
     # ok.c = 69696969;
 
+    {
+        pp -> aa = 0;
+        pp -> ok = 0;
+    }
     pp -> aa = 0;
     pp -> a = 0;
     ok = nom;
