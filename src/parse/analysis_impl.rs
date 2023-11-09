@@ -780,9 +780,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 return if let Some(struct_def) = struct_def {
                     let fields = definitions
                         .iter()
-                        .map(|field_assignment| {
-                            let bound_expr =
-                                self.analyze_expr(field_assignment.expression(), None, None);
+                        .zip(struct_def.fields())
+                        .map(|(field_assignment, field)| {
+                            let bound_expr = self.analyze_expr(
+                                field_assignment.expression(),
+                                Some(field.data_type()),
+                                Some(field_assignment.position()),
+                            );
                             BoundStructFieldAssignment::new(bound_expr.1)
                         })
                         .collect_vec();
@@ -816,8 +820,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             {
                                 let stack_pos = variable_descr.stack_position();
                                 let field_off = field.offset();
-                                dbg!(&stack_pos);
-                                dbg!(&field_off);
                                 return BoundExpression::StructFieldAccess(BoundVariable::new(
                                     variable_descrr.0,
                                     (stack_pos + field_off) as i32,
