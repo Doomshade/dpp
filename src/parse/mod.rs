@@ -1276,8 +1276,7 @@ mod parser {
         },
         StructFieldAccess {
             position: (u32, u32),
-            struct_identifier: &'a str,
-            field_identifier: &'a str,
+            identifiers: Vec<&'a str>,
         },
         Invalid {
             position: (u32, u32),
@@ -1497,11 +1496,9 @@ mod parser {
                 }
                 Expression::Invalid { .. } => "Invalid expression".to_string(),
                 Expression::StructDeclaration { identifier, .. } => format!("Struct {identifier}"),
-                Expression::StructFieldAccess {
-                    struct_identifier,
-                    field_identifier,
-                    ..
-                } => format!("Struct field access {struct_identifier}.{field_identifier}"),
+                Expression::StructFieldAccess { identifiers, .. } => {
+                    format!("Struct field access {}", identifiers.join("."))
+                }
             };
             write!(f, "{}", formatted)?;
             Ok(())

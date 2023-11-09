@@ -27,14 +27,24 @@ FUNc main() -> pp {
         400,
     };
 
+    struct File -> idk = bb(69123);
+
     pp -> a = 69;
     struct AHA -> zzz = EHH.a;
     pp -> by = aa(500, AHA {_TEST{}, 600, 700});
 
     # 300 + 100 + 1100
-    bye EHH.b + zzz.b + by;
+    bye idk.fd;
 }
 
 FUNc aa(pp -> a, struct AHA -> b) -> pp {
     bye a + b.b;
+}
+
+struct File {
+    pp -> fd,
+}
+
+FUNc bb(pp -> fd) -> struct File {
+    bye File {fd};
 }

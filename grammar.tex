@@ -111,12 +111,14 @@
         \alt <number>
         \alt <string>
         \alt `(' <expr> `)'
-        \alt <ident> [ <func-args> | <struct-flds> | <struct-fld-access> ]
+        \alt <ident-expr>
+
+        <ident-expr> ::= <ident> [ <func-args> | <struct-flds> | <struct-fld-access> ]
 
         <func-args> ::= `(' [ <expr> \{ `,' <expr> \}] `)'
 
         <struct-flds> ::= `{' \{ <expr> `,' \} `}'
 
-        <struct-fld-access> ::= `.' <ident>
+        <struct-fld-access> ::= \{ `.' <ident> \}
     \end{grammar}
 \end{document}

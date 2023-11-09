@@ -1,0 +1,25 @@
+struct Booba {
+    booba -> has_both_booba
+}
+
+struct Me {
+    struct Booba -> _booba
+}
+
+FUNc main() -> pp {
+    pp -> ret_val;
+    struct Booba -> bubers_booba = Booba {
+        yem
+    };
+    struct Me -> bubers = Me {
+        bubers_booba
+    };
+
+    struct Booba -> bubers_booba_copy = bubers._booba;
+    if (bubers_booba_copy.has_both_booba) {
+        ret_val = 69;
+    } else {
+        ret_val = 420;
+    }
+    bye ret_val;
+}

@@ -637,18 +637,17 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     Some(BoundDataType::Struct(String::from(*identifier), 0))
                 }
             }
-            Expression::StructFieldAccess {
-                struct_identifier,
-                field_identifier,
-                ..
-            } => {
+            Expression::StructFieldAccess { identifiers, .. } => {
+                // TODO: There can be more than one access.
+                let struct_identifier = identifiers.get(0).unwrap();
                 let var_decl = self
                     .symbol_table()
-                    .find_variable_declaration(*struct_identifier);
+                    .find_variable_declaration(struct_identifier);
                 if let Some(var_decl) = var_decl.1 {
                     if let BoundDataType::Struct(ident, size) = var_decl.data_type() {
                         let struct_decl = self.symbol_table().find_struct_definition(ident);
                         if let Some(struct_decl) = struct_decl.1 {
+                            let field_identifier = identifiers.get(1).unwrap();
                             if let Some(field) = struct_decl
                                 .fields()
                                 .iter()
@@ -743,12 +742,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
-                    BoundExpression::Variable(BoundVariable::new(
-                        0,
-                        0,
-                        BoundDataType::Pp,
-                        true,
-                    ))
+                    BoundExpression::Variable(BoundVariable::new(0, 0, BoundDataType::Pp, true))
                 }
             }
             Expression::FunctionCall {
@@ -773,7 +767,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .iter()
                         .zip(function.parameters())
                         .map(|(arg, param)| {
-                            self.analyze_expr(arg, Some(param.data_type()), Some(arg.position())).1
+                            self.analyze_expr(arg, Some(param.data_type()), Some(arg.position()))
+                                .1
                         })
                         .collect_vec();
                     BoundExpression::FunctionCall {
@@ -830,9 +825,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
             Expression::StructFieldAccess {
                 position,
-                struct_identifier,
-                field_identifier,
+                identifiers,
             } => {
+                let struct_identifier = identifiers.get(0).unwrap();
+                let field_identifier = identifiers.get(1).unwrap();
                 let variable_descrr = self
                     .symbol_table()
                     .find_variable_declaration(*struct_identifier);
