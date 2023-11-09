@@ -78,7 +78,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _transl_unit(&mut self) -> TranslationUnit<'a> {
         let mut functions = Vec::<Function<'a>>::new();
         let mut variable_declarations = Vec::<Statement<'a>>::new();
-        let mut struct_declarations = Vec::<Struct>::new();
+        let mut struct_declarations = Vec::<Struct<'a>>::new();
         loop {
             if self.matches_token_kind(TokenKind::FUNcKeyword) {
                 if let Some(function) = self._function() {

@@ -5,7 +5,7 @@ use std::{cell, collections, fs, io, rc};
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundDataType, BoundExpression, BoundLiteralValue, BoundTranslationUnit, BoundVariable,
+    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable,
     SymbolTable,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
@@ -1395,11 +1395,11 @@ mod parser {
             }
         }
 
-        pub fn fields(&self) -> &Vec<StructField> {
+        pub fn fields(&self) -> &Vec<StructField<'a>> {
             &self.fields
         }
         pub fn ident(&self) -> &str {
-            &self.ident
+            self.ident
         }
     }
 
@@ -1425,7 +1425,7 @@ mod parser {
             &self.data_type
         }
         pub fn ident(&self) -> &str {
-            &self.ident
+            self.ident
         }
     }
 
@@ -1859,7 +1859,7 @@ mod analysis {
         fn find_in_scope<'b: 'a, T>(
             &'b self,
             identifier: &str,
-            getter: fn(&'a Scope, &str) -> Option<&'b T>,
+            getter: fn(&'a Scope<'a>, &str) -> Option<&'b T>,
         ) -> (usize, Option<&'b T>) {
             let mut level = 0;
             let mut cur = self.current_scope().function_identifier;
