@@ -851,10 +851,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _struct_fld_access(&mut self) -> Option<Vec<&'a str>> {
         let mut vec = Vec::new();
 
-        while self.token()?.kind() == TokenKind::Dot {
-            self.expect(TokenKind::Dot)?;
-            vec.push(self.expect(TokenKind::Identifier)?);
-        }
+        // TODO: Make this happen someday maybeeee.
+        // while self.token()?.kind() == TokenKind::Dot {
+        self.expect(TokenKind::Dot)?;
+        vec.push(self.expect(TokenKind::Identifier)?);
+        // }
 
         Some(vec)
     }

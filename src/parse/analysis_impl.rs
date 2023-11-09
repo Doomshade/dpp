@@ -638,13 +638,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
             }
             Expression::StructFieldAccess { identifiers, .. } => {
-                // TODO: There can be more than one access.
                 let struct_identifier = identifiers.get(0).unwrap();
                 let var_decl = self
                     .symbol_table()
                     .find_variable_declaration(struct_identifier);
                 if let Some(var_decl) = var_decl.1 {
-                    if let BoundDataType::Struct(ident, size) = var_decl.data_type() {
+                    if let BoundDataType::Struct(ident, _) = var_decl.data_type() {
                         let struct_decl = self.symbol_table().find_struct_definition(ident);
                         if let Some(struct_decl) = struct_decl.1 {
                             let field_identifier = identifiers.get(1).unwrap();

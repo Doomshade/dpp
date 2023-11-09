@@ -138,7 +138,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         self.insert_error_message(
             position,
             format!(
-                "Struct \"{struct_identifier}\" expects {expected_size} fields, got {got_size}"
+                "Struct \"{struct_identifier}\" expects {expected_size} field(s), got {got_size}."
             )
             .as_str(),
         );

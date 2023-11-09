@@ -1,25 +1,22 @@
-struct Booba {
-    booba -> has_both_booba
+struct File {
+    pp -> fd,
 }
 
-struct Me {
-    struct Booba -> _booba
+struct FileDef {
+    struct File -> next,
+    struct File -> prev,
 }
 
 FUNc main() -> pp {
-    pp -> ret_val;
-    struct Booba -> bubers_booba = Booba {
-        yem
+    struct File -> root = File {
+        68,
     };
-    struct Me -> bubers = Me {
-        bubers_booba
-    };
+    struct File -> transform_fd = transform_fd(root);
+    bye transform_fd.fd;
+}
 
-    struct Booba -> bubers_booba_copy = bubers._booba;
-    if (bubers_booba_copy.has_both_booba) {
-        ret_val = 69;
-    } else {
-        ret_val = 420;
-    }
-    bye ret_val;
+FUNc transform_fd(struct File -> root,) -> struct File {
+    bye File {
+        root.fd + 1
+    };
 }
