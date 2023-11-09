@@ -54,13 +54,20 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .borrow_mut()
                         .struct_already_exists(a_struct.position(), a_struct.ident());
                 } else {
+                    let mut current_offset = 0;
                     let vec = a_struct
                         .fields()
                         .iter()
                         .map(|field| {
-                            (
+                            let offset = current_offset;
+                            let bound_data_type =
+                                self.to_bound_data_type(field.data_type(), field.position());
+                            current_offset += bound_data_type.size();
+                            BoundStructField::new(
+                                Vec::new(),
+                                bound_data_type,
                                 String::from(field.ident()),
-                                self.to_bound_data_type(field.data_type(), field.position()),
+                                offset,
                             )
                         })
                         .collect_vec();
@@ -605,10 +612,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 .symbol_table()
                 .find_function_definition(identifier)
                 .map(|function| function.return_type().clone()),
-            Expression::Struct { identifier, .. } => {
-                let struct_decl = self.symbol_table().find_struct_definition(*identifier);
-                if let Some(struct_def_descr) = struct_decl.1 {
-                    Some(BoundDataType::Struct(String::from(*identifier), struct_def_descr.size()))
+            Expression::StructDeclaration { identifier, .. } => {
+                let struct_def = self.symbol_table().find_struct_definition(*identifier);
+                if let Some(struct_def_descr) = struct_def.1 {
+                    Some(BoundDataType::Struct(
+                        String::from(*identifier),
+                        struct_def_descr.size(),
+                    ))
                 } else {
                     self.error_diag
                         .borrow_mut()
@@ -616,7 +626,51 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     Some(BoundDataType::Struct(String::from(*identifier), 0))
                 }
             }
-            _ => None,
+            Expression::StructFieldAccess {
+                struct_identifier,
+                field_identifier,
+                ..
+            } => {
+                let var_decl = self
+                    .symbol_table()
+                    .find_variable_declaration(*struct_identifier);
+                if let Some(var_decl) = var_decl.1 {
+                    if let BoundDataType::Struct(ident, size) = var_decl.data_type() {
+                        let struct_decl = self.symbol_table().find_struct_definition(ident);
+                        if let Some(struct_decl) = struct_decl.1 {
+                            if let Some(field) = struct_decl
+                                .fields()
+                                .iter()
+                                .find(|field| field.ident() == *field_identifier)
+                            {
+                                return Some(field.data_type().clone());
+                            } else {
+                                self.error_diag.borrow_mut().struct_field_not_found(
+                                    expr.position(),
+                                    *struct_identifier,
+                                    *field_identifier,
+                                );
+                            }
+                        } else {
+                            self.error_diag
+                                .borrow_mut()
+                                .struct_does_not_exist(expr.position(), *struct_identifier);
+                        }
+                    } else {
+                        self.error_diag.borrow_mut().invalid_data_type(
+                            expr.position(),
+                            &BoundDataType::Struct(String::from(*struct_identifier), 0),
+                            var_decl.data_type(),
+                        );
+                    }
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_not_found(expr.position(), *struct_identifier);
+                }
+                None
+            }
+            _ => todo!("AA"),
         };
     }
 
@@ -645,7 +699,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 LiteralValue::P(p) => BoundLiteralValue::P(*p),
                 LiteralValue::Booba(booba) => BoundLiteralValue::Booba(*booba),
                 LiteralValue::Yarn(yarn) => BoundLiteralValue::Yarn(String::from(*yarn)),
-                _ => todo!("SIGH"),
+                _ => panic!("lol"),
             }),
             Expression::Unary { op, operand, .. } => BoundExpression::Unary {
                 op: op.clone(),
@@ -668,7 +722,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             .variable_not_initialized(*position, identifier);
                     }
 
-                    BoundExpression::Variable(BoundVariable::new(
+                    BoundExpression::VariableDeclaration(BoundVariable::new(
                         level,
                         variable.stack_position() as i32,
                         variable.data_type().size(),
@@ -678,7 +732,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
-                    BoundExpression::Variable(BoundVariable::new(
+                    BoundExpression::VariableDeclaration(BoundVariable::new(
                         0,
                         0,
                         BoundDataType::Pp.size(),
@@ -716,7 +770,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             Expression::Invalid { .. } => {
                 unreachable!("Should have thrown syntax error after parsing")
             }
-            Expression::Struct {
+            Expression::StructDeclaration {
                 position,
                 definitions,
                 identifier,
@@ -727,17 +781,73 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let fields = definitions
                         .iter()
                         .map(|field_assignment| {
-                            let bound_expr = self.analyze_expr(field_assignment.expression(), None, None);
+                            let bound_expr =
+                                self.analyze_expr(field_assignment.expression(), None, None);
                             BoundStructFieldAssignment::new(bound_expr.1)
                         })
                         .collect_vec();
-                    BoundExpression::Struct(fields)
+                    BoundExpression::StructDeclaration(fields)
                 } else {
                     self.error_diag
                         .borrow_mut()
                         .struct_does_not_exist(*position, *identifier);
-                    BoundExpression::Struct(Vec::new())
+                    BoundExpression::StructDeclaration(Vec::new())
                 };
+            }
+            Expression::StructFieldAccess {
+                position,
+                struct_identifier,
+                field_identifier,
+            } => {
+                let variable_descrr = self
+                    .symbol_table()
+                    .find_variable_declaration(*struct_identifier);
+
+                // Find the struct variable.
+                if let Some(variable_descr) = variable_descrr.1 {
+                    // Make sure it has the right data type.
+                    if let BoundDataType::Struct(ident, size) = variable_descr.data_type() {
+                        let struct_descr = self.symbol_table().find_struct_definition(ident);
+                        if let Some(struct_descr) = struct_descr.1 {
+                            if let Some(field) = struct_descr
+                                .fields()
+                                .iter()
+                                .find(|field| field.ident() == *field_identifier)
+                            {
+                                let stack_pos = variable_descr.stack_position();
+                                let field_off = field.offset();
+                                dbg!(&stack_pos);
+                                dbg!(&field_off);
+                                return BoundExpression::StructFieldAccess(BoundVariable::new(
+                                    variable_descrr.0,
+                                    (stack_pos + field_off) as i32,
+                                    field.data_type().size(),
+                                    false,
+                                ));
+                            } else {
+                                self.error_diag.borrow_mut().struct_field_not_found(
+                                    *position,
+                                    *struct_identifier,
+                                    *field_identifier,
+                                );
+                            }
+                        } else {
+                            // TODO: Not sure whether some error should be here. If the struct
+                            // is not defined there's an error somewhere else as well.
+                        }
+                    } else {
+                        self.error_diag.borrow_mut().invalid_data_type(
+                            *position,
+                            &BoundDataType::Struct(String::from(*struct_identifier), 0),
+                            variable_descr.data_type(),
+                        );
+                    }
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_not_found(*position, struct_identifier);
+                }
+                BoundExpression::StructFieldAccess(BoundVariable::new(0, 0, 0, false))
             }
         }
     }

@@ -757,7 +757,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let identifier = self.expect(TokenKind::Identifier)?;
                 match self.token()?.kind() {
                     TokenKind::OpenParen => {
-                        let arguments = self._args()?;
+                        let arguments = self._func_args()?;
                         Some(Expression::FunctionCall {
                             position,
                             identifier,
@@ -765,24 +765,21 @@ impl<'a, 'b> Parser<'a, 'b> {
                         })
                     }
                     TokenKind::OpenBrace => {
-                        self.expect(TokenKind::OpenBrace)?;
-                        let mut definitions = Vec::new();
-                        while !self.matches_token_kind(TokenKind::CloseBrace)
-                            && !self.matches_token_kind(TokenKind::Eof)
-                        {
-                            let position = self.position;
-                            let field_expr = self._expr()?;
-                            self.expect(TokenKind::Comma);
-                            definitions.push(StructFieldAssignment::new(
-                                position,
-                                field_expr,
-                            ));
-                        }
-                        self.expect(TokenKind::CloseBrace)?;
-                        Some(Expression::Struct {
+                        let definitions = self._struct_flds()?;
+
+                        Some(Expression::StructDeclaration {
                             position,
                             identifier,
                             definitions,
+                        })
+                    }
+                    TokenKind::Dot => {
+                        let field_identifier = self._struct_fld_access()?;
+
+                        Some(Expression::StructFieldAccess {
+                            position,
+                            struct_identifier: identifier,
+                            field_identifier,
                         })
                     }
                     _ => Some(Expression::Identifier {
@@ -854,7 +851,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn _args(&mut self) -> Option<Vec<Expression<'a>>> {
+    fn _func_args(&mut self) -> Option<Vec<Expression<'a>>> {
         self.expect(TokenKind::OpenParen)?;
         let mut args = Vec::<Expression<'a>>::new();
 
@@ -873,5 +870,31 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         self.expect(TokenKind::CloseParen)?;
         Some(args)
+    }
+
+    fn _struct_flds(&mut self) -> Option<Vec<StructFieldAssignment<'a>>> {
+        self.expect(TokenKind::OpenBrace)?;
+        let mut definitions = Vec::new();
+
+        if self.matches_token_kind(TokenKind::CloseBrace) {
+            self.expect(TokenKind::CloseBrace)?;
+            return Some(definitions);
+        }
+
+        while !self.matches_token_kind(TokenKind::CloseBrace)
+            && !self.matches_token_kind(TokenKind::Eof)
+        {
+            let position = self.position;
+            let field_expr = self._expr()?;
+            self.expect(TokenKind::Comma);
+            definitions.push(StructFieldAssignment::new(position, field_expr));
+        }
+        self.expect(TokenKind::CloseBrace)?;
+        Some(definitions)
+    }
+
+    fn _struct_fld_access(&mut self) -> Option<&'a str> {
+        self.expect(TokenKind::Dot)?;
+        self.expect(TokenKind::Identifier)
     }
 }

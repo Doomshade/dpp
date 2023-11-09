@@ -128,6 +128,15 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
+    pub fn struct_field_not_found(&mut self, position: (u32, u32),
+                                  struct_identifier: &str, field_identifier: &str) {
+        self.insert_error_message(
+            position,
+            format!("Struct field \"{field_identifier}\" does not exist for struct named \
+            \"{struct_identifier}\".").as_str(),
+        );
+    }
+
     pub fn invalid_number_of_arguments(
         &mut self,
         position: (u32, u32),

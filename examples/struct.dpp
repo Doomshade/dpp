@@ -1,14 +1,26 @@
-struct TEST {
+struct AHA {
     pp -> a,
+}
+
+struct TEST {
+    struct AHA -> a,
     pp -> b,
+    pp -> c,
 }
 
 FUNc main() -> pp {
+    pp -> c = 123;
+    struct AHA -> OHO = AHA {
+        456,
+    };
+
     struct TEST -> EHH = TEST {
-        69,
-        69,
+        OHO,
+        67,
+        123,
     };
     pp -> a = 69;
-    pp -> b = 6969;
-    bye a + b;
+    struct AHA -> zzz = EHH.a;
+
+    bye EHH.b + zzz.a;
 }

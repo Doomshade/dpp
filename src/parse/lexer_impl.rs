@@ -52,7 +52,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             '0'..='9' => self.number(),
             '"' => self.yarn(),
             ' ' | '\t' | '\n' | '\r' => self.whitespace(),
-            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' => self.punctuation(),
+            ';' | '(' | ')' | '{' | '}' | ',' | '[' | ']' | ':' | '.' => self.punctuation(),
             '+' | '-' | '*' | '/' | '%' | '^' | '=' | '<' | '>' | '!' | '&' | '|' | '~' => {
                 self.operator()
             }
@@ -231,6 +231,7 @@ impl<'a, 'b> Lexer<'a, 'b> {
             '}' => TokenKind::CloseBrace,
             '[' => TokenKind::OpenBracket,
             ']' => TokenKind::CloseBracket,
+            '.' => TokenKind::Dot,
             ',' => TokenKind::Comma,
             ':' => TokenKind::Colon,
             ';' => TokenKind::Semicolon,

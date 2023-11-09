@@ -111,8 +111,12 @@
         \alt <number>
         \alt <string>
         \alt `(' <expr> `)'
-        \alt <ident> [ ( `(' [ <args> ] `)' | `{' \{ <expr> `,' \} `}') ] // function call or struct definition
+        \alt <ident> [ <func-args> | <struct-flds> | <struct-fld-access> ]
 
-        <args> ::= <expr> \{ `,' <expr> \}
+        <func-args> ::= `(' [ <expr> \{ `,' <expr> \}] `)'
+
+        <struct-flds> ::= `{' \{ <expr> `,' \} `}'
+
+        <struct-fld-access> ::= `.' <ident>
     \end{grammar}
 \end{document}

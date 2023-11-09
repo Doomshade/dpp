@@ -676,7 +676,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     fn store(&mut self, level: usize, offset: i32, size: usize) {
-        for i in 0..size {
+        // Store in reverse order
+        // i.e. variable of size 4, for example 4 integers a, b, c, d: at the top of the stack
+        // is d. after storing there's c, then b and then a.
+        // In memory it's stored as [a|b|c|d] for easy access to structs and arrays for example.
+        for i in (0..size).rev() {
             self.emit_instruction(Instruction::Store {
                 level,
                 offset: offset + i as i32,
@@ -865,6 +869,7 @@ mod lexer {
         Semicolon,          // ;
         Ampersand,          // &
         Pipe,               // |
+        Dot,                // .
         Comma,              // ,
         IfKeyword,          // if
         LetKeyword,         // let
@@ -1002,6 +1007,7 @@ mod lexer {
                 Self::Literal(literal_kind) => {
                     return write!(f, "{literal_kind}");
                 }
+                Self::Dot => "\".\"",
             };
             write!(f, "{text_representation}")
         }
@@ -1183,7 +1189,6 @@ mod parser {
         P(char),
         Booba(bool),
         Yarn(&'a str),
-        Struct(&'a str, Vec<StructFieldAssignment<'a>>),
     }
 
     #[derive(Clone, Debug, Pos, PartialEq)]
@@ -1234,11 +1239,16 @@ mod parser {
             identifier: &'a str,
             arguments: Vec<Expression<'a>>,
         },
-        Struct {
+        StructDeclaration {
             position: (u32, u32),
             identifier: &'a str,
             // Identifier + expression.
             definitions: Vec<StructFieldAssignment<'a>>,
+        },
+        StructFieldAccess {
+            position: (u32, u32),
+            struct_identifier: &'a str,
+            field_identifier: &'a str,
         },
         Invalid {
             position: (u32, u32),
@@ -1457,7 +1467,12 @@ mod parser {
                     format!("Function {identifier}")
                 }
                 Expression::Invalid { .. } => "Invalid expression".to_string(),
-                Expression::Struct { identifier, .. } => format!("Struct {identifier}"),
+                Expression::StructDeclaration { identifier, .. } => format!("Struct {identifier}"),
+                Expression::StructFieldAccess {
+                    struct_identifier,
+                    field_identifier,
+                    ..
+                } => format!("Struct field access {struct_identifier}.{field_identifier}"),
             };
             write!(f, "{}", formatted)?;
             Ok(())
@@ -1473,7 +1488,6 @@ mod parser {
                 LiteralValue::P(p) => write!(f, "{p}"),
                 LiteralValue::Booba(booba) => write!(f, "{booba}"),
                 LiteralValue::Yarn(yarn) => write!(f, "{yarn}"),
-                LiteralValue::Struct(name, fields) => write!(f, "{name} {{ {fields:?} }}"),
             }
         }
     }
@@ -1559,13 +1573,8 @@ mod analysis {
     pub struct StructDefinitionDescriptor {
         id: usize,
         size: usize,
-        fields: Vec<(String, BoundDataType)>,
-    }
-
-    #[derive(Clone, PartialEq, Debug)]
-    pub struct StructDeclarationDescriptor {
-        id: usize,
-        fields: Vec<(String, BoundExpression)>,
+        // Offset + data type.
+        fields: Vec<BoundStructField>,
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1626,6 +1635,7 @@ mod analysis {
         modifiers: Vec<Modifier>,
         data_type: BoundDataType,
         ident: String,
+        offset: usize,
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1640,7 +1650,7 @@ mod analysis {
             op: BinaryOperator,
             rhs: Box<BoundExpression>,
         },
-        Variable(BoundVariable),
+        VariableDeclaration(BoundVariable),
         FunctionCall {
             level: usize,
             identifier: usize,
@@ -1648,7 +1658,8 @@ mod analysis {
             arguments_size: usize,
             arguments: Vec<BoundExpression>,
         },
-        Struct(Vec<BoundStructFieldAssignment>)
+        StructDeclaration(Vec<BoundStructFieldAssignment>),
+        StructFieldAccess(BoundVariable),
     }
 
     #[derive(PartialEq, Clone, Debug)]
@@ -1658,14 +1669,15 @@ mod analysis {
 
     impl BoundStructFieldAssignment {
         pub fn new(expression: BoundExpression) -> Self {
-            Self {
-                expression,
-            }
+            Self { expression }
         }
         pub fn expression(&self) -> &BoundExpression {
             &self.expression
         }
     }
+
+    #[derive(Eq, PartialEq, Hash, Clone, Debug)]
+    pub struct BoundStruct {}
 
     #[derive(Eq, PartialEq, Hash, Clone, Debug)]
     pub struct BoundVariable {
@@ -1829,7 +1841,7 @@ mod analysis {
             }
         }
 
-        pub fn define_struct(&mut self, ident: &'a str, fields: Vec<(String, BoundDataType)>) {
+        pub fn define_struct(&mut self, ident: &'a str, fields: Vec<BoundStructField>) {
             let id = self.next_id();
             self.current_scope_mut().define_struct(ident, id, fields);
         }
@@ -1975,7 +1987,7 @@ mod analysis {
             &mut self,
             identifier: &'a str,
             id: usize,
-            fields: Vec<(String, BoundDataType)>,
+            fields: Vec<BoundStructField>,
         ) {
             self.struct_definitions
                 .insert(identifier, StructDefinitionDescriptor::new(id, fields));
@@ -2057,28 +2069,19 @@ mod analysis {
     }
 
     impl StructDefinitionDescriptor {
-        pub fn new(id: usize, fields: Vec<(String, BoundDataType)>) -> Self {
-            let size = fields.iter().map(|(_, data_type)| data_type.size()).sum();
+        pub fn new(id: usize, fields: Vec<BoundStructField>) -> Self {
+            let size = fields.iter().map(|field| field.data_type().size()).sum();
             Self { id, fields, size }
         }
 
         pub fn id(&self) -> usize {
             self.id
         }
-        pub fn fields(&self) -> &Vec<(String, BoundDataType)> {
+        pub fn fields(&self) -> &Vec<BoundStructField> {
             &self.fields
         }
         pub fn size(&self) -> usize {
-            self.fields()
-                .iter()
-                .map(|(_, data_type)| data_type.size())
-                .sum()
-        }
-    }
-
-    impl StructDeclarationDescriptor {
-        pub fn new(id: usize, fields: Vec<(String, BoundExpression)>) -> Self {
-            Self { id, fields }
+            self.size
         }
     }
 
@@ -2374,11 +2377,17 @@ mod analysis {
     }
 
     impl BoundStructField {
-        pub fn new(modifiers: Vec<Modifier>, data_type: BoundDataType, ident: String) -> Self {
+        pub fn new(
+            modifiers: Vec<Modifier>,
+            data_type: BoundDataType,
+            ident: String,
+            offset: usize,
+        ) -> Self {
             Self {
                 modifiers,
                 data_type,
                 ident,
+                offset,
             }
         }
 
@@ -2390,6 +2399,9 @@ mod analysis {
         }
         pub fn ident(&self) -> &str {
             &self.ident
+        }
+        pub fn offset(&self) -> usize {
+            self.offset
         }
     }
 }
