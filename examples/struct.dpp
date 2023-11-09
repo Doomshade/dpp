@@ -4,10 +4,10 @@ struct TEST {
 }
 
 FUNc main() -> pp {
-    # struct TEST -> EHH = TEST {
-    #     a = 69,
-    #     b = 69,
-    # };
+    struct TEST -> EHH = TEST {
+        69,
+        69,
+    };
     pp -> a = 69;
     pp -> b = 6969;
     bye a + b;

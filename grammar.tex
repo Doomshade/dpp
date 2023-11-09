@@ -111,7 +111,7 @@
         \alt <number>
         \alt <string>
         \alt `(' <expr> `)'
-        \alt <ident> [ ( `(' [ <args> ] `)' | `{' \{ <ident> `=' <expr> `,' \} `}') ] // function call or struct definition
+        \alt <ident> [ ( `(' [ <args> ] `)' | `{' \{ <expr> `,' \} `}') ] // function call or struct definition
 
         <args> ::= <expr> \{ `,' <expr> \}
     \end{grammar}

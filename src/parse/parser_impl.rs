@@ -771,13 +771,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                             && !self.matches_token_kind(TokenKind::Eof)
                         {
                             let position = self.position;
-                            let field_ident = self.expect(TokenKind::Identifier)?;
-                            self.expect(TokenKind::Equal);
                             let field_expr = self._expr()?;
                             self.expect(TokenKind::Comma);
                             definitions.push(StructFieldAssignment::new(
                                 position,
-                                field_ident,
                                 field_expr,
                             ));
                         }

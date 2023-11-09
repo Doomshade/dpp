@@ -742,9 +742,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
             BoundLiteralValue::Yarn(_yarn) => {
                 todo!("Not yet implemented");
             }
-            BoundLiteralValue::Struct(_, _) => {
-                todo!("Not yet implemented");
-            }
         }
     }
 }
@@ -1192,24 +1189,19 @@ mod parser {
     #[derive(Clone, Debug, Pos, PartialEq)]
     pub struct StructFieldAssignment<'a> {
         position: (u32, u32),
-        ident: &'a str,
         expression: Expression<'a>,
     }
 
     impl<'a> StructFieldAssignment<'a> {
-        pub fn new(position: (u32, u32), ident: &'a str, expression: Expression<'a>) -> Self {
+        pub fn new(position: (u32, u32), expression: Expression<'a>) -> Self {
             Self {
                 position,
-                ident,
                 expression,
             }
         }
 
         pub fn position(&self) -> (u32, u32) {
             self.position
-        }
-        pub fn ident(&self) -> &'a str {
-            self.ident
         }
         pub fn expression(&self) -> &Expression<'a> {
             &self.expression
@@ -1615,7 +1607,7 @@ mod analysis {
 
     #[derive(Clone, PartialEq, Debug)]
     pub struct BoundVariableAssignment {
-        pub position: BoundVariable,
+        pub variable: BoundVariable,
         pub value: BoundExpression,
     }
 
@@ -1627,7 +1619,6 @@ mod analysis {
         P(char),
         Booba(bool),
         Yarn(String),
-        Struct(String, Vec<BoundStructFieldAssignment>),
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1657,29 +1648,22 @@ mod analysis {
             arguments_size: usize,
             arguments: Vec<BoundExpression>,
         },
-        Struct {
-            identifier: usize,
-            size: usize,
-            fields: Vec<(String, (BoundDataType, BoundExpression))>,
-        },
+        Struct(Vec<BoundStructFieldAssignment>)
     }
 
-    #[derive(PartialEq,Clone, Debug)]
+    #[derive(PartialEq, Clone, Debug)]
     pub struct BoundStructFieldAssignment {
-        level: usize,
-        offset: i32,
-        size: usize,
         expression: BoundExpression,
     }
 
     impl BoundStructFieldAssignment {
-        pub fn new(level: usize, offset: i32, size: usize, expression: BoundExpression) -> Self {
+        pub fn new(expression: BoundExpression) -> Self {
             Self {
-                level,
-                offset,
-                size,
                 expression,
             }
+        }
+        pub fn expression(&self) -> &BoundExpression {
+            &self.expression
         }
     }
 
@@ -2075,11 +2059,7 @@ mod analysis {
     impl StructDefinitionDescriptor {
         pub fn new(id: usize, fields: Vec<(String, BoundDataType)>) -> Self {
             let size = fields.iter().map(|(_, data_type)| data_type.size()).sum();
-            Self {
-                id,
-                fields,
-                size,
-            }
+            Self { id, fields, size }
         }
 
         pub fn id(&self) -> usize {
@@ -2275,11 +2255,11 @@ mod analysis {
     }
 
     impl BoundVariableAssignment {
-        pub fn new(position: BoundVariable, value: BoundExpression) -> Self {
-            BoundVariableAssignment { position, value }
+        pub fn new(variable: BoundVariable, value: BoundExpression) -> Self {
+            BoundVariableAssignment { variable, value }
         }
-        pub fn position(&self) -> &BoundVariable {
-            &self.position
+        pub fn variable(&self) -> &BoundVariable {
+            &self.variable
         }
         pub fn value(&self) -> &BoundExpression {
             &self.value

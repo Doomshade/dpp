@@ -64,9 +64,9 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
-    fn emit_variable_assignment(&mut self, variable: &BoundVariableAssignment) {
-        self.emit_expression(variable.value());
-        self.store_variable(variable.position());
+    fn emit_variable_assignment(&mut self, assignment: &BoundVariableAssignment) {
+        self.emit_expression(assignment.value());
+        self.store_variable(assignment.variable());
     }
 
     /// # Summary
@@ -322,7 +322,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     UnaryOperator::Negate => self.emit_operation(OperationType::Negate),
                 }
             }
-             BoundExpression::Struct { identifier, fields, size } => {
+             BoundExpression::Struct(fields) => {
+                 for field in fields {
+                     self.emit_expression(field.expression());
+                 }
              }
             _ => todo!("Not implemented {expression:?}"),
         }

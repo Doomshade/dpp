@@ -724,29 +724,19 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 let struct_def = self.symbol_table().find_struct_definition(*identifier).1;
 
                 return if let Some(struct_def) = struct_def {
-                    let mut size = 0;
                     let fields = definitions
                         .iter()
                         .map(|field_assignment| {
                             let bound_expr = self.analyze_expr(field_assignment.expression(), None, None);
-                            (String::from(field_assignment.ident()), (bound_expr.0.unwrap(), bound_expr.1))
+                            BoundStructFieldAssignment::new(bound_expr.1)
                         })
-                        .inspect(|(_, (data_type, _))| size += data_type.size())
                         .collect_vec();
-                    BoundExpression::Struct {
-                        identifier: struct_def.id(),
-                        fields,
-                        size,
-                    }
+                    BoundExpression::Struct(fields)
                 } else {
                     self.error_diag
                         .borrow_mut()
                         .struct_does_not_exist(*position, *identifier);
-                    BoundExpression::Struct {
-                        identifier: 0,
-                        size: 0,
-                        fields: Vec::new(),
-                    }
+                    BoundExpression::Struct(Vec::new())
                 };
             }
         }
