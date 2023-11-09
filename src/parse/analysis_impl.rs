@@ -3,7 +3,8 @@ use itertools::Itertools;
 
 use crate::parse::analysis::{
     BoundCase, BoundDataType, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
-    BoundStructField, BoundTranslationUnit, BoundVariable, BoundVariableAssignment,
+    BoundStructField, BoundStructFieldAssignment, BoundTranslationUnit, BoundVariable,
+    BoundVariableAssignment,
 };
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
@@ -229,7 +230,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let position = BoundVariable::new(
                         level,
                         var_decl.stack_position() as i32,
-                        var_decl.data_type().clone(),
+                        var_decl.data_type().size(),
                         var_decl.has_modifier(Modifier::Const),
                     );
                     let data_type =
@@ -384,7 +385,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let data_type = variable.data_type().clone();
                     self.symbol_table_mut().initialize_variable(identifier);
 
-                    let position = BoundVariable::new(level, offset as i32, data_type, is_const);
+                    let position =
+                        BoundVariable::new(level, offset as i32, data_type.size(), is_const);
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         position,
                         expression.1,
@@ -461,7 +463,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut().pop_scope();
 
                 BoundStatement::For {
-                    ident_position: BoundVariable::new(level, offset as i32, data_type, is_const),
+                    ident_position: BoundVariable::new(
+                        level,
+                        offset as i32,
+                        data_type.size(),
+                        is_const,
+                    ),
                     ident_expression: bound_ident_expression.map(|exp| exp.1),
                     length_expression: bound_length_expression.1,
                     statement: Box::new(bound_statement),
@@ -534,16 +541,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 LiteralValue::P(_) => BoundDataType::P,
                 LiteralValue::Booba(_) => BoundDataType::Booba,
                 LiteralValue::Yarn(_) => BoundDataType::Yarn,
-                LiteralValue::Struct(name, fields) => BoundDataType::Struct(
-                    String::from(*name),
-                    fields
-                        .iter()
-                        .map(|field| {
-                            self.to_bound_data_type(field.data_type(), field.position())
-                                .size()
-                        })
-                        .sum(),
-                ),
+                _ => todo!("SIGH"),
             }),
             Expression::Unary {
                 operand,
@@ -607,11 +605,17 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 .symbol_table()
                 .find_function_definition(identifier)
                 .map(|function| function.return_type().clone()),
-            Expression::Struct { identifier, .. } => self
-                .symbol_table()
-                .find_struct_definition(*identifier)
-                .1
-                .map(|a_struct| BoundDataType::Struct(String::from(*identifier), a_struct.size())),
+            Expression::Struct { identifier, .. } => {
+                let struct_decl = self.symbol_table().find_struct_definition(*identifier);
+                if let Some(struct_def_descr) = struct_decl.1 {
+                    Some(BoundDataType::Struct(String::from(*identifier), struct_def_descr.size()))
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .struct_does_not_exist(expr.position(), *identifier);
+                    Some(BoundDataType::Struct(String::from(*identifier), 0))
+                }
+            }
             _ => None,
         };
     }
@@ -641,19 +645,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 LiteralValue::P(p) => BoundLiteralValue::P(*p),
                 LiteralValue::Booba(booba) => BoundLiteralValue::Booba(*booba),
                 LiteralValue::Yarn(yarn) => BoundLiteralValue::Yarn(String::from(*yarn)),
-                LiteralValue::Struct(name, fields) => BoundLiteralValue::Struct(
-                    String::from(*name),
-                    fields
-                        .iter()
-                        .map(|field| {
-                            BoundStructField::new(
-                                field.modifiers().clone(),
-                                self.to_bound_data_type(field.data_type(), field.position()),
-                                String::from(field.ident()),
-                            )
-                        })
-                        .collect_vec(),
-                ),
+                _ => todo!("SIGH"),
             }),
             Expression::Unary { op, operand, .. } => BoundExpression::Unary {
                 op: op.clone(),
@@ -679,14 +671,19 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     BoundExpression::Variable(BoundVariable::new(
                         level,
                         variable.stack_position() as i32,
-                        variable.data_type().clone(),
+                        variable.data_type().size(),
                         variable.has_modifier(Modifier::Const),
                     ))
                 } else {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
-                    BoundExpression::Variable(BoundVariable::new(0, 0, BoundDataType::Pp, true))
+                    BoundExpression::Variable(BoundVariable::new(
+                        0,
+                        0,
+                        BoundDataType::Pp.size(),
+                        true,
+                    ))
                 }
             }
             Expression::FunctionCall {
@@ -730,9 +727,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let mut size = 0;
                     let fields = definitions
                         .iter()
-                        .map(|(ident, expr)| {
-                            let bound_expr = self.analyze_expr(expr, None, None);
-                            (String::from(*ident), (bound_expr.0.unwrap(), bound_expr.1))
+                        .map(|field_assignment| {
+                            let bound_expr = self.analyze_expr(field_assignment.expression(), None, None);
+                            (String::from(field_assignment.ident()), (bound_expr.0.unwrap(), bound_expr.1))
                         })
                         .inspect(|(_, (data_type, _))| size += data_type.size())
                         .collect_vec();

@@ -432,7 +432,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     parameter.has_modifier(Modifier::Const),
                 )
             })
-            .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
+            .map(|(data_type, offset, is_const)| {
+                BoundVariable::new(0, offset, data_type.size(), is_const)
+            })
             .collect_vec()
     }
 
@@ -670,11 +672,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
     }
 
     fn store_variable(&mut self, variable: &BoundVariable) {
-        self.store(
-            variable.level(),
-            variable.offset(),
-            variable.data_type().size(),
-        );
+        self.store(variable.level(), variable.offset(), variable.size());
     }
 
     fn store(&mut self, level: usize, offset: i32, size: usize) {
@@ -1188,12 +1186,38 @@ mod parser {
         P(char),
         Booba(bool),
         Yarn(&'a str),
-        Struct(&'a str, Vec<StructField<'a>>),
+        Struct(&'a str, Vec<StructFieldAssignment<'a>>),
+    }
+
+    #[derive(Clone, Debug, Pos, PartialEq)]
+    pub struct StructFieldAssignment<'a> {
+        position: (u32, u32),
+        ident: &'a str,
+        expression: Expression<'a>,
+    }
+
+    impl<'a> StructFieldAssignment<'a> {
+        pub fn new(position: (u32, u32), ident: &'a str, expression: Expression<'a>) -> Self {
+            Self {
+                position,
+                ident,
+                expression,
+            }
+        }
+
+        pub fn position(&self) -> (u32, u32) {
+            self.position
+        }
+        pub fn ident(&self) -> &'a str {
+            self.ident
+        }
+        pub fn expression(&self) -> &Expression<'a> {
+            &self.expression
+        }
     }
 
     #[derive(Clone, Debug, Pos, PartialEq)]
     pub enum Expression<'a> {
-        // TODO: Use LiteralExpression instead.
         Literal {
             position: (u32, u32),
             value: LiteralValue<'a>,
@@ -1222,7 +1246,7 @@ mod parser {
             position: (u32, u32),
             identifier: &'a str,
             // Identifier + expression.
-            definitions: Vec<(&'a str, Expression<'a>)>,
+            definitions: Vec<StructFieldAssignment<'a>>,
         },
         Invalid {
             position: (u32, u32),
@@ -1542,6 +1566,7 @@ mod analysis {
     #[derive(Clone, PartialEq, Debug)]
     pub struct StructDefinitionDescriptor {
         id: usize,
+        size: usize,
         fields: Vec<(String, BoundDataType)>,
     }
 
@@ -1602,7 +1627,7 @@ mod analysis {
         P(char),
         Booba(bool),
         Yarn(String),
-        Struct(String, Vec<BoundStructField>),
+        Struct(String, Vec<BoundStructFieldAssignment>),
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1639,11 +1664,30 @@ mod analysis {
         },
     }
 
+    #[derive(PartialEq,Clone, Debug)]
+    pub struct BoundStructFieldAssignment {
+        level: usize,
+        offset: i32,
+        size: usize,
+        expression: BoundExpression,
+    }
+
+    impl BoundStructFieldAssignment {
+        pub fn new(level: usize, offset: i32, size: usize, expression: BoundExpression) -> Self {
+            Self {
+                level,
+                offset,
+                size,
+                expression,
+            }
+        }
+    }
+
     #[derive(Eq, PartialEq, Hash, Clone, Debug)]
     pub struct BoundVariable {
         level: usize,
         offset: i32,
-        data_type: BoundDataType,
+        size: usize,
         is_const: bool,
     }
 
@@ -2030,7 +2074,12 @@ mod analysis {
 
     impl StructDefinitionDescriptor {
         pub fn new(id: usize, fields: Vec<(String, BoundDataType)>) -> Self {
-            Self { id, fields }
+            let size = fields.iter().map(|(_, data_type)| data_type.size()).sum();
+            Self {
+                id,
+                fields,
+                size,
+            }
         }
 
         pub fn id(&self) -> usize {
@@ -2146,7 +2195,7 @@ mod analysis {
         pub fn parameters_size(&self) -> usize {
             self.parameters()
                 .iter()
-                .fold(0, |acc, parameter| acc + parameter.data_type().size())
+                .fold(0, |acc, parameter| acc + parameter.size())
         }
         pub fn id(&self) -> usize {
             self.id
@@ -2238,11 +2287,11 @@ mod analysis {
     }
 
     impl BoundVariable {
-        pub fn new(level: usize, offset: i32, data_type: BoundDataType, is_const: bool) -> Self {
+        pub fn new(level: usize, offset: i32, size: usize, is_const: bool) -> Self {
             BoundVariable {
                 level,
                 offset,
-                data_type,
+                size,
                 is_const,
             }
         }
@@ -2253,11 +2302,12 @@ mod analysis {
         pub fn offset(&self) -> i32 {
             self.offset
         }
-        pub fn data_type(&self) -> &BoundDataType {
-            &self.data_type
-        }
         pub fn is_const(&self) -> bool {
             self.is_const
+        }
+
+        pub fn size(&self) -> usize {
+            self.size
         }
     }
 
@@ -2282,7 +2332,7 @@ mod analysis {
             write!(
                 f,
                 "level: {}, offset: {}, data_type: {}",
-                self.level, self.offset, self.data_type
+                self.level, self.offset, self.size
             )
         }
     }

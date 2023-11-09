@@ -43,7 +43,7 @@ use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::{LiteralKind, TokenKind};
 use crate::parse::parser::{
     BinaryOperator, Case, DataType, LiteralValue, Modifier, Statement, Struct, StructField,
-    TranslationUnit, UnaryOperator,
+    StructFieldAssignment, TranslationUnit, UnaryOperator,
 };
 use crate::parse::{Block, Expression, Function, Parser, Variable};
 
@@ -770,11 +770,16 @@ impl<'a, 'b> Parser<'a, 'b> {
                         while !self.matches_token_kind(TokenKind::CloseBrace)
                             && !self.matches_token_kind(TokenKind::Eof)
                         {
+                            let position = self.position;
                             let field_ident = self.expect(TokenKind::Identifier)?;
                             self.expect(TokenKind::Equal);
                             let field_expr = self._expr()?;
                             self.expect(TokenKind::Comma);
-                            definitions.push((field_ident, field_expr));
+                            definitions.push(StructFieldAssignment::new(
+                                position,
+                                field_ident,
+                                field_expr,
+                            ));
                         }
                         self.expect(TokenKind::CloseBrace)?;
                         Some(Expression::Struct {
