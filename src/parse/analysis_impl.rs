@@ -733,7 +733,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             .variable_not_initialized(*position, identifier);
                     }
 
-                    BoundExpression::VariableDeclaration(BoundVariable::new(
+                    BoundExpression::Variable(BoundVariable::new(
                         level,
                         variable.stack_position() as i32,
                         variable.data_type().clone(),
@@ -743,7 +743,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
-                    BoundExpression::VariableDeclaration(BoundVariable::new(
+                    BoundExpression::Variable(BoundVariable::new(
                         0,
                         0,
                         BoundDataType::Pp,
@@ -760,7 +760,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let id = function.id();
                     let return_type_size = function.return_type().size();
                     let parameters_size = function.parameters_size();
-                    if parameters_size != arguments.len() {
+                    if function.parameters().len() != arguments.len() {
                         self.error_diag.borrow_mut().invalid_number_of_arguments(
                             *position,
                             *identifier,
@@ -820,12 +820,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             BoundStructFieldAssignment::new(bound_expr.1)
                         })
                         .collect_vec();
-                    BoundExpression::StructDeclaration(fields)
+                    BoundExpression::Struct(fields)
                 } else {
                     self.error_diag
                         .borrow_mut()
                         .struct_does_not_exist(*position, *identifier);
-                    BoundExpression::StructDeclaration(Vec::new())
+                    BoundExpression::Struct(Vec::new())
                 };
             }
             Expression::StructFieldAccess {

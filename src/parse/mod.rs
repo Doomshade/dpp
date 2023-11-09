@@ -687,12 +687,17 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Operation { operation });
     }
 
-    fn load_variable(&mut self, position: &BoundVariable) {
-        self.load(position.level(), position.offset());
+    fn load_variable(&mut self, variable: &BoundVariable) {
+        self.load(variable.level(), variable.offset(), variable.size());
     }
 
-    fn load(&mut self, level: usize, offset: i32) {
-        self.emit_instruction(Instruction::Load { level, offset });
+    fn load(&mut self, level: usize, offset: i32, size: usize) {
+        for i in 0..size {
+            self.emit_instruction(Instruction::Load {
+                level,
+                offset: offset + i as i32,
+            });
+        }
     }
 
     fn store_variable(&mut self, variable: &BoundVariable) {
@@ -1674,7 +1679,7 @@ mod analysis {
             op: BinaryOperator,
             rhs: Box<BoundExpression>,
         },
-        VariableDeclaration(BoundVariable),
+        Variable(BoundVariable),
         FunctionCall {
             level: usize,
             identifier: usize,
@@ -1682,7 +1687,7 @@ mod analysis {
             arguments_size: usize,
             arguments: Vec<BoundExpression>,
         },
-        StructDeclaration(Vec<BoundStructFieldAssignment>),
+        Struct(Vec<BoundStructFieldAssignment>),
         StructFieldAccess(BoundVariable),
     }
 

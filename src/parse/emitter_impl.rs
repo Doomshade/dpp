@@ -294,7 +294,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     }
                 };
             }
-            BoundExpression::VariableDeclaration { 0: position, .. } => {
+            BoundExpression::Variable { 0: position, .. } => {
                 self.load_variable(position);
             }
             BoundExpression::FunctionCall {
@@ -322,7 +322,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     UnaryOperator::Negate => self.emit_operation(OperationType::Negate),
                 }
             }
-             BoundExpression::StructDeclaration(fields) => {
+             BoundExpression::Struct(fields) => {
                  for field in fields {
                      self.emit_expression(field.expression());
                  }

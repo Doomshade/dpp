@@ -3,6 +3,7 @@ struct _TEST {
 struct AHA {
     struct _TEST -> a,
     pp -> b,
+    pp -> c,
 }
 
 struct TEST {
@@ -16,19 +17,21 @@ FUNc main() -> pp {
     pp -> c = 123;
     struct AHA -> OHO = AHA {
         _TEST {},
-        123
-        # "asd",
+        100,
+        200
     };
 
     struct TEST -> EHH = TEST {
         OHO,
-        67,
-        0
+        300,
+        400,
     };
+
     pp -> a = 69;
     struct AHA -> zzz = EHH.a;
-    pp -> by = aa(5, AHA {_TEST{}, 5});
+    pp -> by = aa(500, AHA {_TEST{}, 600, 700});
 
+    # 300 + 100 + 1100
     bye EHH.b + zzz.b + by;
 }
 
