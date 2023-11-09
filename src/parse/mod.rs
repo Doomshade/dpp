@@ -1168,6 +1168,7 @@ mod parser {
         modifiers: Vec<Modifier>,
         data_type: DataType,
         value: Option<Expression<'a>>,
+        pointer_count: usize,
     }
 
     #[derive(Clone, Debug, Pos)]
@@ -1388,6 +1389,7 @@ mod parser {
             data_type: DataType,
             modifiers: Vec<Modifier>,
             value: Option<Expression<'a>>,
+            pointer_count: usize,
         ) -> Self {
             Variable {
                 position,
@@ -1395,6 +1397,7 @@ mod parser {
                 modifiers,
                 data_type,
                 value,
+                pointer_count,
             }
         }
 

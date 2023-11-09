@@ -478,6 +478,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         let data_type = self._data_type()?;
         self.expect(TokenKind::Arrow)?;
 
+        let mut pointer_count = 0usize;
+
+        while self.token()?.kind() == TokenKind::Star {
+            self.expect(TokenKind::Star)?;
+            pointer_count += 1;
+        }
+
         let identifier = self.expect(TokenKind::Identifier)?;
         let statement = if self.matches_token_kind(TokenKind::Equal) {
             self.expect(TokenKind::Equal);
@@ -490,6 +497,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     data_type,
                     modifiers,
                     Some(expression),
+                    0,
                 ),
             }
         } else {

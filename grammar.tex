@@ -18,13 +18,11 @@
 
     \begin{grammar}
 
-        <transl-unit> ::= \{ ( <function> | <var-decl> | <struct-decl> ) \}
+        <transl-unit> ::= \{ ( <function> | <var-decl-stat> | <struct-decl> ) \}
 
         <function> ::= `FUNc' <ident> <params> `->' <data-type> `{'  \{ <stat> \} `}'
 
-        <params> ::= `(' [ <param> \{ `,' <param> \} ] `)'
-
-        <param> ::= <modifiers> <data-type> `->' <ident>
+        <params> ::= `(' [ <var-decl> \{ `,' <var-decl> \} ] `)'
 
         <block> ::= `{'  \{ <stat> \} `}'
 
@@ -41,7 +39,7 @@
         \alt <pprintln>
         \alt <empty>
         \alt <assign>
-        \alt <var-decl>
+        \alt <var-decl-stat>
         \alt <block-stat>
         \alt <expr-stat>
 
@@ -73,11 +71,14 @@
 
         <assign> ::= <ident> ( `=' | `+=' | `-=' ) <expr> `;'
 
-        <var-decl> ::= <modifiers> <data-type> `->' <ident> [ `=' <expr> ] `;'
+        <var-decl-stat> ::= <var-decl> [ `=' <expr> ] `;'
+
+        <var-decl> ::= <modifiers> <data-type> `->' \{ `*' \} <ident> [ `[' <expr> `]' ]
 
         <block-stat> ::= <block>
 
         <expr-stat> ::= <expr> `;'
+
 
         <data-type> ::= `pp' // int
         \alt `p' // char
@@ -92,7 +93,7 @@
 
         <modifier> ::= `const'
 
-        <struct-decl> ::= `struct' <ident> `{' \{ <modifiers> <data-type> `->' <ident> `,' \} `}'
+        <struct-decl> ::= `struct' <ident> `{' \{ <var-decl> `,' \} `}'
 
         <expr> ::= <equ>
 
