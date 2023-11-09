@@ -16,17 +16,22 @@ FUNc main() -> pp {
     pp -> c = 123;
     struct AHA -> OHO = AHA {
         _TEST {},
-        123,
+        123
         # "asd",
     };
 
     struct TEST -> EHH = TEST {
         OHO,
         67,
-        0,
+        0
     };
     pp -> a = 69;
     struct AHA -> zzz = EHH.a;
+    pp -> by = aa(5, AHA {_TEST{}, 5});
 
-    bye EHH.b + zzz.b;
+    bye EHH.b + zzz.b + by;
+}
+
+FUNc aa(pp -> a, struct AHA -> b) -> pp {
+    bye a + b.b;
 }

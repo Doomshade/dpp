@@ -177,6 +177,13 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
+    pub fn invalid_main_function(&mut self, reason: &str) {
+        self.insert_error_message(
+            (0, 0),
+            format!("Invalid main function. Reason: {reason}",).as_str(),
+        );
+    }
+
     pub fn unknown_data_type(&mut self, position: (u32, u32), reason: &str) {
         self.insert_error_message(position, format!("Unknown data type: {reason}").as_str());
     }

@@ -121,6 +121,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let parameters = self._params()?;
         self.expect(TokenKind::Arrow)?;
         let return_type = self._data_type()?;
+
         self.expect(TokenKind::OpenBrace)?;
         let mut statements = Vec::<Statement<'a>>::new();
         while !self.matches_token_kind(TokenKind::CloseBrace)
@@ -142,40 +143,12 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _params(&mut self) -> Option<Vec<Variable<'a>>> {
-        self.expect(TokenKind::OpenParen)?;
-        let mut parameters = Vec::<Variable<'a>>::new();
-
-        // Check if the close parenthesis is present first,
-        // then try to parse a parameter. If a parameter is present,
-        // check if "," or the close parenthesis is there.
-        // If neither is there, we say we expected
-        if self.matches_token_kind(TokenKind::CloseParen) {
-            self.expect(TokenKind::CloseParen)?;
-            return Some(parameters);
-        }
-
-        let parameter = self._param()?;
-        parameters.push(parameter);
-
-        let mut invalid_params = false;
-        while !self.matches_token_kind(TokenKind::CloseParen)
-            && !self.matches_token_kind(TokenKind::Eof)
-        {
-            if invalid_params {
-                self.add_error("parameter");
-                self.consume_token();
-            } else {
-                invalid_params = invalid_params || self.expect(TokenKind::Comma).is_none();
-                if !invalid_params {
-                    let parameter = self._param();
-                    invalid_params = invalid_params || parameter.is_none();
-                    parameters.push(parameter?);
-                }
-            }
-        }
-        self.expect(TokenKind::CloseParen)?;
-
-        Some(parameters)
+        self.expect_token_separated(
+            TokenKind::OpenParen,
+            TokenKind::CloseParen,
+            TokenKind::Comma,
+            |parser| parser._param(),
+        )
     }
 
     fn _param(&mut self) -> Option<Variable<'a>> {
@@ -599,26 +572,21 @@ impl<'a, 'b> Parser<'a, 'b> {
         let position = self.position;
         self.expect(TokenKind::StructKeyword)?;
         let ident = self.expect(TokenKind::Identifier)?;
-        self.expect(TokenKind::OpenBrace);
 
-        let mut struct_fields = Vec::new();
-        while !self.matches_token_kind(TokenKind::CloseBrace)
-            && !self.matches_token_kind(TokenKind::Eof)
-        {
-            let position = self.position;
-            let modifiers = self._modifiers();
-            let data_type = self._data_type()?;
-            self.expect(TokenKind::Arrow)?;
-            let field_ident = self.expect(TokenKind::Identifier)?;
-            self.expect(TokenKind::Comma)?;
-            struct_fields.push(StructField::new(
-                position,
-                modifiers,
-                data_type,
-                field_ident,
-            ))
-        }
-        self.expect(TokenKind::CloseBrace);
+        let struct_fields = self.expect_token_separated(TokenKind::OpenBrace, TokenKind::CloseBrace, TokenKind::Comma,
+                                                 |parser| {
+                                                     let position = parser.position;
+                                                     let modifiers = parser._modifiers();
+                                                     let data_type = parser._data_type()?;
+                                                     parser.expect(TokenKind::Arrow)?;
+                                                     let field_ident = parser.expect(TokenKind::Identifier)?;
+                                                     Some(StructField::new(
+                                                         position,
+                                                         modifiers,
+                                                         data_type,
+                                                         field_ident,
+                                                     ))
+                                                 })?;
         Some(Struct::new(position, ident, struct_fields))
     }
 
@@ -852,45 +820,25 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _func_args(&mut self) -> Option<Vec<Expression<'a>>> {
-        self.expect(TokenKind::OpenParen)?;
-        let mut args = Vec::<Expression<'a>>::new();
-
-        if self.matches_token_kind(TokenKind::CloseParen) {
-            self.expect(TokenKind::CloseParen)?;
-            return Some(args);
-        }
-
-        let arg = self._expr()?;
-        args.push(arg);
-        while !self.matches_token_kind(TokenKind::CloseParen)
-            && !self.matches_token_kind(TokenKind::Eof)
-        {
-            self.expect(TokenKind::Comma)?;
-            args.push(self._expr()?);
-        }
-        self.expect(TokenKind::CloseParen)?;
-        Some(args)
+        self.expect_token_separated(
+            TokenKind::OpenParen,
+            TokenKind::CloseParen,
+            TokenKind::Comma,
+            |parser| parser._expr(),
+        )
     }
 
     fn _struct_flds(&mut self) -> Option<Vec<StructFieldAssignment<'a>>> {
-        self.expect(TokenKind::OpenBrace)?;
-        let mut definitions = Vec::new();
-
-        if self.matches_token_kind(TokenKind::CloseBrace) {
-            self.expect(TokenKind::CloseBrace)?;
-            return Some(definitions);
-        }
-
-        while !self.matches_token_kind(TokenKind::CloseBrace)
-            && !self.matches_token_kind(TokenKind::Eof)
-        {
-            let position = self.position;
-            let field_expr = self._expr()?;
-            self.expect(TokenKind::Comma);
-            definitions.push(StructFieldAssignment::new(position, field_expr));
-        }
-        self.expect(TokenKind::CloseBrace)?;
-        Some(definitions)
+        self.expect_token_separated(
+            TokenKind::OpenBrace,
+            TokenKind::CloseBrace,
+            TokenKind::Comma,
+            |parser| {
+                let position = parser.position;
+                let field_expr = parser._expr()?;
+                Some(StructFieldAssignment::new(position, field_expr))
+            },
+        )
     }
 
     fn _struct_fld_access(&mut self) -> Option<&'a str> {

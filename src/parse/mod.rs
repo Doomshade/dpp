@@ -362,6 +362,32 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn println(str: &str) {
         println!("{str}");
     }
+
+    fn expect_token_separated<T>(
+        &mut self,
+        start_token_kind: TokenKind,
+        end_token_kind: TokenKind,
+        separator: TokenKind,
+        consumer_function: fn(&mut Parser<'a, 'b>) -> Option<T>,
+    ) -> Option<Vec<T>> {
+        self.expect(start_token_kind)?;
+        let mut vec = Vec::new();
+        if self.matches_token_kind(end_token_kind) {
+            self.expect(end_token_kind);
+            return Some(vec);
+        }
+
+        vec.push(consumer_function(self)?);
+        while !self.matches_token_kind(end_token_kind) && !self.matches_token_kind(TokenKind::Eof) {
+            self.expect(separator);
+            if self.matches_token_kind(end_token_kind) || self.matches_token_kind(TokenKind::Eof) {
+                break;
+            }
+            vec.push(consumer_function(self)?);
+        }
+        self.expect(end_token_kind)?;
+        Some(vec)
+    }
 }
 
 impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
@@ -432,9 +458,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     parameter.has_modifier(Modifier::Const),
                 )
             })
-            .map(|(data_type, offset, is_const)| {
-                BoundVariable::new(0, offset, data_type.size(), is_const)
-            })
+            .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
             .collect_vec()
     }
 
@@ -1683,7 +1707,7 @@ mod analysis {
     pub struct BoundVariable {
         level: usize,
         offset: i32,
-        size: usize,
+        data_type: BoundDataType,
         is_const: bool,
     }
 
@@ -1983,12 +2007,7 @@ mod analysis {
             }
         }
 
-        fn define_struct(
-            &mut self,
-            identifier: &'a str,
-            id: usize,
-            fields: Vec<BoundStructField>,
-        ) {
+        fn define_struct(&mut self, identifier: &'a str, id: usize, fields: Vec<BoundStructField>) {
             self.struct_definitions
                 .insert(identifier, StructDefinitionDescriptor::new(id, fields));
         }
@@ -2270,11 +2289,11 @@ mod analysis {
     }
 
     impl BoundVariable {
-        pub fn new(level: usize, offset: i32, size: usize, is_const: bool) -> Self {
+        pub fn new(level: usize, offset: i32, data_type: BoundDataType, is_const: bool) -> Self {
             BoundVariable {
                 level,
                 offset,
-                size,
+                data_type,
                 is_const,
             }
         }
@@ -2289,8 +2308,12 @@ mod analysis {
             self.is_const
         }
 
+        pub fn data_type(&self) -> &BoundDataType {
+            &self.data_type
+        }
+
         pub fn size(&self) -> usize {
-            self.size
+            self.data_type.size()
         }
     }
 
@@ -2315,7 +2338,7 @@ mod analysis {
             write!(
                 f,
                 "level: {}, offset: {}, data_type: {}",
-                self.level, self.offset, self.size
+                self.level, self.offset, self.data_type
             )
         }
     }

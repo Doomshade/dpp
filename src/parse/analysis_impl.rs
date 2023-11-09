@@ -128,11 +128,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .find(|function| function.is_main_function())
         {
             if !main_function.parameters().is_empty() {
-                self.error_diag.borrow_mut().invalid_number_of_arguments(
-                    (0, 0),
-                    "main",
-                    0,
-                    main_function.parameters().len(),
+                self.error_diag.borrow_mut().invalid_main_function(
+                    format!(
+                        "Expected 0 parameters, got {}",
+                        main_function.parameters().len()
+                    )
+                    .as_str(),
                 );
             }
             main_function_identifier = main_function.identifier();
@@ -237,7 +238,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let position = BoundVariable::new(
                         level,
                         var_decl.stack_position() as i32,
-                        var_decl.data_type().size(),
+                        var_decl.data_type().clone(),
                         var_decl.has_modifier(Modifier::Const),
                     );
                     let data_type =
@@ -392,8 +393,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let data_type = variable.data_type().clone();
                     self.symbol_table_mut().initialize_variable(identifier);
 
-                    let position =
-                        BoundVariable::new(level, offset as i32, data_type.size(), is_const);
+                    let position = BoundVariable::new(level, offset as i32, data_type, is_const);
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         position,
                         expression.1,
@@ -470,12 +470,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut().pop_scope();
 
                 BoundStatement::For {
-                    ident_position: BoundVariable::new(
-                        level,
-                        offset as i32,
-                        data_type.size(),
-                        is_const,
-                    ),
+                    ident_position: BoundVariable::new(level, offset as i32, data_type, is_const),
                     ident_expression: bound_ident_expression.map(|exp| exp.1),
                     length_expression: bound_length_expression.1,
                     statement: Box::new(bound_statement),
@@ -741,7 +736,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     BoundExpression::VariableDeclaration(BoundVariable::new(
                         level,
                         variable.stack_position() as i32,
-                        variable.data_type().size(),
+                        variable.data_type().clone(),
                         variable.has_modifier(Modifier::Const),
                     ))
                 } else {
@@ -751,7 +746,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     BoundExpression::VariableDeclaration(BoundVariable::new(
                         0,
                         0,
-                        BoundDataType::Pp.size(),
+                        BoundDataType::Pp,
                         true,
                     ))
                 }
@@ -761,26 +756,45 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 arguments,
                 position,
             } => {
-                let (id, return_type_size, arguments_size);
                 if let Some(function) = self.symbol_table().find_function_definition(identifier) {
-                    id = function.id();
-                    return_type_size = function.return_type().size();
-                    arguments_size = function.parameters_size()
-                } else {
-                    id = 0;
-                    return_type_size = 0;
-                    arguments_size = 0;
+                    let id = function.id();
+                    let return_type_size = function.return_type().size();
+                    let parameters_size = function.parameters_size();
+                    if parameters_size != arguments.len() {
+                        self.error_diag.borrow_mut().invalid_number_of_arguments(
+                            *position,
+                            *identifier,
+                            parameters_size,
+                            arguments.len(),
+                        );
+                    }
 
+                    let arguments = arguments
+                        .iter()
+                        .zip(function.parameters())
+                        .map(|(arg, param)| {
+                            self.analyze_expr(arg, Some(param.data_type()), Some(arg.position())).1
+                        })
+                        .collect_vec();
+                    BoundExpression::FunctionCall {
+                        level: 1,
+                        identifier: id,
+                        return_type_size,
+                        arguments_size: parameters_size,
+                        arguments,
+                    }
+                } else {
                     self.error_diag
                         .borrow_mut()
                         .function_does_not_exist(*position, identifier);
-                }
-                BoundExpression::FunctionCall {
-                    level: 1,
-                    identifier: id,
-                    return_type_size,
-                    arguments_size,
-                    arguments: arguments.iter().map(|arg| self.expr(arg)).collect_vec(),
+
+                    BoundExpression::FunctionCall {
+                        level: 1,
+                        identifier: 0,
+                        return_type_size: 0,
+                        arguments_size: 0,
+                        arguments: Vec::new(),
+                    }
                 }
             }
             Expression::Invalid { .. } => {
@@ -839,7 +853,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                                 return BoundExpression::StructFieldAccess(BoundVariable::new(
                                     variable_descrr.0,
                                     (stack_pos + field_off) as i32,
-                                    field.data_type().size(),
+                                    field.data_type().clone(),
                                     false,
                                 ));
                             } else {
@@ -865,7 +879,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .borrow_mut()
                         .variable_not_found(*position, struct_identifier);
                 }
-                BoundExpression::StructFieldAccess(BoundVariable::new(0, 0, 0, false))
+                BoundExpression::StructFieldAccess(BoundVariable::new(
+                    0,
+                    0,
+                    BoundDataType::Nopp,
+                    false,
+                ))
             }
         }
     }

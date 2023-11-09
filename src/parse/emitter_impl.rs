@@ -99,7 +99,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 return_type_size,
             } => {
                 if let Some(expression) = expression {
-                    dbg!(&statement);
                     self.emit_expression(expression);
                     self.store(0, -(*return_type_size as i32), *return_type_size);
                 }
@@ -329,7 +328,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
                  }
              }
             BoundExpression::StructFieldAccess(variable) => {
-                dbg!(&variable);
                 self.load_variable(variable);
             }
             _ => todo!("Not implemented {expression:?}"),

@@ -301,14 +301,14 @@ impl<'a, 'b> Lexer<'a, 'b> {
             self.error_diag.borrow_mut().expected_different_token_error(
                 &self.new_token(
                     TokenKind::Literal(LiteralKind::Yarn),
-                    &self.raw_input[start + 1..end],
+                    &self.raw_input[start..end],
                 ),
                 TokenKind::DoubleQuote,
             );
         }
         self.new_token(
             TokenKind::Literal(LiteralKind::Yarn),
-            &self.raw_input[start + 1..end - 1],
+            &self.raw_input[start..end],
         )
     }
 
