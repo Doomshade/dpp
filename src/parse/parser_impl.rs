@@ -42,7 +42,7 @@
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::lexer::{LiteralKind, TokenKind};
 use crate::parse::parser::{
-    BinaryOperator, Case, DataType, LiteralValue, Modifier, Statement, Struct, StructField,
+    BinaryOperator, Case, DataType, LiteralValue, Modifier, Statement, Struct,
     StructFieldAssignment, TranslationUnit, UnaryOperator,
 };
 use crate::parse::{Block, Expression, Function, Parser, Variable};
@@ -85,7 +85,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     functions.push(function);
                 }
             } else if self.matches_data_type() || self.matches_modifier() {
-                if let Some(var_decl) = self._var_decl() {
+                if let Some(var_decl) = self._var_decl_stat() {
                     variable_declarations.push(var_decl);
                 }
             } else if self.matches_token_kind(TokenKind::StructKeyword) {
@@ -147,19 +147,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::OpenParen,
             TokenKind::CloseParen,
             TokenKind::Comma,
-            |parser| parser._param(),
+            |parser| parser._var_decl(),
         )
-    }
-
-    fn _param(&mut self) -> Option<Variable<'a>> {
-        let position = self.position;
-        let modifiers = self._modifiers();
-        let data_type = self._data_type()?;
-        self.expect(TokenKind::Arrow)?;
-        let identifier = self.expect(TokenKind::Identifier)?;
-        Some(Variable::new(
-            position, identifier, data_type, modifiers, None,
-        ))
     }
 
     fn _block(&mut self) -> Option<Block<'a>> {
@@ -204,7 +193,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // if present, then it's assignment. If not, it's expression.
                 if matches!(
                     self.token_offset(1)?.kind(),
-                    TokenKind::Equal | TokenKind::PlusEqual | TokenKind::MinusEqual
+                    TokenKind::Equal
+                        | TokenKind::PlusEqual
+                        | TokenKind::MinusEqual
+                        | TokenKind::Dot
                 ) {
                     self._assign()
                 } else {
@@ -219,7 +211,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             | TokenKind::BoobaKeyword
             | TokenKind::YarnKeyword
             | TokenKind::StructKeyword
-            | TokenKind::ConstKeyword => self._var_decl(),
+            | TokenKind::ConstKeyword => self._var_decl_stat(),
             _ => {
                 self.error_diag.borrow_mut().unexpected_token_error(token);
                 self.add_error("statement");
@@ -434,6 +426,13 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _assign(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
         let identifier = self.expect(TokenKind::Identifier)?;
+        let field_identifier = if self.matches_token_kind(TokenKind::Dot) {
+            self.expect(TokenKind::Dot)?;
+            Some(self.expect(TokenKind::Identifier)?)
+        } else {
+            None
+        };
+
         let assign_tok = self
             .expect_one_from(&[
                 TokenKind::Equal,
@@ -468,47 +467,69 @@ impl<'a, 'b> Parser<'a, 'b> {
         Some(Statement::Assignment {
             position,
             identifier,
+            field_identifier,
             expression: assign_expr,
         })
     }
 
-    fn _var_decl(&mut self) -> Option<Statement<'a>> {
+    fn _var_decl_stat(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
-        let modifiers = self._modifiers();
-        let data_type = self._data_type()?;
-        self.expect(TokenKind::Arrow)?;
-
-        let mut pointer_count = 0usize;
-
-        while self.token()?.kind() == TokenKind::Star {
-            self.expect(TokenKind::Star)?;
-            pointer_count += 1;
-        }
-
-        let identifier = self.expect(TokenKind::Identifier)?;
+        let variable = self._var_decl()?;
         let statement = if self.matches_token_kind(TokenKind::Equal) {
             self.expect(TokenKind::Equal);
             let expression = self._expr()?;
             Statement::VariableDeclaration {
                 position,
-                variable: Variable::new(
-                    self.position,
-                    identifier,
-                    data_type,
-                    modifiers,
-                    Some(expression),
-                    0,
-                ),
+                variable,
+                value: Some(expression),
             }
         } else {
             Statement::VariableDeclaration {
                 position,
-                variable: Variable::new(self.position, identifier, data_type, modifiers, None),
+                variable,
+                value: None,
             }
         };
 
         self.expect(TokenKind::Semicolon)?;
         Some(statement)
+    }
+
+    fn _var_decl(&mut self) -> Option<Variable<'a>> {
+        let modifiers = self._modifiers();
+        let data_type = self._data_type()?;
+        self.expect(TokenKind::Arrow)?;
+
+        let mut pointer_count = 0usize;
+        while self.token()?.kind() == TokenKind::Star {
+            self.expect(TokenKind::Star)?;
+            pointer_count += 1;
+        }
+
+        let position = self.position;
+        let identifier = self.expect(TokenKind::Identifier)?;
+        if self.matches_token_kind(TokenKind::OpenBracket) {
+            self.expect(TokenKind::OpenBracket)?;
+            let size_expr = self._expr()?;
+            self.expect(TokenKind::CloseBracket)?;
+            Some(Variable::new(
+                position,
+                identifier,
+                data_type,
+                modifiers,
+                pointer_count,
+                Some(size_expr),
+            ))
+        } else {
+            Some(Variable::new(
+                position,
+                identifier,
+                data_type,
+                modifiers,
+                pointer_count,
+                None,
+            ))
+        }
     }
 
     fn _block_stat(&mut self) -> Option<Statement<'a>> {
@@ -585,19 +606,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::OpenBrace,
             TokenKind::CloseBrace,
             TokenKind::Comma,
-            |parser| {
-                let position = parser.position;
-                let modifiers = parser._modifiers();
-                let data_type = parser._data_type()?;
-                parser.expect(TokenKind::Arrow)?;
-                let field_ident = parser.expect(TokenKind::Identifier)?;
-                Some(StructField::new(
-                    position,
-                    modifiers,
-                    data_type,
-                    field_ident,
-                ))
-            },
+            |parser| parser._var_decl(),
         )?;
         Some(Struct::new(position, ident, struct_fields))
     }

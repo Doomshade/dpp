@@ -1,5 +1,5 @@
 struct File {
-    pp -> fd,
+    const pp -> fd,
 }
 
 struct FileDef {
@@ -8,9 +8,10 @@ struct FileDef {
 }
 
 FUNc main() -> pp {
-    struct File -> root = File {
+    const struct File -> root = File {
         68,
     };
+    root.fd = 123456;
     struct File -> transform_fd = transform_fd(root);
     bye transform_fd.fd;
 }

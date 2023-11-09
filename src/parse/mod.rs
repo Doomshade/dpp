@@ -1090,6 +1090,7 @@ mod parser {
         VariableDeclaration {
             position: (u32, u32),
             variable: Variable<'a>,
+            value: Option<Expression<'a>>,
         },
         If {
             position: (u32, u32),
@@ -1157,6 +1158,7 @@ mod parser {
         Assignment {
             position: (u32, u32),
             identifier: &'a str,
+            field_identifier: Option<&'a str>,
             expression: Expression<'a>,
         },
     }
@@ -1167,8 +1169,8 @@ mod parser {
         identifier: &'a str,
         modifiers: Vec<Modifier>,
         data_type: DataType,
-        value: Option<Expression<'a>>,
         pointer_count: usize,
+        array_size_expr: Option<Expression<'a>>,
     }
 
     #[derive(Clone, Debug, Pos)]
@@ -1199,15 +1201,7 @@ mod parser {
     #[derive(Clone, Debug, PartialEq, Pos)]
     pub struct Struct<'a> {
         position: (u32, u32),
-        fields: Vec<StructField<'a>>,
-        ident: &'a str,
-    }
-
-    #[derive(Clone, Debug, PartialEq, Pos)]
-    pub struct StructField<'a> {
-        position: (u32, u32),
-        modifiers: Vec<Modifier>,
-        data_type: DataType,
+        fields: Vec<Variable<'a>>,
         ident: &'a str,
     }
 
@@ -1388,16 +1382,16 @@ mod parser {
             identifier: &'a str,
             data_type: DataType,
             modifiers: Vec<Modifier>,
-            value: Option<Expression<'a>>,
             pointer_count: usize,
+            array_size_expr: Option<Expression<'a>>,
         ) -> Self {
             Variable {
                 position,
                 identifier,
                 modifiers,
                 data_type,
-                value,
                 pointer_count,
+                array_size_expr,
             }
         }
 
@@ -1410,14 +1404,17 @@ mod parser {
         pub fn data_type(&self) -> &DataType {
             &self.data_type
         }
-        pub fn value(&self) -> Option<&Expression<'a>> {
-            self.value.as_ref()
-        }
         pub fn modifiers(&self) -> &Vec<Modifier> {
             &self.modifiers
         }
         pub fn has_modifier(&self, modifier: Modifier) -> bool {
             self.modifiers.contains(&modifier)
+        }
+        pub fn pointer_count(&self) -> usize {
+            self.pointer_count
+        }
+        pub fn array_size_expr(&self) -> &Option<Expression<'a>> {
+            &self.array_size_expr
         }
     }
 
@@ -1443,7 +1440,7 @@ mod parser {
     }
 
     impl<'a> Struct<'a> {
-        pub fn new(position: (u32, u32), ident: &'a str, fields: Vec<StructField<'a>>) -> Self {
+        pub fn new(position: (u32, u32), ident: &'a str, fields: Vec<Variable<'a>>) -> Self {
             Self {
                 position,
                 ident,
@@ -1451,34 +1448,8 @@ mod parser {
             }
         }
 
-        pub fn fields(&self) -> &Vec<StructField<'a>> {
+        pub fn fields(&self) -> &Vec<Variable<'a>> {
             &self.fields
-        }
-        pub fn ident(&self) -> &str {
-            self.ident
-        }
-    }
-
-    impl<'a> StructField<'a> {
-        pub fn new(
-            position: (u32, u32),
-            modifiers: Vec<Modifier>,
-            data_type: DataType,
-            ident: &'a str,
-        ) -> Self {
-            Self {
-                position,
-                modifiers,
-                data_type,
-                ident,
-            }
-        }
-
-        pub fn modifiers(&self) -> &Vec<Modifier> {
-            &self.modifiers
-        }
-        pub fn data_type(&self) -> &DataType {
-            &self.data_type
         }
         pub fn ident(&self) -> &str {
             self.ident
@@ -1704,9 +1675,6 @@ mod analysis {
             &self.expression
         }
     }
-
-    #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-    pub struct BoundStruct {}
 
     #[derive(Eq, PartialEq, Hash, Clone, Debug)]
     pub struct BoundVariable {
@@ -2417,6 +2385,10 @@ mod analysis {
                 ident,
                 offset,
             }
+        }
+
+        pub fn has_modifier(&self, modifier: Modifier) -> bool {
+            self.modifiers.contains(&modifier)
         }
 
         pub fn modifiers(&self) -> &Vec<Modifier> {

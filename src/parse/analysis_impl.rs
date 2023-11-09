@@ -64,9 +64,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                                 self.to_bound_data_type(field.data_type(), field.position());
                             current_offset += bound_data_type.size();
                             BoundStructField::new(
-                                Vec::new(),
+                                field.modifiers().clone(),
                                 bound_data_type,
-                                String::from(field.ident()),
+                                String::from(field.identifier()),
                                 offset,
                             )
                         })
@@ -214,7 +214,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     /// * `statement`: the (local) statement to analyze
     fn analyze_statement(&mut self, statement: &Statement<'a>) -> BoundStatement {
         match &statement {
-            Statement::VariableDeclaration { variable, .. } => {
+            Statement::VariableDeclaration {
+                variable, value, ..
+            } => {
                 if self.is_variable_in_scope(variable.identifier()) {
                     self.error_diag
                         .borrow_mut()
@@ -228,7 +230,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     variable.identifier(),
                     false,
                 );
-                if let Some(expression) = variable.value() {
+                if let Some(expression) = value {
                     self.symbol_table_mut()
                         .initialize_variable(variable.identifier());
                     let (level, var_decl) = self
@@ -374,11 +376,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
             Statement::Assignment {
                 identifier,
+                field_identifier,
                 expression,
                 position,
             } => {
+                // Find the variable.
                 let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
                 if let Some(variable) = var_decl {
+                    // If const throw an error.
                     let is_const = variable.has_modifier(Modifier::Const);
                     if is_const {
                         self.error_diag
@@ -386,6 +391,62 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             .cannot_assign_to_const_variable(*position, identifier);
                     }
                     let data_type = variable.data_type();
+
+                    // Check if the variable is a structure.
+                    if let BoundDataType::Struct(ident, _) = data_type {
+                        // If it is, check whether we are accessing a field.
+                        if let Some(field_name) = field_identifier {
+                            // If we are accessing a field find the struct definition and make
+                            // sure the field actually exists in it.
+                            let (_, struct_def) = self.symbol_table().find_struct_definition(ident);
+                            if let Some(struct_def) = struct_def {
+                                if let Some(field) = struct_def
+                                    .fields()
+                                    .iter()
+                                    .find(|field| field.ident() == *field_name)
+                                {
+                                    // The field exists, it's an assignment to a struct.
+                                    let expression = self.analyze_expr(
+                                        expression,
+                                        Some(field.data_type()),
+                                        Some(*position),
+                                    );
+                                    let offset = variable.stack_position() + field.offset();
+                                    dbg!(&field);
+                                    let is_field_const = field.has_modifier(Modifier::Const);
+                                    if is_field_const {
+                                        self.error_diag
+                                            .borrow_mut()
+                                            .cannot_assign_to_const_variable(
+                                                *position,
+                                                *field_name,
+                                            );
+                                    }
+                                    let variable = BoundVariable::new(
+                                        level,
+                                        offset as i32,
+                                        field.data_type().clone(),
+                                        is_field_const,
+                                    );
+                                    return BoundStatement::VariableAssignment(
+                                        BoundVariableAssignment::new(variable, expression.1),
+                                    );
+                                }
+                            } else {
+                                unreachable!("This should not happen :(");
+                            }
+                        }
+                    } else {
+                        // The variable is not a struct and we are accessing a field of it ->
+                        // throw an error.
+                        if let Some(field_identifier) = field_identifier {
+                            self.error_diag.borrow_mut().variable_is_not_struct(
+                                *position,
+                                *identifier,
+                                *field_identifier,
+                            );
+                        }
+                    }
                     let expression =
                         self.analyze_expr(expression, Some(data_type), Some(*position));
 
@@ -393,9 +454,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let data_type = variable.data_type().clone();
                     self.symbol_table_mut().initialize_variable(identifier);
 
-                    let position = BoundVariable::new(level, offset as i32, data_type, is_const);
+                    let variable = BoundVariable::new(level, offset as i32, data_type, is_const);
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        position,
+                        variable,
                         expression.1,
                     ))
                 } else {
