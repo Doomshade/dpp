@@ -7,9 +7,19 @@ struct FileDef {
     struct File -> prev,
 }
 
+FUNc init_a() -> pp {
+   if (yem) {
+       bye 4;
+   } else {
+       bye 3;
+   }
+   bye 0;
+}
+
 FUNc main() -> pp {
-    const struct File -> root = File {
-        68,
+    const pp -> a = init_a();
+     struct File -> root = File {
+        init_a(),
     };
     root.fd = 123456;
     struct File -> transform_fd = transform_fd(root);
