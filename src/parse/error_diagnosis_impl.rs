@@ -128,12 +128,35 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
-    pub fn struct_field_not_found(&mut self, position: (u32, u32),
-                                  struct_identifier: &str, field_identifier: &str) {
+    pub fn struct_declaration_invalid_field_amount(
+        &mut self,
+        position: (u32, u32),
+        struct_identifier: &str,
+        expected_size: usize,
+        got_size: usize,
+    ) {
         self.insert_error_message(
             position,
-            format!("Struct field \"{field_identifier}\" does not exist for struct named \
-            \"{struct_identifier}\".").as_str(),
+            format!(
+                "Struct \"{struct_identifier}\" expects {expected_size} fields, got {got_size}"
+            )
+            .as_str(),
+        );
+    }
+
+    pub fn struct_field_not_found(
+        &mut self,
+        position: (u32, u32),
+        struct_identifier: &str,
+        field_identifier: &str,
+    ) {
+        self.insert_error_message(
+            position,
+            format!(
+                "Struct field \"{field_identifier}\" does not exist for struct named \
+            \"{struct_identifier}\"."
+            )
+            .as_str(),
         );
     }
 

@@ -612,9 +612,25 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 .symbol_table()
                 .find_function_definition(identifier)
                 .map(|function| function.return_type().clone()),
-            Expression::StructDeclaration { identifier, .. } => {
+            Expression::StructDeclaration {
+                identifier,
+                definitions,
+                ..
+            } => {
                 let struct_def = self.symbol_table().find_struct_definition(*identifier);
                 if let Some(struct_def_descr) = struct_def.1 {
+                    let expected_len = struct_def_descr.fields().len();
+                    let got_len = definitions.len();
+                    if expected_len != got_len {
+                        self.error_diag
+                            .borrow_mut()
+                            .struct_declaration_invalid_field_amount(
+                                expr.position(),
+                                identifier,
+                                expected_len,
+                                got_len,
+                            )
+                    }
                     Some(BoundDataType::Struct(
                         String::from(*identifier),
                         struct_def_descr.size(),

@@ -1,5 +1,8 @@
+struct _TEST {
+}
 struct AHA {
-    pp -> a,
+    struct _TEST -> a,
+    pp -> b,
 }
 
 struct TEST {
@@ -8,19 +11,22 @@ struct TEST {
     pp -> c,
 }
 
+
 FUNc main() -> pp {
     pp -> c = 123;
     struct AHA -> OHO = AHA {
-        456,
+        _TEST {},
+        123,
+        # "asd",
     };
 
     struct TEST -> EHH = TEST {
         OHO,
         67,
-        123,
+        0,
     };
     pp -> a = 69;
     struct AHA -> zzz = EHH.a;
 
-    bye EHH.b + zzz.a;
+    bye EHH.b + zzz.b;
 }
