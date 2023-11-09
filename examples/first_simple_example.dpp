@@ -38,7 +38,7 @@ FUNc main() -> pp {
     pp -> z = hellyea(y, 123);
     booba -> d = nom || yem;
     booba -> c = (nom && yem && d && nom) || (yem && d);
-    bye 0;
+    bye z;
 }
 
 FUNc hellyea(pp -> fuk, pp -> dis) -> pp {

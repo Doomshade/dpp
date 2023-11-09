@@ -607,8 +607,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 .symbol_table()
                 .find_function_definition(identifier)
                 .map(|function| function.return_type().clone()),
-            Expression::Struct { .. } => None,
-            // TODO: Add structs to symbol table.
+            Expression::Struct { identifier, .. } => self
+                .symbol_table()
+                .find_struct_definition(*identifier)
+                .1
+                .map(|a_struct| BoundDataType::Struct(String::from(*identifier), a_struct.size())),
             _ => None,
         };
     }
@@ -721,18 +724,33 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 definitions,
                 identifier,
             } => {
-                self.error_diag.borrow_mut().not_implemented(
-                    *position,
-                    format!(
-                        "Struct definition analysis not implemented\
-                     - struct \"{identifier}\" and \"{definitions:?}\""
-                    )
-                    .as_str(),
-                );
-                BoundExpression::Literal(BoundLiteralValue::Struct(
-                    String::from(*identifier),
-                    Vec::new(),
-                ))
+                let struct_def = self.symbol_table().find_struct_definition(*identifier).1;
+
+                return if let Some(struct_def) = struct_def {
+                    let mut size = 0;
+                    let fields = definitions
+                        .iter()
+                        .map(|(ident, expr)| {
+                            let bound_expr = self.analyze_expr(expr, None, None);
+                            (String::from(*ident), (bound_expr.0.unwrap(), bound_expr.1))
+                        })
+                        .inspect(|(_, (data_type, _))| size += data_type.size())
+                        .collect_vec();
+                    BoundExpression::Struct {
+                        identifier: struct_def.id(),
+                        fields,
+                        size,
+                    }
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .struct_does_not_exist(*position, *identifier);
+                    BoundExpression::Struct {
+                        identifier: 0,
+                        size: 0,
+                        fields: Vec::new(),
+                    }
+                };
             }
         }
     }

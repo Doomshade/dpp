@@ -322,6 +322,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     UnaryOperator::Negate => self.emit_operation(OperationType::Negate),
                 }
             }
+             BoundExpression::Struct { identifier, fields, size } => {
+             }
             _ => todo!("Not implemented {expression:?}"),
         }
     }

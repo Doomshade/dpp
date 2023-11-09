@@ -121,6 +121,12 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
             format!("Function \"{identifier}\" does not exist.").as_str(),
         );
     }
+    pub fn struct_does_not_exist(&mut self, position: (u32, u32), identifier: &str) {
+        self.insert_error_message(
+            position,
+            format!("Struct \"{identifier}\" does not exist.").as_str(),
+        );
+    }
 
     pub fn invalid_number_of_arguments(
         &mut self,

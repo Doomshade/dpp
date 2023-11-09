@@ -5,8 +5,7 @@ use std::{cell, collections, fs, io, rc};
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable,
-    SymbolTable,
+    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable, SymbolTable,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
@@ -1635,7 +1634,8 @@ mod analysis {
         },
         Struct {
             identifier: usize,
-            definitions: Vec<(usize, BoundExpression)>,
+            size: usize,
+            fields: Vec<(String, (BoundDataType, BoundExpression))>,
         },
     }
 
@@ -2127,7 +2127,7 @@ mod analysis {
                 id,
                 return_type,
                 parameters,
-                stack_frame_size: 0,
+                stack_frame_size: Scope::ACTIVATION_RECORD_SIZE,
             }
         }
 
