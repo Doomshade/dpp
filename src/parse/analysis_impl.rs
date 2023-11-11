@@ -231,8 +231,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     false,
                 );
                 if let Some(expression) = value {
-                    self.symbol_table_mut()
-                        .initialize_variable(variable.identifier());
                     let (level, var_decl) = self
                         .symbol_table()
                         .find_variable_declaration(variable.identifier());
@@ -394,6 +392,35 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     }
                     let data_type = variable.data_type();
 
+                    // Check if the variable is an array.
+                    if let BoundDataType::Array(inner, size) = data_type {
+                        if let Some(array_index_expression) = array_index_expression {
+                            let expression =
+                                self.analyze_expr(expression, Some(inner), Some(*position));
+                            let array_index_expression = self.analyze_expr(
+                                array_index_expression,
+                                Some(&BoundDataType::Pp),
+                                Some(*position),
+                            );
+                            let offset = variable.stack_position();
+
+                            let variable =
+                                BoundVariable::new(level, offset as i32, *inner.clone(), is_const);
+                            return BoundStatement::VariableAssignment(
+                                BoundVariableAssignment::new(variable, expression.1),
+                            );
+                        } else {
+                            // TODO: Handle this
+                            todo!("SIGH")
+                        }
+                    } else {
+                        if let Some(array_index_expression) = array_index_expression {
+                            self.error_diag
+                                .borrow_mut()
+                                .variable_is_not_array(*position, *identifier);
+                        }
+                    }
+
                     // Check if the variable is a structure.
                     if let BoundDataType::Struct(ident, _) = data_type {
                         // If it is, check whether we are accessing a field.
@@ -414,7 +441,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                                         Some(*position),
                                     );
                                     let offset = variable.stack_position() + field.offset();
-                                    dbg!(&field);
                                     let is_field_const = field.has_modifier(Modifier::Const);
                                     if is_field_const {
                                         self.error_diag
@@ -454,7 +480,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                     let offset = variable.stack_position();
                     let data_type = variable.data_type().clone();
-                    self.symbol_table_mut().initialize_variable(identifier);
 
                     let variable = BoundVariable::new(level, offset as i32, data_type, is_const);
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
@@ -495,9 +520,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // Declare the variable as pp.
                 let data_type = self.to_bound_data_type(&DataType::Pp, *position);
                 self.declare_variable(*position, Vec::new(), data_type.clone(), index_ident, false);
-
-                // Mark the variable as initialized immediately. We initialize it later on.
-                self.symbol_table_mut().initialize_variable(index_ident);
 
                 // Check that the ident expression is pp or none.
                 let bound_ident_expression;
@@ -742,7 +764,26 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 }
                 None
             }
-            _ => todo!("AA"),
+            Expression::ArrayAccess {
+                position,
+                identifier,
+                ..
+            } => self
+                .symbol_table()
+                .find_variable_declaration(identifier)
+                .1
+                .map(|variable| {
+                    // TODO: Handle this better.
+                    if let BoundDataType::Array(inner, size) = variable.data_type() {
+                        return *inner.clone();
+                    } else {
+                        self.error_diag
+                            .borrow_mut()
+                            .not_implemented(*position, "HANDLING THIS :(");
+                    }
+                    BoundDataType::Nopp
+                }),
+            _ => todo!("{expr:?}"),
         };
     }
 
@@ -788,12 +829,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
                 if let Some(variable) = var_decl {
-                    if !variable.is_initialized() {
-                        self.error_diag
-                            .borrow_mut()
-                            .variable_not_initialized(*position, identifier);
-                    }
-
                     BoundExpression::Variable(BoundVariable::new(
                         level,
                         variable.stack_position() as i32,
@@ -943,6 +978,48 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     BoundDataType::Nopp,
                     false,
                 ))
+            }
+            Expression::ArrayAccess {
+                position,
+                identifier,
+                array_index_expression,
+            } => {
+                let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
+                let (_, bound_expr) = self.analyze_expr(
+                    array_index_expression,
+                    Some(&BoundDataType::Pp),
+                    Some(*position),
+                );
+
+                if let Some(var_descr) = var_decl {
+                    if let BoundDataType::Array(inner, size) = var_descr.data_type() {
+                        return BoundExpression::ArrayAccess(
+                            BoundVariable::new(
+                                level,
+                                var_descr.stack_position() as i32,
+                                *inner.clone(),
+                                false,
+                            ),
+                            *size,
+                            Box::new(bound_expr),
+                        );
+                    } else {
+                        self.error_diag.borrow_mut().invalid_data_type(
+                            *position,
+                            &BoundDataType::Array(Box::new(BoundDataType::Nopp), 0),
+                            var_descr.data_type(),
+                        )
+                    }
+                } else {
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_not_found(*position, *identifier);
+                }
+                BoundExpression::ArrayAccess(
+                    BoundVariable::new(0, 0, BoundDataType::Nopp, false),
+                    0,
+                    Box::new(BoundExpression::Literal(BoundLiteralValue::Pp(0))),
+                )
             }
         }
     }

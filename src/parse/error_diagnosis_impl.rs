@@ -161,6 +161,13 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
         );
     }
 
+    pub fn variable_is_not_array(&mut self, position: (u32, u32), variable_identifier: &str) {
+        self.insert_error_message(
+            position,
+            format!("Variable \"{variable_identifier}\" is not of type \"array\".",).as_str(),
+        );
+    }
+
     pub fn struct_field_not_found(
         &mut self,
         position: (u32, u32),

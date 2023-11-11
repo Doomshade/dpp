@@ -1,4 +1,5 @@
 use dpp_macros::Pos;
+use std::env::var;
 
 use crate::parse::analysis::{
     BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement, BoundTranslationUnit,
@@ -294,8 +295,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     }
                 };
             }
-            BoundExpression::Variable { 0: position, .. } => {
-                self.load_variable(position);
+            BoundExpression::Variable(variable) => {
+                self.load_variable(variable);
             }
             BoundExpression::FunctionCall {
                 level,
@@ -322,13 +323,23 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     UnaryOperator::Negate => self.emit_operation(OperationType::Negate),
                 }
             }
-             BoundExpression::Struct(fields) => {
-                 for field in fields {
-                     self.emit_expression(field.expression());
-                 }
-             }
+            BoundExpression::Struct(fields) => {
+                for field in fields {
+                    self.emit_expression(field.expression());
+                }
+            }
             BoundExpression::StructFieldAccess(variable) => {
                 self.load_variable(variable);
+            }
+            BoundExpression::ArrayAccess(variable, array_size, index_expr) => {
+                self.emit_value(&BoundLiteralValue::Pp(variable.level() as i32));
+                self.emit_expression(index_expr);
+                // TODO: Could add a check here for IOOB.
+                self.emit_value(&BoundLiteralValue::Pp(variable.data_type().size() as i32));
+                self.emit_operation(OperationType::Multiply);
+                self.emit_value(&BoundLiteralValue::Pp(variable.offset()));
+                self.emit_operation(OperationType::Add);
+                self.emit_instruction(Instruction::Pld);
             }
             _ => todo!("Not implemented {expression:?}"),
         }

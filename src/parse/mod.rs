@@ -390,7 +390,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         vec.push(consumer_function(self)?);
         while !self.matches_token_kind(end_token_kind) && !self.matches_token_kind(TokenKind::Eof) {
-            self.expect(separator);
+            self.expect(separator)?;
             if self.matches_token_kind(end_token_kind) || self.matches_token_kind(TokenKind::Eof) {
                 break;
             }
@@ -658,6 +658,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                         }
                     }
                 }
+                Instruction::Pld => writer.write_all(format!("{pc} PLD 0 0\r\n").as_bytes())?,
             }
             pc += 1;
         }
@@ -1297,6 +1298,11 @@ mod parser {
             position: (u32, u32),
             identifiers: Vec<&'a str>,
         },
+        ArrayAccess {
+            position: (u32, u32),
+            identifier: &'a str,
+            array_index_expression: Box<Expression<'a>>,
+        },
         Invalid {
             position: (u32, u32),
         },
@@ -1497,6 +1503,11 @@ mod parser {
                 Expression::StructFieldAccess { identifiers, .. } => {
                     format!("Struct field access {}", identifiers.join("."))
                 }
+                Expression::ArrayAccess {
+                    identifier,
+                    array_index_expression,
+                    ..
+                } => format!("{identifier}[{array_index_expression}]"),
             };
             write!(f, "{}", formatted)?;
             Ok(())
@@ -1610,7 +1621,6 @@ mod analysis {
         modifiers: Vec<Modifier>,
         value: Option<BoundExpression>,
         is_parameter: bool,
-        initialized: bool,
     }
 
     #[derive(Clone, PartialEq, Debug)]
@@ -1685,6 +1695,7 @@ mod analysis {
         },
         Struct(Vec<BoundStructFieldAssignment>),
         StructFieldAccess(BoundVariable),
+        ArrayAccess(BoundVariable, usize, Box<BoundExpression>),
     }
 
     #[derive(PartialEq, Clone, Debug)]
@@ -1833,13 +1844,6 @@ mod analysis {
             let current_id = self.guid_counter;
             self.guid_counter += 1;
             current_id
-        }
-
-        pub fn initialize_variable(&mut self, identifier: &str) {
-            let (_, variable_descriptor) = self.find_variable_mut(identifier);
-            if let Some(variable_descriptor) = variable_descriptor {
-                variable_descriptor.set_initialized();
-            }
         }
 
         pub fn current_scope(&self) -> &Scope<'a> {
@@ -2129,16 +2133,7 @@ mod analysis {
                 modifiers,
                 value: None,
                 is_parameter,
-                initialized: false,
             }
-        }
-
-        pub fn set_initialized(&mut self) {
-            self.initialized = true;
-        }
-
-        pub fn is_initialized(&self) -> bool {
-            self.initialized || self.is_parameter || self.value.is_some()
         }
 
         pub fn stack_position(&self) -> usize {
@@ -2497,6 +2492,7 @@ mod emitter {
         Dbg {
             debug_keyword: DebugKeyword,
         },
+        Pld,
     }
 
     #[derive(Clone, Copy, Debug)]

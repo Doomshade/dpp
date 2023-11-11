@@ -17,13 +17,17 @@ FUNc init_a() -> pp {
 }
 
 FUNc main() -> pp {
-    const struct FileDef[69] -> b;
-    const pp -> a = init_a();
-     struct File -> root = File {
+    struct File[9] -> b;
+    b[0] = File{69};
+    b[1] = File{123};
+    b[2] = File{456};
+    pp -> a;
+    struct File -> root = File {
         init_a(),
     };
 
     const booba -> asd = 0 == 1;
+    const struct File -> first = b[0];
     root.fd = 123456;
     struct File -> transform_fd = transform_fd(root);
     bye transform_fd.fd;

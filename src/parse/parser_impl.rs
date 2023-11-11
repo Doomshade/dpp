@@ -574,16 +574,15 @@ impl<'a, 'b> Parser<'a, 'b> {
         let data_type = self._data_type_kind()?;
 
         while self.matches_token_kind(TokenKind::Star) {
-            self.expect(TokenKind::Star);
+            self.expect(TokenKind::Star)?;
         }
         if self.matches_token_kind(TokenKind::OpenBracket) {
-            self.expect(TokenKind::OpenBracket);
-            // TODO: This can throw errors.
+            self.expect(TokenKind::OpenBracket)?;
             let number = self
                 .expect(TokenKind::Literal(LiteralKind::Pp))?
                 .parse::<usize>()
-                .unwrap();
-            self.expect(TokenKind::CloseBracket);
+                .ok()?;
+            self.expect(TokenKind::CloseBracket)?;
             Some(DataType::Array(Box::from(data_type), number))
         } else {
             Some(data_type)
@@ -866,6 +865,15 @@ impl<'a, 'b> Parser<'a, 'b> {
                     identifiers,
                 })
             }
+            TokenKind::OpenBracket => {
+                let array_index_expression = Box::new(self._array_access()?);
+
+                Some(Expression::ArrayAccess {
+                    position,
+                    identifier,
+                    array_index_expression,
+                })
+            }
             _ => Some(Expression::Identifier {
                 position,
                 identifier,
@@ -905,5 +913,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         // }
 
         Some(vec)
+    }
+
+    fn _array_access(&mut self) -> Option<Expression<'a>> {
+        self.expect(TokenKind::OpenBracket)?;
+        let expr = self._expr()?;
+        self.expect(TokenKind::CloseBracket)?;
+        Some(expr)
     }
 }
