@@ -519,12 +519,6 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         self.expect(TokenKind::Arrow)?;
 
-        let mut pointer_count = 0usize;
-        while self.token()?.kind() == TokenKind::Star {
-            self.expect(TokenKind::Star)?;
-            pointer_count += 1;
-        }
-
         let position = self.position;
         let identifier = self.expect(TokenKind::Identifier)?;
         if self.matches_token_kind(TokenKind::OpenBracket) {
@@ -536,17 +530,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                 identifier,
                 data_type,
                 modifiers,
-                pointer_count,
+                0,
                 Some(size_expr),
             ))
         } else {
             Some(Variable::new(
-                position,
-                identifier,
-                data_type,
-                modifiers,
-                pointer_count,
-                None,
+                position, identifier, data_type, modifiers, 0, None,
             ))
         }
     }
@@ -583,6 +572,10 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     fn _data_type(&mut self) -> Option<DataType> {
         let data_type = self._data_type_kind()?;
+
+        while self.matches_token_kind(TokenKind::Star) {
+            self.expect(TokenKind::Star);
+        }
         if self.matches_token_kind(TokenKind::OpenBracket) {
             self.expect(TokenKind::OpenBracket);
             // TODO: This can throw errors.
@@ -651,12 +644,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _equ(&mut self) -> Option<Expression<'a>> {
+        const EQU_OPERATORS: [TokenKind; 2] = [TokenKind::BangEqual, TokenKind::EqualEqual];
         let mut expr = self._comp()?;
 
-        while self.matches_token_kind(TokenKind::BangEqual)
-            || self.matches_token_kind(TokenKind::EqualEqual)
-        {
-            let op = match self.token()?.kind() {
+        while let Some(equ_op) = self.matches_one_from(&EQU_OPERATORS) {
+            let op = match equ_op {
                 TokenKind::BangEqual => BinaryOperator::NotEqual,
                 TokenKind::EqualEqual => BinaryOperator::Equal,
                 _ => unreachable!(),
@@ -676,16 +668,18 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _comp(&mut self) -> Option<Expression<'a>> {
+        const COMP_OPERATORS: [TokenKind; 6] = [
+            TokenKind::Greater,
+            TokenKind::GreaterEqual,
+            TokenKind::Less,
+            TokenKind::LessEqual,
+            TokenKind::PipePipe,
+            TokenKind::AmpersandAmpersand,
+        ];
         let mut expr = self._term()?;
 
-        while self.matches_token_kind(TokenKind::Greater)
-            || self.matches_token_kind(TokenKind::GreaterEqual)
-            || self.matches_token_kind(TokenKind::Less)
-            || self.matches_token_kind(TokenKind::LessEqual)
-            || self.matches_token_kind(TokenKind::PipePipe)
-            || self.matches_token_kind(TokenKind::AmpersandAmpersand)
-        {
-            let op = match self.token()?.kind() {
+        while let Some(comp_op) = self.matches_one_from(&COMP_OPERATORS) {
+            let op = match comp_op {
                 TokenKind::Greater => BinaryOperator::GreaterThan,
                 TokenKind::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
                 TokenKind::Less => BinaryOperator::LessThan,
@@ -709,10 +703,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _term(&mut self) -> Option<Expression<'a>> {
+        const EQU_OPERATORS: [TokenKind; 2] = [TokenKind::Dash, TokenKind::Plus];
         let mut expr = self._factor()?;
 
-        while self.matches_token_kind(TokenKind::Dash) || self.matches_token_kind(TokenKind::Plus) {
-            let op = match self.token()?.kind() {
+        while let Some(term_op) = self.matches_one_from(&EQU_OPERATORS) {
+            let op = match term_op {
                 TokenKind::Dash => BinaryOperator::Subtract,
                 TokenKind::Plus => BinaryOperator::Add,
                 _ => unreachable!(),
@@ -732,12 +727,11 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _factor(&mut self) -> Option<Expression<'a>> {
+        const FACTOR_OPERATORS: [TokenKind; 2] = [TokenKind::ForwardSlash, TokenKind::Star];
         let mut expr = self._unary()?;
 
-        while self.matches_token_kind(TokenKind::ForwardSlash)
-            || self.matches_token_kind(TokenKind::Star)
-        {
-            let op = match self.token()?.kind() {
+        while let Some(fact_op) = self.matches_one_from(&FACTOR_OPERATORS) {
+            let op = match fact_op {
                 TokenKind::ForwardSlash => BinaryOperator::Divide,
                 TokenKind::Star => BinaryOperator::Multiply,
                 _ => unreachable!(),
@@ -755,8 +749,9 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn _unary(&mut self) -> Option<Expression<'a>> {
-        if self.matches_token_kind(TokenKind::Bang) || self.matches_token_kind(TokenKind::Dash) {
-            let op = match self.token()?.kind() {
+        const UNARY_OPERATORS: [TokenKind; 2] = [TokenKind::Bang, TokenKind::Dash];
+        if let Some(unary_op) = self.matches_one_from(&UNARY_OPERATORS) {
+            let op = match unary_op {
                 TokenKind::Bang => UnaryOperator::Not,
                 TokenKind::Dash => UnaryOperator::Negate,
                 _ => unreachable!(),

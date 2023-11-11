@@ -199,6 +199,17 @@ impl<'a, 'b> Parser<'a, 'b> {
         false
     }
 
+    fn matches_one_from(&self, token_kinds: &[TokenKind]) -> Option<TokenKind> {
+        if let Some(token) = self.token() {
+            let token_kind = token.kind();
+            return token_kinds
+                .iter()
+                .find(|arr_token| **arr_token == token_kind)
+                .map(|x| token_kind);
+        }
+        None
+    }
+
     fn expect_one_from(
         &mut self,
         expected_token_kinds: &[TokenKind],

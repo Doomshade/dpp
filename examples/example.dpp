@@ -22,6 +22,8 @@ FUNc main() -> pp {
      struct File -> root = File {
         init_a(),
     };
+
+    const booba -> asd = 0 == 1;
     root.fd = 123456;
     struct File -> transform_fd = transform_fd(root);
     bye transform_fd.fd;

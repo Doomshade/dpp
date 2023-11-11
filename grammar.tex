@@ -71,15 +71,15 @@
 
         <assign> ::= <ident> [`.' <ident> ] [ `[' <expr> `]'] ( `=' [ `new' ] | `+=' | `-=' ) <expr> `;'
 
-        <var-decl-stat> ::= <var-decl> [ `=' [ `new' ] <expr> ] `;'
+        <var-decl-stat> ::= <var-decl> [ `=' <expr> ] `;'
 
-        <var-decl> ::= <modifiers> <data-type> `->' \{ `*' \} <ident> [ `[' <expr> `]' ]
+        <var-decl> ::= <modifiers> <data-type> `->' <ident> [ `[' <expr> `]' ]
 
         <block-stat> ::= <block>
 
         <expr-stat> ::= <expr> `;'
 
-        <data-type> ::= <data-type-kind> [ `[' <number> `]' ]
+        <data-type> ::= <data-type-kind> \{ `*' \} [ `[' <number> `]' ]
 
         <data-type-kind> ::= `pp' // int
         \alt `p' // char
