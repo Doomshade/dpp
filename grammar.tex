@@ -69,7 +69,7 @@
 
         <empty> ::= `;'
 
-        <assign> ::= <ident> [`.' <ident> ] ( `=' [ `new' ] | `+=' | `-=' ) <expr> `;'
+        <assign> ::= <ident> [`.' <ident> ] [ `[' <expr> `]'] ( `=' [ `new' ] | `+=' | `-=' ) <expr> `;'
 
         <var-decl-stat> ::= <var-decl> [ `=' [ `new' ] <expr> ] `;'
 
@@ -79,8 +79,9 @@
 
         <expr-stat> ::= <expr> `;'
 
+        <data-type> ::= <data-type-kind> [ `[' <number> `]' ]
 
-        <data-type> ::= `pp' // int
+        <data-type-kind> ::= `pp' // int
         \alt `p' // char
         \alt `nopp' // void
         \alt `booba' // bool
@@ -109,17 +110,18 @@
 
         <primary> ::= `yem' // true
         \alt `nom' // false
-        \alt <number>
-        \alt <string>
+        \alt <literal>
         \alt `(' <expr> `)'
         \alt <ident-expr>
 
-        <ident-expr> ::= <ident> [ <func-args> | <struct-flds> | <struct-fld-access> ]
+        <ident-expr> ::= <ident> [ <func-args> | <struct-flds> | <struct-fld-access> | <array-access> ]
 
         <func-args> ::= `(' [ <expr> \{ `,' <expr> \}] `)'
 
         <struct-flds> ::= `{' \{ <expr> `,' \} `}'
 
         <struct-fld-access> ::= `.' <ident>
+
+        <array-access> ::= `[' <expr> `]'
     \end{grammar}
 \end{document}

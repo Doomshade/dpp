@@ -197,6 +197,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         | TokenKind::PlusEqual
                         | TokenKind::MinusEqual
                         | TokenKind::Dot
+                        | TokenKind::OpenBracket
                 ) {
                     self._assign()
                 } else {
@@ -433,6 +434,15 @@ impl<'a, 'b> Parser<'a, 'b> {
             None
         };
 
+        let array_index_expression = if self.matches_token_kind(TokenKind::OpenBracket) {
+            self.expect(TokenKind::OpenBracket)?;
+            let index_expr = self._expr()?;
+            self.expect(TokenKind::CloseBracket)?;
+            Some(index_expr)
+        } else {
+            None
+        };
+
         let assign_tok = self
             .expect_one_from(&[
                 TokenKind::Equal,
@@ -468,6 +478,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             position,
             identifier,
             field_identifier,
+            array_index_expression,
             expression: assign_expr,
         })
     }
@@ -505,6 +516,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _var_decl(&mut self) -> Option<Variable<'a>> {
         let modifiers = self._modifiers();
         let data_type = self._data_type()?;
+
         self.expect(TokenKind::Arrow)?;
 
         let mut pointer_count = 0usize;
@@ -570,6 +582,22 @@ impl<'a, 'b> Parser<'a, 'b> {
     ];
 
     fn _data_type(&mut self) -> Option<DataType> {
+        let data_type = self._data_type_kind()?;
+        if self.matches_token_kind(TokenKind::OpenBracket) {
+            self.expect(TokenKind::OpenBracket);
+            // TODO: This can throw errors.
+            let number = self
+                .expect(TokenKind::Literal(LiteralKind::Pp))?
+                .parse::<usize>()
+                .unwrap();
+            self.expect(TokenKind::CloseBracket);
+            Some(DataType::Array(Box::from(data_type), number))
+        } else {
+            Some(data_type)
+        }
+    }
+
+    fn _data_type_kind(&mut self) -> Option<DataType> {
         let token = self.expect_one_from(&Self::DATA_TYPE_TOKEN_KINDS)?;
 
         match token.1 {

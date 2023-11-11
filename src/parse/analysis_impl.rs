@@ -378,8 +378,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 identifier,
                 field_identifier,
                 expression,
+                array_index_expression,
                 position,
             } => {
+                // TODO: Implement indexing
                 // Find the variable.
                 let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
                 if let Some(variable) = var_decl {

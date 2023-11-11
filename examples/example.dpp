@@ -1,5 +1,5 @@
 struct File {
-    const pp -> fd,
+    pp -> fd,
 }
 
 struct FileDef {
@@ -17,6 +17,7 @@ FUNc init_a() -> pp {
 }
 
 FUNc main() -> pp {
+    const struct FileDef[69] -> b;
     const pp -> a = init_a();
      struct File -> root = File {
         init_a(),

@@ -1161,6 +1161,7 @@ mod parser {
             position: (u32, u32),
             identifier: &'a str,
             field_identifier: Option<&'a str>,
+            array_index_expression: Option<Expression<'a>>,
             expression: Expression<'a>,
         },
     }
@@ -1184,15 +1185,25 @@ mod parser {
 
     #[derive(Eq, Hash, Debug, Clone)]
     pub enum DataType {
-        Pp,      // int
-        AB,      // ratio
-        Flaccid, // float
-        P,       // char
-        Yarn,    // string
-        Booba,   // bool
-        Nopp,    // void
-        Ratio,   // ratio
+        Pp,
+        // int
+        AB,
+        // ratio
+        Flaccid,
+        // float
+        P,
+        // char
+        Yarn,
+        // string
+        Booba,
+        // bool
+        Nopp,
+        // void
+        Ratio,
+        // ratio
         Struct(String),
+        // struct
+        Array(Box<DataType>, usize), // array with inner data type and size
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -1521,6 +1532,7 @@ mod parser {
                 DataType::Ratio => write!(f, "ratio"),
                 DataType::Struct(name) => write!(f, "struct {name}"),
                 DataType::AB => write!(f, "ratio"),
+                DataType::Array(inner, size) => write!(f, "{inner}[{size}]"),
             }
         }
     }
@@ -1688,15 +1700,25 @@ mod analysis {
 
     #[derive(PartialEq, Eq, Hash, Debug, Clone)]
     pub enum BoundDataType {
-        Pp,      // int
-        AB,      // ratio
-        Flaccid, // float
-        P,       // char
-        Yarn,    // string
-        Booba,   // bool
-        Nopp,    // void
-        Ratio,   // ratio
+        Pp,
+        // int
+        AB,
+        // ratio
+        Flaccid,
+        // float
+        P,
+        // char
+        Yarn,
+        // string
+        Booba,
+        // bool
+        Nopp,
+        // void
+        Ratio,
+        // ratio
         Struct(String, usize),
+        // struct name with size
+        Array(Box<BoundDataType>, usize), // array with inner data type and array size
     }
 
     impl fmt::Display for BoundDataType {
@@ -1711,6 +1733,7 @@ mod analysis {
                 BoundDataType::Ratio => write!(f, "ratio"),
                 BoundDataType::Struct(name, _) => write!(f, "struct {name}"),
                 BoundDataType::AB => write!(f, "ratio"),
+                BoundDataType::Array(inner, size) => write!(f, "{inner}[{size}]"),
             }
         }
     }
@@ -1781,6 +1804,7 @@ mod analysis {
                 BoundDataType::Nopp => 0,
                 BoundDataType::Ratio => 2,
                 BoundDataType::Struct(_, size) => *size,
+                BoundDataType::Array(data_type, size) => data_type.size() * size,
             }
         }
     }
@@ -2142,6 +2166,10 @@ mod analysis {
                         reason: format!("Unknown struct {name}"),
                         dummy_data_type: BoundDataType::Struct(name.clone(), 0),
                     })
+                }
+                DataType::Array(inner, size) => {
+                    let inner = BoundDataType::try_from((&*inner.clone(), value.1))?;
+                    Ok(BoundDataType::Array(Box::new(inner), *size))
                 }
             }
         }
