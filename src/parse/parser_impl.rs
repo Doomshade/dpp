@@ -849,10 +849,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             TokenKind::OpenBrace => {
                 let definitions = self._struct_flds()?;
 
-                Some(Expression::StructDeclaration {
+                Some(Expression::Struct {
                     position,
                     identifier,
-                    definitions,
+                    field_assignments: definitions,
                 })
             }
             TokenKind::Dot => {

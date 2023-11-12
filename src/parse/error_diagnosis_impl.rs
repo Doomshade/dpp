@@ -69,6 +69,9 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     pub fn invalid_break_placement(&mut self, position: (u32, u32)) {
         self.insert_error_message(position, "Invalid break placement.");
     }
+    pub fn invalid_bye_placement(&mut self, position: (u32, u32)) {
+        self.insert_error_message(position, "Invalid bye placement.");
+    }
 
     pub fn invalid_continue_placement(&mut self, position: (u32, u32)) {
         self.insert_error_message(position, "Invalid continue placement.");

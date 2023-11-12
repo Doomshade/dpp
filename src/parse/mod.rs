@@ -471,7 +471,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 )
             })
             .map(|(data_type, offset, is_const)| {
-                BoundVariable::new_static(0, offset, data_type, is_const)
+                BoundVariable::with_static_position(0, offset, data_type, is_const)
             })
             .collect_vec()
     }
@@ -1279,11 +1279,10 @@ mod parser {
             identifier: &'a str,
             arguments: Vec<Expression<'a>>,
         },
-        StructDeclaration {
+        Struct {
             position: (u32, u32),
             identifier: &'a str,
-            // Identifier + expression.
-            definitions: Vec<StructFieldAssignment<'a>>,
+            field_assignments: Vec<StructFieldAssignment<'a>>,
         },
         StructFieldAccess {
             position: (u32, u32),
@@ -1490,7 +1489,7 @@ mod parser {
                     format!("Function {identifier}")
                 }
                 Expression::Invalid { .. } => "Invalid expression".to_string(),
-                Expression::StructDeclaration { identifier, .. } => format!("Struct {identifier}"),
+                Expression::Struct { identifier, .. } => format!("Struct {identifier}"),
                 Expression::StructFieldAccess { identifiers, .. } => {
                     format!("Struct field access {}", identifiers.join("."))
                 }
@@ -1795,7 +1794,7 @@ mod analysis {
         },
         Expression(BoundExpression),
         For {
-            ident_position: BoundVariable,
+            variable: BoundVariable,
             ident_expression: Option<BoundExpression>,
             length_expression: BoundExpression,
             statement: Box<BoundStatement>,
@@ -2312,7 +2311,7 @@ mod analysis {
     }
 
     impl BoundVariable {
-        pub fn new_dynamic(
+        pub fn with_dynamic_position(
             level: usize,
             base_offset: i32,
             dynamic_offset: BoundExpression,
@@ -2330,7 +2329,7 @@ mod analysis {
             }
         }
 
-        pub fn new_static(
+        pub fn with_static_position(
             level: usize,
             offset: i32,
             data_type: BoundDataType,

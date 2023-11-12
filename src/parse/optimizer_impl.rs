@@ -113,7 +113,7 @@ impl Optimizer {
             }
             BoundStatement::For {
                 ident_expression,
-                ident_position,
+                variable: ident_position,
                 length_expression,
                 statement,
             } => {
@@ -128,7 +128,7 @@ impl Optimizer {
 
                 BoundStatement::For {
                     ident_expression,
-                    ident_position,
+                    variable: ident_position,
                     length_expression,
                     statement: Box::new(statement),
                 }

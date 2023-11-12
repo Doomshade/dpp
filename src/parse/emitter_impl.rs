@@ -191,7 +191,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_label(end);
             }
             BoundStatement::For {
-                ident_position,
+                variable: ident_position,
                 ident_expression,
                 length_expression,
                 statement,
