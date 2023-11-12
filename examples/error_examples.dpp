@@ -1,9 +1,8 @@
 struct Test {}
 
 FUNc main() -> pp {
-    bye Test{};
+    bye 0;
 }
 
-FUNc test() -> nopp {
-    bye;
+FUNc test(pp -> a) -> nopp {
 }

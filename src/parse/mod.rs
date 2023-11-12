@@ -507,25 +507,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             None => {}
         }
     }
-
-    fn begin_function(&mut self, function: &Function<'a>) {
-        self.symbol_table_mut()
-            .push_function_scope(function.identifier());
-        function.parameters().iter().for_each(|parameter| {
-            let data_type = self.to_bound_data_type(parameter.data_type(), parameter.position());
-            self.declare_variable(
-                parameter.position(),
-                parameter.modifiers().clone(),
-                data_type,
-                parameter.identifier(),
-                true,
-            )
-        });
-    }
-
-    fn end_function(&mut self) {
-        self.symbol_table_mut().pop_scope();
-    }
 }
 
 impl Optimizer {
@@ -1522,14 +1503,14 @@ mod parser {
     impl fmt::Display for DataType {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                DataType::Pp => write!(f, "integer"),
+                DataType::Pp => write!(f, "pp"),
                 DataType::Flaccid => write!(f, "flaccid"),
                 DataType::P => write!(f, "p"),
                 DataType::Yarn => write!(f, "yarn"),
                 DataType::Booba => write!(f, "booba"),
                 DataType::Nopp => write!(f, "nopp"),
                 DataType::Struct(name) => write!(f, "struct {name}"),
-                DataType::AB => write!(f, "ratio"),
+                DataType::AB => write!(f, "ab"),
                 DataType::Array(inner, size) => write!(f, "{inner}[{size}]"),
             }
         }
@@ -1734,14 +1715,14 @@ mod analysis {
     impl fmt::Display for BoundDataType {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                BoundDataType::Pp => write!(f, "integer"),
+                BoundDataType::Pp => write!(f, "pp"),
                 BoundDataType::Flaccid => write!(f, "flaccid"),
                 BoundDataType::P => write!(f, "p"),
                 BoundDataType::Yarn => write!(f, "yarn"),
                 BoundDataType::Booba => write!(f, "booba"),
                 BoundDataType::Nopp => write!(f, "nopp"),
                 BoundDataType::Struct(name, _) => write!(f, "struct {name}"),
-                BoundDataType::AB => write!(f, "ratio"),
+                BoundDataType::AB => write!(f, "ab"),
                 BoundDataType::Array(inner, size) => write!(f, "{inner}[{size}]"),
             }
         }

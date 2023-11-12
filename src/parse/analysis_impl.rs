@@ -85,16 +85,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.error_diag
                     .borrow_mut()
                     .function_already_exists(function.position(), function.identifier());
-            } else {
-                let return_type =
-                    self.to_bound_data_type(function.return_type(), function.position());
-                let parameters = self.to_bound_parameters(function.parameters());
-                self.symbol_table_mut().define_function(
-                    return_type,
-                    function.identifier(),
-                    parameters,
-                );
             }
+
+            let return_type = self.to_bound_data_type(function.return_type(), function.position());
+            let parameters = self.to_bound_parameters(function.parameters());
+            self.symbol_table_mut()
+                .define_function(return_type, function.identifier(), parameters);
         });
 
         // Analyze global statements.
@@ -111,20 +107,26 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             .map(|function| self.analyze_function(function))
             .collect_vec();
 
-        // TODO: Check the return type of the main function.
-        // |function| {
-        //                 if function.identifier() == "main" {
-        //                     if function.return_type() != &DataType::Number(NumberType::Pp) {
-        //                         self.error_diag.borrow_mut().invalid_return_type(
-        //                             (0, 0),
-        //                             "main",
-        //                             &DataType::Number(NumberType::Pp),
-        //                             function.return_type(),
-        //                         );
-        //                     }
-        //                 }
-        //             }
-        let main_function_identifier;
+        // Analyze the main function.
+        let main_function_identifier = self.find_and_analyze_main_function(&functions).unwrap_or(0);
+
+        // Make sure the only scope that's currently in the symbol table is the global scope.
+        assert_eq!(
+            self.symbol_table.current_scope_depth(),
+            1,
+            "There should only be the global scope."
+        );
+        let global_stack_frame_size = self.symbol_table().current_scope().stack_position();
+
+        BoundTranslationUnit::new(
+            functions,
+            main_function_identifier,
+            global_stack_frame_size,
+            global_variables,
+        )
+    }
+
+    fn find_and_analyze_main_function(&mut self, functions: &Vec<BoundFunction>) -> Option<usize> {
         if let Some(main_function) = functions
             .iter()
             .find(|function| function.is_main_function())
@@ -148,24 +150,11 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .invalid_main_function("Invalid return type. Expected \"pp\" or \"nopp\"."),
             }
 
-            main_function_identifier = main_function.identifier();
+            Some(main_function.identifier())
         } else {
-            main_function_identifier = 0;
             self.error_diag.borrow_mut().no_main_method_found_error();
+            None
         }
-
-        assert_eq!(
-            self.symbol_table.current_scope_depth(),
-            1,
-            "There should only be the global scope."
-        );
-
-        BoundTranslationUnit::new(
-            functions,
-            main_function_identifier,
-            self.symbol_table().current_scope().stack_position(),
-            global_variables,
-        )
     }
 
     /// # Summary
@@ -177,10 +166,34 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
     ///
     /// * `function`: the function to analyze
     fn analyze_function(&mut self, function: &Function<'a>) -> BoundFunction {
-        self.begin_function(function);
+        // Push a function scope to symbol table. This will set the currently analyzed function
+        // to this one.
+        self.symbol_table_mut()
+            .push_function_scope(function.identifier());
+
+        // Push the parameters to the scope.
+        for parameter in function.parameters() {
+            let data_type = self.to_bound_data_type(parameter.data_type(), parameter.position());
+            self.declare_variable(
+                parameter.position(),
+                parameter.modifiers().clone(),
+                data_type,
+                parameter.identifier(),
+                true,
+            );
+        }
+
+        // Get the generated id.
         let function_id = self.symbol_table().current_function().unwrap().id();
+
+        // Map the parameters to bound variables.
         let parameters = self.to_bound_parameters(function.parameters());
+
+        // Analyze the function's statements.
         let bound_statements = self.analyze_statements(function.statements());
+
+        // Make sure the last statement is the bye statement.
+        // This could be done better, but it's way easier to implement this.
         if function.return_type() != &DataType::Nopp {
             // If it's anything other than Nopp, then we require the function to have
             // a return statement at the very end.
@@ -202,17 +215,20 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
         }
 
-        let stack_position = self
+        // Get the current stack pointer after all statements. This is basically the stack frame
+        // size.
+        let stack_frame_size = self
             .symbol_table()
             .current_function()
             .unwrap()
             .stack_frame_size();
 
-        self.end_function();
+        // Pop the function scope off the symbol table.
+        self.symbol_table_mut().pop_scope();
 
         BoundFunction::new(
             function_id,
-            stack_position,
+            stack_frame_size,
             function.identifier() == "main",
             self.to_bound_data_type(function.return_type(), function.position()),
             parameters,
