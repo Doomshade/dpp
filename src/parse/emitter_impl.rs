@@ -130,7 +130,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         // We aren't forcing the function to have a return statement if it's nopp, so we'll emit it
         // ourselves.
-        if function.return_size() == 0 {
+        if function.return_type().size() == 0 {
             self.emit_instruction(Instruction::Return);
         }
     }

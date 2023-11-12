@@ -1635,7 +1635,7 @@ mod analysis {
         identifier: usize,
         is_main_function: bool,
         stack_frame_size: usize,
-        return_size: usize,
+        return_type: BoundDataType,
         parameters: Vec<BoundVariable>,
         pub statements: Vec<BoundStatement>,
     }
@@ -2264,7 +2264,7 @@ mod analysis {
             identifier: usize,
             stack_frame_size: usize,
             is_main_function: bool,
-            return_size: usize,
+            return_type: BoundDataType,
             parameters: Vec<BoundVariable>,
             statements: Vec<BoundStatement>,
         ) -> Self {
@@ -2272,7 +2272,7 @@ mod analysis {
                 identifier,
                 stack_frame_size,
                 is_main_function,
-                return_size,
+                return_type,
                 parameters,
                 statements,
             }
@@ -2290,8 +2290,8 @@ mod analysis {
         pub fn parameters(&self) -> &Vec<BoundVariable> {
             &self.parameters
         }
-        pub fn return_size(&self) -> usize {
-            self.return_size
+        pub fn return_type(&self) -> &BoundDataType {
+            &self.return_type
         }
         pub fn is_main_function(&self) -> bool {
             self.is_main_function

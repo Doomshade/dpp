@@ -1,0 +1,9 @@
+struct Test {}
+
+FUNc main() -> struct Test {
+    bye Test{};
+}
+
+FUNc test() -> nopp {
+    bye;
+}

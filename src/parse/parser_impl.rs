@@ -372,15 +372,16 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _bye(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
         self.expect(TokenKind::ByeKeyword)?;
-        if let Some(expression) = self._expr() {
-            let ret = Statement::Bye {
-                position,
-                expression: Some(expression),
-            };
-            self.expect(TokenKind::Semicolon)?;
-            return Some(ret);
+        if !self.matches_token_kind(TokenKind::Semicolon) {
+            if let Some(expression) = self._expr() {
+                let ret = Statement::Bye {
+                    position,
+                    expression: Some(expression),
+                };
+                self.expect(TokenKind::Semicolon)?;
+                return Some(ret);
+            }
         }
-
         self.expect(TokenKind::Semicolon)?;
         Some(Statement::Bye {
             position,

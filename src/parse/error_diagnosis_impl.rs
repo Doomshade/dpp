@@ -206,7 +206,7 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
 
     pub fn invalid_main_function(&mut self, reason: &str) {
         self.insert_error_message(
-            (0, 0),
+            (1, 1),
             format!("Invalid main function. Reason: {reason}",).as_str(),
         );
     }

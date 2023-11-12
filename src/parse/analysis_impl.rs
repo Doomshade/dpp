@@ -4,7 +4,8 @@ use itertools::Itertools;
 use crate::parse::analysis::{
     BoundCase, BoundDataType, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
     BoundStructField, BoundStructFieldAssignment, BoundTranslationUnit, BoundVariable,
-    BoundVariableAssignment, BoundVariablePosition,
+    BoundVariableAssignment, BoundVariablePosition, StructDefinitionDescriptor,
+    VariableDeclarationDescriptor,
 };
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
@@ -137,6 +138,16 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     .as_str(),
                 );
             }
+            match main_function.return_type() {
+                BoundDataType::Pp | BoundDataType::Nopp => {
+                    // Do nothing.
+                }
+                _ => self
+                    .error_diag
+                    .borrow_mut()
+                    .invalid_main_function("Invalid return type. Expected \"pp\" or \"nopp\"."),
+            }
+
             main_function_identifier = main_function.identifier();
         } else {
             main_function_identifier = 0;
@@ -175,19 +186,22 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             // a return statement at the very end.
             let last_statement = function.statements().last();
             if let Some(statement) = last_statement {
-                if let Statement::Bye { .. } = statement {
-                    // Do nothing.
-                } else {
-                    self.error_diag
+                match statement {
+                    Statement::Bye { .. } => {
+                        // Do nothing.
+                    }
+                    _ => self
+                        .error_diag
                         .borrow_mut()
-                        .missing_return_statement(function.position());
-                }
+                        .missing_return_statement(function.position()),
+                };
             } else {
                 self.error_diag
                     .borrow_mut()
                     .missing_return_statement(function.position());
             }
         }
+
         let stack_position = self
             .symbol_table()
             .current_function()
@@ -200,8 +214,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             function_id,
             stack_position,
             function.identifier() == "main",
-            self.to_bound_data_type(function.return_type(), function.position())
-                .size(),
+            self.to_bound_data_type(function.return_type(), function.position()),
             parameters,
             bound_statements,
         )
@@ -1042,6 +1055,10 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 position,
                 identifiers,
             } => {
+                let default_value = BoundExpression::StructFieldAccess(
+                    BoundVariable::with_static_position(0, 0, BoundDataType::Nopp, false),
+                );
+
                 let struct_identifier = identifiers
                     .get(0)
                     .expect("The struct identifier to be present.");
@@ -1056,55 +1073,62 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
 
                 // Find the variable, then type the data type to struct. Find the field and
                 // return its data type.
-                if let Some(variable_descr) = variable_descr.1 {
-                    if let BoundDataType::Struct(ident, _) = variable_descr.data_type() {
-                        let struct_descr = self.symbol_table().find_struct_definition(ident);
-                        if let Some(struct_descr) = struct_descr.1 {
-                            if let Some(field) = struct_descr
-                                .fields()
-                                .iter()
-                                .find(|field| field.ident() == *field_identifier)
-                            {
-                                let stack_pos = variable_descr.stack_position();
-                                let field_off = field.offset();
-                                return BoundExpression::StructFieldAccess(
-                                    BoundVariable::with_static_position(
-                                        level,
-                                        (stack_pos + field_off) as i32,
-                                        field.data_type().clone(),
-                                        false,
-                                    ),
-                                );
-                            } else {
-                                self.error_diag.borrow_mut().struct_field_not_found(
-                                    *position,
-                                    *struct_identifier,
-                                    *field_identifier,
-                                );
-                            }
-                        } else {
-                            self.error_diag
-                                .borrow_mut()
-                                .struct_does_not_exist(expression.position(), *struct_identifier);
-                        }
-                    } else {
-                        self.error_diag.borrow_mut().invalid_data_type(
-                            *position,
-                            &BoundDataType::Struct(String::from(*struct_identifier), 0),
-                            variable_descr.data_type(),
-                        );
-                    }
-                } else {
+                if variable_descr.1.is_none() {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, struct_identifier);
+                    return default_value;
                 }
-                BoundExpression::StructFieldAccess(BoundVariable::with_static_position(
-                    0,
-                    0,
-                    BoundDataType::Nopp,
-                    false,
-                ))
+
+                let variable_descr = variable_descr
+                    .1
+                    .expect("The variable descriptor to be present.");
+                match variable_descr.data_type() {
+                    BoundDataType::Struct(ident, _) => {
+                        let struct_descr = self.symbol_table().find_struct_definition(ident);
+                        if struct_descr.1.is_none() {
+                            self.error_diag
+                                .borrow_mut()
+                                .struct_does_not_exist(*position, struct_identifier);
+                            return default_value;
+                        }
+
+                        let struct_descr = struct_descr
+                            .1
+                            .expect("The struct descriptor to be present.");
+                        let field = struct_descr
+                            .fields()
+                            .iter()
+                            .find(|field| field.ident() == *field_identifier);
+                        if field.is_none() {
+                            self.error_diag.borrow_mut().struct_field_not_found(
+                                *position,
+                                *struct_identifier,
+                                *field_identifier,
+                            );
+                            return default_value;
+                        }
+
+                        let field = field.expect("The field to be present.");
+                        let stack_pos = variable_descr.stack_position();
+                        let field_off = field.offset();
+                        return BoundExpression::StructFieldAccess(
+                            BoundVariable::with_static_position(
+                                level,
+                                (stack_pos + field_off) as i32,
+                                field.data_type().clone(),
+                                false,
+                            ),
+                        );
+                    }
+                    _ => self.error_diag.borrow_mut().invalid_data_type(
+                        *position,
+                        &BoundDataType::Struct(String::from(*struct_identifier), 0),
+                        variable_descr.data_type(),
+                    ),
+                }
+
+                default_value
             }
             Expression::ArrayAccess {
                 position,
