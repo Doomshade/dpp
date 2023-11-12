@@ -1,12 +1,11 @@
-use itertools::Itertools;
 use std::io::Write;
 use std::{cell, collections, fs, io, rc};
 
 use dpp_macros::Pos;
+use itertools::Itertools;
 
 use crate::parse::analysis::{
-    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable, BoundVariablePosition,
-    SymbolTable,
+    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable, SymbolTable,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
@@ -847,9 +846,8 @@ mod error_diagnosis {
 mod lexer {
     use std::fmt;
 
-    use dpp_macros_derive::Pos;
-
     use dpp_macros::Pos;
+    use dpp_macros_derive::Pos;
 
     #[derive(Debug, Pos)]
     pub struct Token<'a> {
@@ -1063,9 +1061,8 @@ mod lexer {
 mod parser {
     use std::fmt;
 
-    use dpp_macros_derive::Pos;
-
     use dpp_macros::Pos;
+    use dpp_macros_derive::Pos;
 
     #[derive(Clone, Debug, Pos)]
     pub struct TranslationUnit<'a> {
@@ -1549,7 +1546,6 @@ mod parser {
 }
 
 mod analysis {
-    use std::fmt::Formatter;
     use std::{cmp, collections, fmt, ops};
 
     use crate::parse::parser::{BinaryOperator, DataType, Modifier, UnaryOperator};
@@ -1706,7 +1702,7 @@ mod analysis {
     }
 
     impl fmt::Display for BoundVariablePosition {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 BoundVariablePosition::Static(level, offset) => write!(
                     f,
@@ -1724,22 +1720,14 @@ mod analysis {
 
     #[derive(PartialEq, Eq, Hash, Debug, Clone)]
     pub enum BoundDataType {
-        Pp,
-        // int
-        AB,
-        // ratio
-        Flaccid,
-        // float
-        P,
-        // char
-        Yarn,
-        // string
-        Booba,
-        // bool
-        Nopp,
-        // void
-        Struct(String, usize),
-        // struct name with size
+        Pp,                               // int
+        AB,                               // ratio
+        Flaccid,                          // float
+        P,                                // char
+        Yarn,                             // string
+        Booba,                            // bool
+        Nopp,                             // void
+        Struct(String, usize),            // struct name with size
         Array(Box<BoundDataType>, usize), // array with inner data type and array size
     }
 
