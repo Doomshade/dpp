@@ -1,5 +1,4 @@
 use dpp_macros::Pos;
-use std::env::var;
 
 use crate::parse::analysis::{
     BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement, BoundTranslationUnit,
@@ -58,8 +57,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     );
                     self.emit_value(&BoundLiteralValue::Pp(i as i32));
                     self.emit_operation(OperationType::Add);
-
-                    self.emit_instruction(Instruction::Sta);
+                    self.emit_instruction(Instruction::Pst);
                 }
             }
         }
@@ -401,20 +399,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
             BoundExpression::StructFieldAccess(variable) => {
                 self.load_variable(variable);
             }
-            BoundExpression::ArrayAccess(variable, array_size) => {
-                if let BoundVariablePosition::Dynamic(level, base_offset, dynamic_offset) =
-                    variable.position()
-                {
-                    self.emit_variable_level(variable.position());
-
-                    self.emit_expression(dynamic_offset);
-                    // TODO: Could add a check here for IOOB.
-                    self.emit_value(&BoundLiteralValue::Pp(variable.data_type().size() as i32));
-                    self.emit_operation(OperationType::Multiply);
-                    self.emit_variable_offset(variable.position());
-                    self.emit_operation(OperationType::Add);
-                    self.emit_instruction(Instruction::Pld);
-                }
+            BoundExpression::ArrayAccess(variable, _) => {
+                self.load_variable(variable);
             }
             _ => todo!("Not implemented {expression:?}"),
         }

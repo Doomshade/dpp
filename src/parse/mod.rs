@@ -637,7 +637,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     }
                 }
                 Instruction::Pld => writer.write_all(format!("{pc} PLD 0 0\r\n").as_bytes())?,
-                Instruction::Sta => writer.write_all(format!("{pc} STA 0 0\r\n").as_bytes())?,
+                Instruction::Pst => writer.write_all(format!("{pc} PST 0 0\r\n").as_bytes())?,
             }
             pc += 1;
         }
@@ -2479,7 +2479,7 @@ mod emitter {
             debug_keyword: DebugKeyword,
         },
         Pld,
-        Sta,
+        Pst,
     }
 
     #[derive(Clone, Copy, Debug)]

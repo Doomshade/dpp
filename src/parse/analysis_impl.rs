@@ -141,13 +141,13 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 );
             }
             match main_function.return_type() {
-                BoundDataType::Pp | BoundDataType::Nopp => {
+                BoundDataType::Pp => {
                     // Do nothing.
                 }
                 _ => self
                     .error_diag
                     .borrow_mut()
-                    .invalid_main_function("Invalid return type. Expected \"pp\" or \"nopp\"."),
+                    .invalid_main_function("Invalid return type. Expected \"pp\"."),
             }
 
             Some(main_function.identifier())
@@ -476,125 +476,153 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 // TODO: Implement indexing
                 // Find the variable.
                 let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
-                if let Some(variable) = var_decl {
-                    // If const throw an error.
-                    let is_const = variable.has_modifier(Modifier::Const);
-                    if is_const {
-                        self.error_diag
-                            .borrow_mut()
-                            .cannot_assign_to_const_variable(*position, identifier);
-                    }
-                    let data_type = variable.data_type();
 
-                    // Check if the variable is an array.
-                    if let BoundDataType::Array(inner, size) = data_type {
-                        if let Some(array_index_expression) = array_index_expression {
-                            let expression =
-                                self.analyze_expr(expression, Some(inner), Some(*position));
-                            let array_index_expression = self.analyze_expr(
-                                array_index_expression,
-                                Some(&BoundDataType::Pp),
-                                Some(*position),
-                            );
-                            let offset = variable.stack_position();
-
-                            let variable = BoundVariable::with_static_position(
-                                level,
-                                offset as i32,
-                                *inner.clone(),
-                                is_const,
-                            );
-                            return BoundStatement::VariableAssignment(
-                                BoundVariableAssignment::new(variable, expression.1),
-                            );
-                        } else {
-                            // TODO: Handle this
-                            todo!("SIGH")
-                        }
-                    } else {
-                        if let Some(array_index_expression) = array_index_expression {
-                            self.error_diag
-                                .borrow_mut()
-                                .variable_is_not_array(*position, *identifier);
-                        }
-                    }
-
-                    // Check if the variable is a structure.
-                    if let BoundDataType::Struct(ident, _) = data_type {
-                        // If it is, check whether we are accessing a field.
-                        if let Some(field_name) = field_identifier {
-                            // If we are accessing a field find the struct definition and make
-                            // sure the field actually exists in it.
-                            let (_, struct_def) = self.symbol_table().find_struct_definition(ident);
-                            if let Some(struct_def) = struct_def {
-                                if let Some(field) = struct_def
-                                    .fields()
-                                    .iter()
-                                    .find(|field| field.ident() == *field_name)
-                                {
-                                    // The field exists, it's an assignment to a struct.
-                                    let expression = self.analyze_expr(
-                                        expression,
-                                        Some(field.data_type()),
-                                        Some(*position),
-                                    );
-                                    let offset = variable.stack_position() + field.offset();
-                                    let is_field_const = field.has_modifier(Modifier::Const);
-                                    if is_field_const {
-                                        self.error_diag
-                                            .borrow_mut()
-                                            .cannot_assign_to_const_variable(
-                                                *position,
-                                                *field_name,
-                                            );
-                                    }
-                                    let variable = BoundVariable::with_static_position(
-                                        level,
-                                        offset as i32,
-                                        field.data_type().clone(),
-                                        is_field_const,
-                                    );
-                                    return BoundStatement::VariableAssignment(
-                                        BoundVariableAssignment::new(variable, expression.1),
-                                    );
-                                }
-                            } else {
-                                unreachable!("This should not happen :(");
-                            }
-                        }
-                    } else {
-                        // The variable is not a struct and we are accessing a field of it ->
-                        // throw an error.
-                        if let Some(field_identifier) = field_identifier {
-                            self.error_diag.borrow_mut().variable_is_not_struct(
-                                *position,
-                                *identifier,
-                                *field_identifier,
-                            );
-                        }
-                    }
-                    let expression =
-                        self.analyze_expr(expression, Some(data_type), Some(*position));
-
-                    let offset = variable.stack_position();
-                    let data_type = variable.data_type().clone();
-
-                    let variable = BoundVariable::with_static_position(
-                        level,
-                        offset as i32,
-                        data_type,
-                        is_const,
-                    );
-                    BoundStatement::VariableAssignment(BoundVariableAssignment::new(
-                        variable,
-                        expression.1,
-                    ))
-                } else {
+                // If there is no variable there's nothing to analyze anymore.
+                if var_decl.is_none() {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
-                    BoundStatement::Empty
+                    return BoundStatement::Empty;
                 }
+                let variable = var_decl.expect("A variable descriptor to be present.");
+
+                // If the variable is declared const throw an error.
+                if variable.has_modifier(Modifier::Const) {
+                    self.error_diag
+                        .borrow_mut()
+                        .cannot_assign_to_const_variable(*position, identifier);
+                }
+
+                let data_type = variable.data_type();
+                match data_type {
+                    BoundDataType::Struct(struct_ident, _) => 's: {
+                        // Special case for struct: we can access a field of the struct and
+                        // assign something to it.
+                        if field_identifier.is_none() {
+                            break 's;
+                        }
+
+                        // We are indeed accessing a field.
+                        let field_name =
+                            field_identifier.expect("A field identifier to be present.");
+
+                        // If we are accessing a field find the struct definition and make
+                        // sure the field actually exists in it.
+                        let (_, struct_def) =
+                            self.symbol_table().find_struct_definition(struct_ident);
+
+                        // If the struct does not exist
+                        if struct_def.is_none() {
+                            self.error_diag
+                                .borrow_mut()
+                                .struct_does_not_exist(*position, struct_ident);
+                            return BoundStatement::Empty;
+                        }
+
+                        let struct_def = struct_def.expect("The struct definition to exist.");
+                        let field = struct_def
+                            .fields()
+                            .iter()
+                            .find(|field| field.ident() == field_name);
+                        if field.is_none() {
+                            self.error_diag.borrow_mut().struct_field_not_found(
+                                *position,
+                                struct_ident,
+                                field_name,
+                            );
+                            return BoundStatement::Empty;
+                        }
+
+                        // The field exists, it's an assignment to a struct field.
+                        let field = field.expect("The struct field to be present.");
+                        let expression =
+                            self.analyze_expr(expression, Some(field.data_type()), Some(*position));
+
+                        if field.has_modifier(Modifier::Const) {
+                            self.error_diag
+                                .borrow_mut()
+                                .cannot_assign_to_const_variable(*position, field_name);
+                            return BoundStatement::Empty;
+                        }
+
+                        let offset = variable.stack_position() + field.offset();
+                        let variable = BoundVariable::with_static_position(
+                            level,
+                            offset as i32,
+                            field.data_type().clone(),
+                            false,
+                        );
+                        return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
+                            variable,
+                            expression.1,
+                        ));
+                    }
+                    BoundDataType::Array(inner, size) => 'arr: {
+                        if array_index_expression.is_none() {
+                            break 'arr;
+                        }
+
+                        // We are assigning to an array under some index.
+                        let array_index_expression = array_index_expression
+                            .as_ref()
+                            .expect("The array index expression to be present.");
+
+                        // Analyze the index expression. The data type must be pp.
+                        let array_index_expression = self.analyze_expr(
+                            array_index_expression,
+                            Some(&BoundDataType::Pp),
+                            Some(*position),
+                        );
+
+                        // Analyze the rhs expression. The data type must match the inner array
+                        // data type.
+                        let expression =
+                            self.analyze_expr(expression, Some(inner), Some(*position));
+                        let offset = variable.stack_position();
+
+                        let variable = BoundVariable::with_dynamic_position(
+                            level,
+                            offset as i32,
+                            array_index_expression.1,
+                            *inner.clone(),
+                            false,
+                        );
+                        return BoundStatement::VariableAssignment(BoundVariableAssignment::new(
+                            variable,
+                            expression.1,
+                        ));
+                    }
+                    _ => {}
+                }
+
+                // If there is an index expression present and the variable is not an array ->
+                // throw an error.
+                if array_index_expression.is_some() {
+                    self.error_diag
+                        .borrow_mut()
+                        .variable_is_not_array(*position, *identifier);
+                }
+
+                // The variable is not a struct and we are accessing a field of it ->
+                // throw an error.
+                if let Some(field_identifier) = field_identifier {
+                    self.error_diag.borrow_mut().variable_is_not_struct(
+                        *position,
+                        *identifier,
+                        *field_identifier,
+                    );
+                }
+
+                let expression = self.analyze_expr(expression, Some(data_type), Some(*position));
+                let offset = variable.stack_position();
+                let data_type = variable.data_type().clone();
+
+                let variable =
+                    BoundVariable::with_static_position(level, offset as i32, data_type, false);
+                BoundStatement::VariableAssignment(BoundVariableAssignment::new(
+                    variable,
+                    expression.1,
+                ))
             }
             Statement::Empty { .. } => BoundStatement::Empty, // Nothing to analyze here :)
             Statement::Switch {
