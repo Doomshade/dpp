@@ -492,12 +492,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         let variable = self._var_decl()?;
         let statement = if self.matches_token_kind(TokenKind::Equal) {
             self.expect(TokenKind::Equal);
-            let heap_allocated = if self.matches_token_kind(TokenKind::NewKeyword) {
-                self.expect(TokenKind::NewKeyword)?;
-                true
-            } else {
-                false
-            };
             let expression = self._expr()?;
             // TODO: Heap allocation.
             Statement::VariableDeclaration {

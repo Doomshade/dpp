@@ -189,7 +189,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_label(end);
             }
             BoundStatement::For {
-                variable: ident_position,
+                variable,
                 ident_expression,
                 length_expression,
                 statement,
@@ -203,11 +203,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 } else {
                     self.emit_value(&BoundLiteralValue::Pp(0));
                 }
-                self.store_variable(ident_position);
+                self.store_variable(variable);
 
                 // Compare the variable with the length.
                 self.emit_label(cmp_label.clone());
-                self.load_variable(ident_position);
+                self.load_variable(variable);
                 self.emit_expression(length_expression);
                 self.emit_operation(OperationType::LessThan);
                 self.emit_jmc(Address::Label(end.clone()));
@@ -216,10 +216,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_statement(statement, Some(cmp_label.clone()), Some(end.clone()));
 
                 // Increment i.
-                self.load_variable(ident_position);
+                self.load_variable(variable);
                 self.emit_value(&BoundLiteralValue::Pp(1));
                 self.emit_operation(OperationType::Add);
-                self.store_variable(ident_position);
+                self.store_variable(variable);
 
                 self.emit_jump(Address::Label(cmp_label.clone()));
                 self.emit_label(end.clone());

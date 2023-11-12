@@ -394,7 +394,6 @@ impl<'a, 'b> Lexer<'a, 'b> {
             "pp" => TokenKind::PpKeyword,
             "flaccid" => TokenKind::FlaccidKeyword,
             "ab" => TokenKind::ABKeyword,
-            "ned" => TokenKind::NewKeyword,
             "p" => TokenKind::PKeyword,
             "nopp" => TokenKind::NoppKeyword,
             "booba" => TokenKind::BoobaKeyword,

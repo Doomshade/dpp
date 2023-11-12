@@ -912,8 +912,7 @@ mod lexer {
         StructKeyword,      // struct / record
         PipePipe,           // ||
         AmpersandAmpersand, // &&
-        ConstKeyword,
-        NewKeyword,
+        ConstKeyword,       // const
     }
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -973,7 +972,6 @@ mod lexer {
                 Self::Less => "\"<\"",
                 Self::LessEqual => "\"<=\"",
                 Self::NomKeyword => "\"nom\"",
-                Self::NewKeyword => "\"new\"",
                 Self::YemKeyword => "\"yem\"",
                 Self::OpenParen => "\"(\"",
                 Self::CloseParen => "\")\"",
