@@ -299,7 +299,8 @@ impl<'a, 'b> ErrorDiagnosis<'a, 'b> {
     ) {
         self.insert_error_message(
             position,
-            format!("Invalid data type - expected {expected_data_type} got {got}.").as_str(),
+            format!("Invalid data type - expected \"{expected_data_type}\" got \"{got}\".")
+                .as_str(),
         );
     }
 

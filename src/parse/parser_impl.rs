@@ -372,6 +372,9 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn _bye(&mut self) -> Option<Statement<'a>> {
         let position = self.position;
         self.expect(TokenKind::ByeKeyword)?;
+
+        // This is probably not the best way to handle this. But let's just not expect an
+        // expression if a semicolon is right after the bye statement.
         if !self.matches_token_kind(TokenKind::Semicolon) {
             if let Some(expression) = self._expr() {
                 let ret = Statement::Bye {

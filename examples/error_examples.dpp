@@ -1,6 +1,6 @@
 struct Test {}
 
-FUNc main() -> struct Test {
+FUNc main() -> pp {
     bye Test{};
 }
 

@@ -1202,10 +1202,8 @@ mod parser {
         // bool
         Nopp,
         // void
-        Ratio,
-        // ratio
         Struct(String),
-        // struct
+        // struct with name
         Array(Box<DataType>, usize), // array with inner data type and size
     }
 
@@ -1541,7 +1539,6 @@ mod parser {
                 DataType::Yarn => write!(f, "yarn"),
                 DataType::Booba => write!(f, "booba"),
                 DataType::Nopp => write!(f, "nopp"),
-                DataType::Ratio => write!(f, "ratio"),
                 DataType::Struct(name) => write!(f, "struct {name}"),
                 DataType::AB => write!(f, "ratio"),
                 DataType::Array(inner, size) => write!(f, "{inner}[{size}]"),
@@ -1749,8 +1746,6 @@ mod analysis {
         // bool
         Nopp,
         // void
-        Ratio,
-        // ratio
         Struct(String, usize),
         // struct name with size
         Array(Box<BoundDataType>, usize), // array with inner data type and array size
@@ -1765,7 +1760,6 @@ mod analysis {
                 BoundDataType::Yarn => write!(f, "yarn"),
                 BoundDataType::Booba => write!(f, "booba"),
                 BoundDataType::Nopp => write!(f, "nopp"),
-                BoundDataType::Ratio => write!(f, "ratio"),
                 BoundDataType::Struct(name, _) => write!(f, "struct {name}"),
                 BoundDataType::AB => write!(f, "ratio"),
                 BoundDataType::Array(inner, size) => write!(f, "{inner}[{size}]"),
@@ -1837,7 +1831,6 @@ mod analysis {
                 BoundDataType::Yarn => todo!("Yarn not yet implemented"),
                 BoundDataType::Booba => 1,
                 BoundDataType::Nopp => 0,
-                BoundDataType::Ratio => 2,
                 BoundDataType::Struct(_, size) => *size,
                 BoundDataType::Array(data_type, size) => data_type.size() * size,
             }
@@ -2176,7 +2169,6 @@ mod analysis {
                 DataType::Yarn => Ok(BoundDataType::Yarn),
                 DataType::Booba => Ok(BoundDataType::Booba),
                 DataType::Nopp => Ok(BoundDataType::Nopp),
-                DataType::Ratio => Ok(BoundDataType::Ratio),
                 DataType::Struct(name) => {
                     if let Some(a_struct) = value.1.find_struct_definition(name).1 {
                         return Ok(BoundDataType::Struct(name.clone(), a_struct.size()));
