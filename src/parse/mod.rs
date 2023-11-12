@@ -5,7 +5,8 @@ use std::{cell, collections, fs, io, rc};
 use dpp_macros::Pos;
 
 use crate::parse::analysis::{
-    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable, SymbolTable,
+    BoundDataType, BoundLiteralValue, BoundTranslationUnit, BoundVariable, BoundVariablePosition,
+    SymbolTable,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::error_diagnosis::ErrorMessage;
@@ -469,7 +470,9 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     parameter.has_modifier(Modifier::Const),
                 )
             })
-            .map(|(data_type, offset, is_const)| BoundVariable::new(0, offset, data_type, is_const))
+            .map(|(data_type, offset, is_const)| {
+                BoundVariable::new_static(0, offset, data_type, is_const)
+            })
             .collect_vec()
     }
 
@@ -504,11 +507,6 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             }
             None => {}
         }
-    }
-
-    fn increment_assignment_at(&mut self, position: BoundVariable) {
-        let value = self.assignment_count.get(&position).unwrap_or(&0);
-        self.assignment_count.insert(position, value + 1);
     }
 
     fn begin_function(&mut self, function: &Function<'a>) {
@@ -659,6 +657,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     }
                 }
                 Instruction::Pld => writer.write_all(format!("{pc} PLD 0 0\r\n").as_bytes())?,
+                Instruction::Sta => writer.write_all(format!("{pc} STA 0 0\r\n").as_bytes())?,
             }
             pc += 1;
         }
@@ -699,10 +698,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_instruction(Instruction::Operation { operation });
     }
 
-    fn load_variable(&mut self, variable: &BoundVariable) {
-        self.load(variable.level(), variable.offset(), variable.size());
-    }
-
     fn load(&mut self, level: usize, offset: i32, size: usize) {
         for i in 0..size {
             self.emit_instruction(Instruction::Load {
@@ -710,10 +705,6 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 offset: offset + i as i32,
             });
         }
-    }
-
-    fn store_variable(&mut self, variable: &BoundVariable) {
-        self.store(variable.level(), variable.offset(), variable.size());
     }
 
     fn store(&mut self, level: usize, offset: i32, size: usize) {
@@ -1308,7 +1299,7 @@ mod parser {
         },
     }
 
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Eq, Clone, PartialEq, Debug)]
     pub enum BinaryOperator {
         Add,
         And,
@@ -1324,7 +1315,7 @@ mod parser {
         LessThanOrEqual,
     }
 
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Eq, Clone, PartialEq, Debug)]
     pub enum UnaryOperator {
         Not,
         Negate,
@@ -1570,6 +1561,7 @@ mod parser {
 }
 
 mod analysis {
+    use std::fmt::Formatter;
     use std::{cmp, collections, fmt, ops};
 
     use crate::parse::parser::{BinaryOperator, DataType, Modifier, UnaryOperator};
@@ -1655,7 +1647,7 @@ mod analysis {
         pub value: BoundExpression,
     }
 
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Eq, Clone, PartialEq, Debug)]
     pub enum BoundLiteralValue {
         Pp(i32),
         Flaccid(i32, i32),
@@ -1673,7 +1665,7 @@ mod analysis {
         offset: usize,
     }
 
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Eq, Clone, PartialEq, Debug)]
     pub enum BoundExpression {
         Literal(BoundLiteralValue),
         Unary {
@@ -1695,10 +1687,10 @@ mod analysis {
         },
         Struct(Vec<BoundStructFieldAssignment>),
         StructFieldAccess(BoundVariable),
-        ArrayAccess(BoundVariable, usize, Box<BoundExpression>),
+        ArrayAccess(BoundVariable, usize),
     }
 
-    #[derive(PartialEq, Clone, Debug)]
+    #[derive(Eq, PartialEq, Clone, Debug)]
     pub struct BoundStructFieldAssignment {
         expression: BoundExpression,
     }
@@ -1712,12 +1704,34 @@ mod analysis {
         }
     }
 
-    #[derive(Eq, PartialEq, Hash, Clone, Debug)]
+    #[derive(Eq, PartialEq, Clone, Debug)]
     pub struct BoundVariable {
-        level: usize,
-        offset: i32,
+        position: BoundVariablePosition,
         data_type: BoundDataType,
         is_const: bool,
+    }
+
+    #[derive(Eq, PartialEq, Clone, Debug)]
+    pub enum BoundVariablePosition {
+        Static(usize, i32),
+        Dynamic(usize, i32, Box<BoundExpression>),
+    }
+
+    impl fmt::Display for BoundVariablePosition {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            match self {
+                BoundVariablePosition::Static(level, offset) => write!(
+                    f,
+                    "level: {level}, \
+                offset: {offset}"
+                ),
+                BoundVariablePosition::Dynamic(level, base_offset, dynamic_offset) => write!(
+                    f,
+                    "level: {level}, \
+                base offset: {base_offset}, dynamic offset: {dynamic_offset:?}"
+                ),
+            }
+        }
     }
 
     #[derive(PartialEq, Eq, Hash, Debug, Clone)]
@@ -2298,21 +2312,41 @@ mod analysis {
     }
 
     impl BoundVariable {
-        pub fn new(level: usize, offset: i32, data_type: BoundDataType, is_const: bool) -> Self {
+        pub fn new_dynamic(
+            level: usize,
+            base_offset: i32,
+            dynamic_offset: BoundExpression,
+            data_type: BoundDataType,
+            is_const: bool,
+        ) -> Self {
             BoundVariable {
-                level,
-                offset,
+                position: BoundVariablePosition::Dynamic(
+                    level,
+                    base_offset,
+                    Box::new(dynamic_offset),
+                ),
                 data_type,
                 is_const,
             }
         }
 
-        pub fn level(&self) -> usize {
-            self.level
+        pub fn new_static(
+            level: usize,
+            offset: i32,
+            data_type: BoundDataType,
+            is_const: bool,
+        ) -> Self {
+            BoundVariable {
+                position: BoundVariablePosition::Static(level, offset),
+                data_type,
+                is_const,
+            }
         }
-        pub fn offset(&self) -> i32 {
-            self.offset
+
+        pub fn position(&self) -> &BoundVariablePosition {
+            &self.position
         }
+
         pub fn is_const(&self) -> bool {
             self.is_const
         }
@@ -2346,8 +2380,8 @@ mod analysis {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(
                 f,
-                "level: {}, offset: {}, data_type: {}",
-                self.level, self.offset, self.data_type
+                "position: {}, data_type: {}",
+                self.position, self.data_type
             )
         }
     }
@@ -2493,6 +2527,7 @@ mod emitter {
             debug_keyword: DebugKeyword,
         },
         Pld,
+        Sta,
     }
 
     #[derive(Clone, Copy, Debug)]

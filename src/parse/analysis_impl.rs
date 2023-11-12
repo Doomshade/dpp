@@ -4,11 +4,12 @@ use itertools::Itertools;
 use crate::parse::analysis::{
     BoundCase, BoundDataType, BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement,
     BoundStructField, BoundStructFieldAssignment, BoundTranslationUnit, BoundVariable,
-    BoundVariableAssignment,
+    BoundVariableAssignment, BoundVariablePosition,
 };
 use crate::parse::error_diagnosis::SyntaxError;
 use crate::parse::parser::{
-    Block, Case, DataType, LiteralValue, Modifier, Statement, TranslationUnit, UnaryOperator,
+    BinaryOperator, Block, Case, DataType, LiteralValue, Modifier, Statement, TranslationUnit,
+    UnaryOperator,
 };
 use crate::parse::{Expression, Function, SemanticAnalyzer};
 
@@ -235,7 +236,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .symbol_table()
                         .find_variable_declaration(variable.identifier());
                     let var_decl = var_decl.unwrap();
-                    let position = BoundVariable::new(
+                    let position = BoundVariable::new_static(
                         level,
                         var_decl.stack_position() as i32,
                         var_decl.data_type().clone(),
@@ -404,8 +405,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             );
                             let offset = variable.stack_position();
 
-                            let variable =
-                                BoundVariable::new(level, offset as i32, *inner.clone(), is_const);
+                            let variable = BoundVariable::new_static(
+                                level,
+                                offset as i32,
+                                *inner.clone(),
+                                is_const,
+                            );
                             return BoundStatement::VariableAssignment(
                                 BoundVariableAssignment::new(variable, expression.1),
                             );
@@ -450,7 +455,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                                                 *field_name,
                                             );
                                     }
-                                    let variable = BoundVariable::new(
+                                    let variable = BoundVariable::new_static(
                                         level,
                                         offset as i32,
                                         field.data_type().clone(),
@@ -481,7 +486,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     let offset = variable.stack_position();
                     let data_type = variable.data_type().clone();
 
-                    let variable = BoundVariable::new(level, offset as i32, data_type, is_const);
+                    let variable =
+                        BoundVariable::new_static(level, offset as i32, data_type, is_const);
                     BoundStatement::VariableAssignment(BoundVariableAssignment::new(
                         variable,
                         expression.1,
@@ -555,7 +561,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 self.symbol_table_mut().pop_scope();
 
                 BoundStatement::For {
-                    ident_position: BoundVariable::new(level, offset as i32, data_type, is_const),
+                    ident_position: BoundVariable::new_static(
+                        level,
+                        offset as i32,
+                        data_type,
+                        is_const,
+                    ),
                     ident_expression: bound_ident_expression.map(|exp| exp.1),
                     length_expression: bound_length_expression.1,
                     statement: Box::new(bound_statement),
@@ -829,7 +840,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
             } => {
                 let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
                 if let Some(variable) = var_decl {
-                    BoundExpression::Variable(BoundVariable::new(
+                    BoundExpression::Variable(BoundVariable::new_static(
                         level,
                         variable.stack_position() as i32,
                         variable.data_type().clone(),
@@ -839,7 +850,12 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                     self.error_diag
                         .borrow_mut()
                         .variable_not_found(*position, identifier);
-                    BoundExpression::Variable(BoundVariable::new(0, 0, BoundDataType::Pp, true))
+                    BoundExpression::Variable(BoundVariable::new_static(
+                        0,
+                        0,
+                        BoundDataType::Pp,
+                        true,
+                    ))
                 }
             }
             Expression::FunctionCall {
@@ -943,12 +959,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                             {
                                 let stack_pos = variable_descr.stack_position();
                                 let field_off = field.offset();
-                                return BoundExpression::StructFieldAccess(BoundVariable::new(
-                                    variable_descrr.0,
-                                    (stack_pos + field_off) as i32,
-                                    field.data_type().clone(),
-                                    false,
-                                ));
+                                return BoundExpression::StructFieldAccess(
+                                    BoundVariable::new_static(
+                                        variable_descrr.0,
+                                        (stack_pos + field_off) as i32,
+                                        field.data_type().clone(),
+                                        false,
+                                    ),
+                                );
                             } else {
                                 self.error_diag.borrow_mut().struct_field_not_found(
                                     *position,
@@ -972,7 +990,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .borrow_mut()
                         .variable_not_found(*position, struct_identifier);
                 }
-                BoundExpression::StructFieldAccess(BoundVariable::new(
+                BoundExpression::StructFieldAccess(BoundVariable::new_static(
                     0,
                     0,
                     BoundDataType::Nopp,
@@ -985,7 +1003,7 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 array_index_expression,
             } => {
                 let (level, var_decl) = self.symbol_table().find_variable_declaration(identifier);
-                let (_, bound_expr) = self.analyze_expr(
+                let (_, bound_index_expr) = self.analyze_expr(
                     array_index_expression,
                     Some(&BoundDataType::Pp),
                     Some(*position),
@@ -994,14 +1012,14 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                 if let Some(var_descr) = var_decl {
                     if let BoundDataType::Array(inner, size) = var_descr.data_type() {
                         return BoundExpression::ArrayAccess(
-                            BoundVariable::new(
+                            BoundVariable::new_dynamic(
                                 level,
                                 var_descr.stack_position() as i32,
+                                bound_index_expr,
                                 *inner.clone(),
                                 false,
                             ),
                             *size,
-                            Box::new(bound_expr),
                         );
                     } else {
                         self.error_diag.borrow_mut().invalid_data_type(
@@ -1016,9 +1034,8 @@ impl<'a, 'b> SemanticAnalyzer<'a, 'b> {
                         .variable_not_found(*position, *identifier);
                 }
                 BoundExpression::ArrayAccess(
-                    BoundVariable::new(0, 0, BoundDataType::Nopp, false),
+                    BoundVariable::new_static(0, 0, BoundDataType::Nopp, false),
                     0,
-                    Box::new(BoundExpression::Literal(BoundLiteralValue::Pp(0))),
                 )
             }
         }

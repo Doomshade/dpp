@@ -3,7 +3,7 @@ use std::env::var;
 
 use crate::parse::analysis::{
     BoundExpression, BoundFunction, BoundLiteralValue, BoundStatement, BoundTranslationUnit,
-    BoundVariableAssignment, Scope,
+    BoundVariable, BoundVariableAssignment, BoundVariablePosition, Scope,
 };
 use crate::parse::emitter::{Address, DebugKeyword, Instruction, OperationType};
 use crate::parse::parser::{BinaryOperator, UnaryOperator};
@@ -20,6 +20,76 @@ impl<'a, 'b> Emitter<'a, 'b> {
         self.emit_global_scope(translation_unit);
         self.emit_main_call(translation_unit.main_function_identifier());
         self.emit_functions(translation_unit);
+    }
+
+    fn load_variable(&mut self, variable: &BoundVariable) {
+        match variable.position() {
+            BoundVariablePosition::Static(level, offset) => {
+                self.load(*level, *offset, variable.size())
+            }
+            BoundVariablePosition::Dynamic(level, base_offset, relative_offset) => {
+                for i in 0..variable.size() {
+                    self.emit_value(&BoundLiteralValue::Pp(*level as i32));
+                    self.emit_relative_offset(
+                        *base_offset,
+                        relative_offset,
+                        variable.data_type().size(),
+                    );
+                    self.emit_value(&BoundLiteralValue::Pp(i as i32));
+                    self.emit_operation(OperationType::Add);
+                    self.emit_instruction(Instruction::Pld);
+                }
+            }
+        }
+    }
+
+    fn store_variable(&mut self, variable: &BoundVariable) {
+        match variable.position() {
+            BoundVariablePosition::Static(level, offset) => {
+                self.store(*level, *offset, variable.size())
+            }
+            BoundVariablePosition::Dynamic(level, base_offset, relative_offset) => {
+                for i in (0..variable.size()).rev() {
+                    self.emit_value(&BoundLiteralValue::Pp(*level as i32));
+                    self.emit_relative_offset(
+                        *base_offset,
+                        relative_offset,
+                        variable.data_type().size(),
+                    );
+                    self.emit_value(&BoundLiteralValue::Pp(i as i32));
+                    self.emit_operation(OperationType::Add);
+
+                    self.emit_instruction(Instruction::Sta);
+                }
+            }
+        }
+    }
+
+    fn emit_relative_offset(
+        &mut self,
+        base_offset: i32,
+        relative_offset: &BoundExpression,
+        data_type_size: usize,
+    ) {
+        // For example a variable on offset 4 named "a", data type of size 2
+        // and we need to retrieve a[1 + 2].
+        //
+        // base_offset: 4
+        // relative offset: 1 + 2
+        // data type size: 2
+        //
+        // offset = base_offset + relative_offset * data_type_size
+        // offset = 4 + (1 + 2) * 2
+        // offset = 4 + 3 * 2
+        // offset = 10
+        // X = 0 10
+        // [ | | | |a| | | | | |X|...]
+        self.emit_value(&BoundLiteralValue::Pp(base_offset));
+
+        self.emit_expression(relative_offset);
+        self.emit_value(&BoundLiteralValue::Pp(data_type_size as i32));
+        self.emit_operation(OperationType::Multiply);
+        self.emit_operation(OperationType::Add);
     }
 
     fn emit_global_scope(&mut self, translation_unit: &BoundTranslationUnit) {
@@ -331,17 +401,40 @@ impl<'a, 'b> Emitter<'a, 'b> {
             BoundExpression::StructFieldAccess(variable) => {
                 self.load_variable(variable);
             }
-            BoundExpression::ArrayAccess(variable, array_size, index_expr) => {
-                self.emit_value(&BoundLiteralValue::Pp(variable.level() as i32));
-                self.emit_expression(index_expr);
-                // TODO: Could add a check here for IOOB.
-                self.emit_value(&BoundLiteralValue::Pp(variable.data_type().size() as i32));
-                self.emit_operation(OperationType::Multiply);
-                self.emit_value(&BoundLiteralValue::Pp(variable.offset()));
-                self.emit_operation(OperationType::Add);
-                self.emit_instruction(Instruction::Pld);
+            BoundExpression::ArrayAccess(variable, array_size) => {
+                if let BoundVariablePosition::Dynamic(level, base_offset, dynamic_offset) =
+                    variable.position()
+                {
+                    self.emit_variable_level(variable.position());
+
+                    self.emit_expression(dynamic_offset);
+                    // TODO: Could add a check here for IOOB.
+                    self.emit_value(&BoundLiteralValue::Pp(variable.data_type().size() as i32));
+                    self.emit_operation(OperationType::Multiply);
+                    self.emit_variable_offset(variable.position());
+                    self.emit_operation(OperationType::Add);
+                    self.emit_instruction(Instruction::Pld);
+                }
             }
             _ => todo!("Not implemented {expression:?}"),
+        }
+    }
+
+    fn emit_variable_level(&mut self, position: &BoundVariablePosition) {
+        match position {
+            BoundVariablePosition::Dynamic(level, _, _) => {
+                self.emit_value(&BoundLiteralValue::Pp(*level as i32))
+            }
+            _ => panic!("Expected a dynamic variable position."),
+        }
+    }
+
+    fn emit_variable_offset(&mut self, position: &BoundVariablePosition) {
+        match position {
+            BoundVariablePosition::Dynamic(_, base_offset, dynamic_offset) => {
+                self.emit_expression(dynamic_offset);
+            }
+            _ => panic!("Expected a dynamic variable position."),
         }
     }
 

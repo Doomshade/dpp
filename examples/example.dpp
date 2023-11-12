@@ -18,6 +18,10 @@ FUNc init_a() -> pp {
 
 FUNc main() -> pp {
     struct File[9] -> b;
+
+    for(i to 10) {
+        b[i] = File{5};
+    }
     b[0] = File{69};
     b[1] = File{123};
     b[2] = File{456};
@@ -30,7 +34,9 @@ FUNc main() -> pp {
     const struct File -> first = b[0];
     root.fd = 123456;
     struct File -> transform_fd = transform_fd(root);
-    bye transform_fd.fd;
+
+    struct File -> f = b[0];
+    bye f.fd;
 }
 
 FUNc transform_fd(struct File -> root,) -> struct File {

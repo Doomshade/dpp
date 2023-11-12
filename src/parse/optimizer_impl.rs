@@ -307,7 +307,7 @@ impl Optimizer {
                 }
             }
             BoundExpression::Variable(variable_position) => {
-                self.referenced_variables.insert(variable_position.clone());
+                // self.referenced_variables.insert(variable_position.clone());
                 BoundExpression::Variable(variable_position)
             }
             _ => expression,
