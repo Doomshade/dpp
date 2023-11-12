@@ -2606,9 +2606,9 @@ pub mod compiler {
                     optimized_translation_unit =
                         root_optimizer.optimize(optimized_translation_unit);
                 }
-                println!("Printed optimizations into \"out/dpp/optimizations.txt\"");
+                println!("Printed optimizations into \"optimizations.txt\"");
                 fs::write(
-                    "out/dpp/optimizations.txt",
+                    "optimizations.txt",
                     root_optimizer.optimizations.join("\n\n"),
                 )?;
                 Self::emit(output_file, optimized_translation_unit, &error_diag)?;

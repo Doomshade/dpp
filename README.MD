@@ -25,12 +25,12 @@ Then you will need to compile the compiler:
 ```shell
 > cd dppc
 > cargo run --release
-```
+``` 
 
 Now you can run the compiler:
 
 ```shell
-> ./target/release/dppc.exe <input_file> <output_file>
+> ./target/release/dpp.exe <input_file> <output_file>
 ```
 
 [//]: # (Or just download the executable)
