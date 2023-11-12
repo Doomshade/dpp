@@ -1188,22 +1188,14 @@ mod parser {
 
     #[derive(Eq, Hash, Debug, Clone)]
     pub enum DataType {
-        Pp,
-        // int
-        AB,
-        // ratio
-        Flaccid,
-        // float
-        P,
-        // char
-        Yarn,
-        // string
-        Booba,
-        // bool
-        Nopp,
-        // void
-        Struct(String),
-        // struct with name
+        Pp,                          // int
+        AB,                          // ratio
+        Flaccid,                     // float
+        P,                           // char
+        Yarn,                        // string
+        Booba,                       // bool
+        Nopp,                        // void
+        Struct(String),              // struct with name
         Array(Box<DataType>, usize), // array with inner data type and size
     }
 
