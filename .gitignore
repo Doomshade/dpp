@@ -6,3 +6,5 @@ Cargo.lock
 *.pdb
 out/
 auxil/
+*.pl0
+optimizations.txt

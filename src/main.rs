@@ -139,7 +139,7 @@ fn run() {
         Some((a, _)) => a,
         None => file_name_with_ext,
     };
-    let output = format!("out/dpp/{file_name}.pl0");
+    let output = format!("{file_name}.pl0");
     match DppCompiler::compile_translation_unit(
         A_ABSOLUTE_ADDRESSING,
         L_PRINT_PROGRAM_WITH_ABSOLUTE_ADDRESSES,

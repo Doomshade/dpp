@@ -24,7 +24,7 @@ Then you will need to compile the compiler:
 
 ```shell
 > cd dppc
-> cargo run --release
+> cargo build --release
 ``` 
 
 Now you can run the compiler:
