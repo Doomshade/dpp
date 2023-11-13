@@ -19,7 +19,7 @@ FUNc init_a() -> pp {
 FUNc main() -> pp {
     struct File[9] -> b;
 
-    for(i to 10) {
+    for(i to 9) {
         b[i] = File{5};
     }
     b[0] = File{69};
