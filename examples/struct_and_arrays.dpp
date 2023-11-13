@@ -1,0 +1,76 @@
+struct Fd {
+    pp -> fd,
+}
+
+struct Buf {
+    pp[100] -> buf,
+}
+
+struct File {
+    struct Fd -> fd,
+    booba[8] -> flags,
+    const booba[3] -> rwx,
+}
+
+
+FUNc main() -> pp {
+    # Declare a buffer of size 100 and initialize it.
+    pp[100] -> buf;
+    for(i to 100) {
+        buf[i] = 0;
+    }
+
+    # Declare a Buf struct that accepts a buffer of size 100. This will copy the buffer.
+    struct Buf -> buf_struct = Buf { buf };
+
+    # Declare a Fd struct that accepts a number as the first field.
+    struct Fd -> fd = Fd { 10 };
+
+    # Declare an array of flags of some sort and initialize them to false. Set the 4th flag to true.
+    booba[8] -> some_flags;
+    for(i to 8) {
+        some_flags[i] = nom;
+    }
+    some_flags[3] = yem;
+
+    # Declare an array of rwx and initialize them to false. Set the 2nd flag to true.
+    booba[3] -> rwx;
+    for(i to 3) {
+        rwx[i] = nom;
+    }
+    rwx[1] = yem;
+
+
+    # Create the File struct. It accepts number as first field,
+    # an array of booleans of size 8 as second argument, and
+    # an array of booleans of size 3 as third argument.
+    struct File -> file = File { fd, some_flags, rwx };
+    # file.rwx[0] = rwx; # This will not work because File.rwx is constant.
+
+    # Get the struct Fd from File and increment it based on the rwx boolean array.
+    # the rwx[3] is false, true, false.
+    struct Fd -> files_fd = file.fd;
+
+    # This will not do anything because it's false.
+    if (rwx[0]) {
+        files_fd.fd = files_fd.fd + 1;
+    }
+
+    # This will increment the Fd by 1 because rwx[1] is true.
+    if (rwx[1] || rwx[0]) {
+        files_fd.fd = files_fd.fd + 1;
+    }
+
+    # This will not increment the Fd because rwx[0] is false.
+    if (rwx[1] && rwx[0]) {
+        files_fd.fd = files_fd.fd + 1;
+    }
+
+    # This will increment the Fd because rwx[1] is true.
+    if (rwx[1] || (rwx[2] && rwx[0])) {
+        files_fd.fd = files_fd.fd + 1;
+    }
+
+    # This should return 10 (base) + 1 (first if) + 1 (third if) = 12
+    bye files_fd.fd;
+}

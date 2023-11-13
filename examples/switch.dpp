@@ -1,21 +1,11 @@
-pp -> b = 420;
-
 FUNc main() -> pp {
-    const pp -> a = 0 + 456 + 0 + 0 + 1 + 4 + 5 + b;
-    if (0 == 1) {
-        pp -> zz = 12345789;
-        pp -> zza = 12345789;
-    }
-
-    for(i to 69 + 69){
-        pp -> zz = 0;
-    }
-
-    switch(69) {
+    pp -> a = 69;
+    switch(a) {
         case 420 {
             bye 420;
         },
         case 23 + 46 {
+            # Will return 6969 because the case is 69 and first in order.
             bye 6969;
         },
         case 69 {
@@ -25,5 +15,5 @@ FUNc main() -> pp {
             bye 123;
         }
     }
-    bye 69;
+    bye 0;
 }

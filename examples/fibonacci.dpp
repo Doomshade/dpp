@@ -13,12 +13,11 @@ FUNc fibonacci(pp -> num) -> pp {
         c = a + b;
         a = b;
         b = c;
-        i += 1;
-        i -= 1;
     }
     bye c;
 }
 
 FUNc main() -> pp {
+    # Should return 55 + 55 = 110
     bye fibonacci(10) + fibonacci_rec(10);
 }

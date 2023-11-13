@@ -1,0 +1,25 @@
+pp -> global_1 = 100;
+const pp -> global_2 = 100;
+pp[10] -> global_3;
+
+FUNc main() -> pp {
+    global_1 = 10;
+    booba -> ok = yem;
+    {
+        pp -> global_1 = 50;
+        global_1 = 20;
+        if (global_1 == 10) {
+            ok = nom;
+        }
+    }
+
+    if (!ok) {
+        bye 1;
+    }
+
+    if (global_1 != 10) {
+        bye 2;
+    }
+
+    bye 0;
+}

@@ -188,6 +188,20 @@ impl<'a, 'b> Emitter<'a, 'b> {
                 self.emit_jump(Address::Label(start));
                 self.emit_label(end);
             }
+            BoundStatement::DoWhile {
+                expression,
+                statement,..
+            } => {
+                let start = self.create_control_label();
+                let end = self.create_control_label();
+
+                self.emit_label(start.clone());
+                self.emit_statement(statement, Some(start.clone()), Some(end.clone()));
+                self.emit_expression(expression);
+                self.emit_jmc(Address::Label(end.clone()));
+                self.emit_jump(Address::Label(start));
+                self.emit_label(end);
+            }
             BoundStatement::For {
                 variable,
                 ident_expression,

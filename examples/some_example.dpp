@@ -1,0 +1,42 @@
+struct Test {
+    pp[3] -> a,
+    pp -> b,
+    pp -> c,
+}
+
+FUNc main() -> pp {
+    # Some dummy variables to increase the stack size (for testing purposes).
+    pp -> x;
+    pp -> c;
+    pp -> cx;
+    pp -> ca;
+    pp -> cb;
+    pp -> cc;
+    pp -> cd;
+
+    # An array of size 10 * (pp[3] + pp + pp) = 50
+    struct Test[10] -> a;
+    for(i to 10) {
+        # Declare an array of size 3 and initialize it to something.
+        pp[3] -> test_a;
+        test_a[0] = 10 * i + 1;
+        test_a[1] = 10 * i + 2;
+        test_a[2] = 10 * i + 3;
+
+        # Set the ith element to something.
+        a[i] = Test {
+            test_a,
+            3 * i + 2,
+            3 * i + 3,
+        };
+    }
+
+    # Get the last element.
+    struct Test -> last = a[9];
+
+    # Get the array. This should be [91, 92, 93].
+    pp[3] -> last_a = last.a;
+
+    # This should return 91.
+    bye last_a[0];
+}
