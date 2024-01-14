@@ -476,7 +476,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 op: BinaryOperator::Add,
                 rhs: Box::new(expression),
             },
-            _ => unreachable!(),
+            _ => return None,
         };
         Some(Statement::Assignment {
             position,
