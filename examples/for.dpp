@@ -32,10 +32,13 @@ FUNc main() -> pp {
     # Loops indefinitely.
     i = 0;
     loop {
+        a += 1;
         i += 1;
-        if (i > 10) {
+        if (i >= 69) {
             break;
         }
     }
+
+    # This should return `69 * 5` (5 different loops) ` = 345`
     bye a;
 }

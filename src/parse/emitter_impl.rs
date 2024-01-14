@@ -190,7 +190,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
             }
             BoundStatement::DoWhile {
                 expression,
-                statement,..
+                statement,
+                ..
             } => {
                 let start = self.create_control_label();
                 let end = self.create_control_label();
@@ -302,6 +303,15 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     self.emit_label(end_case.clone());
                 }
                 self.emit_label(switch_end_label);
+            }
+            BoundStatement::Loop { statement } => {
+                let start = self.create_control_label();
+                let end = self.create_control_label();
+
+                self.emit_label(start.clone());
+                self.emit_statement(statement, Some(start.clone()), Some(end.clone()));
+                self.emit_jump(Address::Label(start));
+                self.emit_label(end);
             }
             _ => self
                 .error_diag
