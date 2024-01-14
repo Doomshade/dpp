@@ -23,5 +23,13 @@ FUNc main() -> pp {
             pp -> h = 456;
         else
             pp -> i = 789;
+
+    # If-else with inner if
+    if (a) {
+        if (b)
+            pp -> j = 0;
+    } else {
+            pp -> k = 0;
+    }
     bye 0;
 }
