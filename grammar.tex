@@ -63,10 +63,6 @@
 
         <bye> ::= `bye' <expr> `;'
 
-        <pprint> ::= `pprint' `(' <expr> `)' `;'
-
-        <pprintln> ::= `pprintln' `(' <expr> `)' `;'
-
         <empty> ::= `;'
 
         <assign> ::= <ident> [`.' <ident> ] [ `[' <expr> `]'] ( `=' | `+=' | `-=' ) <expr> `;'
@@ -85,9 +81,6 @@
         \alt `p' // char
         \alt `nopp' // void
         \alt `booba' // bool
-        \alt `yarn' // string
-        \alt `ab' // ratio
-        \alt `flaccid' // float
         \alt `struct' <ident> // record
 
         <modifiers> ::= \{ <modifier> \}
