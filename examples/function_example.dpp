@@ -1,12 +1,17 @@
+# This is a bit more complex example showing functions accepting and returning structs.
+
+# Struct definition with a number.
 struct File {
     pp -> fd,
 }
 
+# Struct definition with two structs.
 struct FileDef {
     struct File -> next,
     struct File -> prev,
 }
 
+# Function returning simple argument.
 FUNc init_a() -> pp {
    if (yem) {
        bye 4;
@@ -17,29 +22,35 @@ FUNc init_a() -> pp {
 }
 
 FUNc main() -> pp {
+    # Array of structs.
     struct File[9] -> b;
 
+    # Initialize them.
     for(i to 9) {
         b[i] = File{5};
     }
+
+    # Modify the array.
     b[0] = File{69};
     b[1] = File{123};
     b[2] = File{456};
-    pp -> a;
+
     struct File -> root = File {
+        # This will set the `fd = 4`
         init_a(),
     };
 
-    const booba -> asd = 0 == 1;
-    const struct File -> first = b[0];
+    # This will set the FD to `123456`.
     root.fd = 123456;
     struct File -> transform_fd = transform_fd(root);
 
-    struct File -> f = b[0];
-    bye f.fd;
+    # This should return `root.fd + 1` aka `123456 + 1 = 123457`
+    bye transform_fd.fd;
 }
 
-FUNc transform_fd(struct File -> root,) -> struct File {
+# Function returning a struct that takes sets the
+# inner `fd` to the argument `fd + 1`.
+FUNc transform_fd(struct File -> root) -> struct File {
     bye File {
         root.fd + 1
     };

@@ -1,3 +1,5 @@
+# This is a rather complex example that uses structs and arrays.
+
 struct Fd {
     pp -> fd,
 }
@@ -21,6 +23,7 @@ FUNc main() -> pp {
     }
 
     # Declare a Buf struct that accepts a buffer of size 100. This will copy the buffer.
+    # If the buffer has incorrect size a syntax error is thrown.
     struct Buf -> buf_struct = Buf { buf };
 
     # Declare a Fd struct that accepts a number as the first field.

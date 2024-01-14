@@ -1,26 +1,41 @@
+# This is an example showing various loops.
+
 FUNc main() -> pp {
     pp -> a = 0;
+
+    # Simple for-i loop.
     for(i to 69) {
         a += 1;
     }
 
     const pp -> offset = 10;
 
+    # Same for-i loop, but with initialization.
     for(i = offset to 69 + offset) {
         a += 1;
     }
 
+    # While loop.
     pp -> i = 0;
     while(i < 69) {
         a += 1;
         i += 1;
     }
 
+    # Do-while loop.
     i = 0;
-
     do {
         a += 1;
         i += 1;
     } while (i < 69);
+
+    # Loops indefinitely.
+    i = 0;
+    loop {
+        i += 1;
+        if (i > 10) {
+            break;
+        }
+    }
     bye a;
 }

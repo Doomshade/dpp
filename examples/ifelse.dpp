@@ -1,3 +1,5 @@
+# This is an example of if-else statements.
+
 FUNc main() -> pp {
     booba -> a = yem;
     booba -> b = nom;

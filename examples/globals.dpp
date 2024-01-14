@@ -1,25 +1,35 @@
+# This is an example showing usage of global variables.
+
 pp -> global_1 = 100;
 const pp -> global_2 = 100;
 pp[10] -> global_3;
 
 FUNc main() -> pp {
+    # Set the global variable to 10.
     global_1 = 10;
+
     booba -> ok = yem;
     {
+        # Create local variable with the same name as the global variable.
         pp -> global_1 = 50;
+
+        # Assigns 20 to the local variable.
         global_1 = 20;
         if (global_1 == 10) {
             ok = nom;
         }
     }
 
+    # If this passes then the if above was wrong.
     if (!ok) {
         bye 1;
     }
 
+    # If this passes then we didn't modify the global variable.
     if (global_1 != 10) {
         bye 2;
     }
 
+    # This should be returned.
     bye 0;
 }

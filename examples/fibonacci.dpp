@@ -1,3 +1,5 @@
+# This is an example using recursion and computing fibonacci numbers.
+
 FUNc fibonacci_rec(pp -> num) -> pp {
     if (num < 2) {
         bye num;

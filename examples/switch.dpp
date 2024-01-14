@@ -1,6 +1,7 @@
+# This is an example of switch and the underlying optimization (this will simply return 6969).
+
 FUNc main() -> pp {
-    pp -> a = 69;
-    switch(a) {
+    switch(69) {
         case 420 {
             bye 420;
         },
