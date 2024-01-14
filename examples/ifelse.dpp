@@ -1,0 +1,27 @@
+FUNc main() -> pp {
+    booba -> a = yem;
+    booba -> b = nom;
+
+    # Standard if-else
+    if (a)
+        pp -> c = 69;
+    else
+        pp -> d = 123;
+
+    # If-else with inner if-else
+    if (a)
+        if (b)
+            pp -> e = 420;
+        else
+            pp -> f = 123;
+    else
+        pp -> g = 123;
+
+    # If with inner if-else
+    if (a)
+        if (b)
+            pp -> h = 456;
+        else
+            pp -> i = 789;
+    bye 0;
+}
